@@ -47,6 +47,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 - Vim-inspired keybindings (h/j/k/l navigation)
 - 5 brainwave presets with quick-select
 - 5 timed sequences with smooth interpolation
+- Aurora-style terminal stage with animated backdrop and spectral control deck
 - Session timer and breathing pacer
 - Context-sensitive help overlay
 - Color palette tuned for dark terminal backgrounds

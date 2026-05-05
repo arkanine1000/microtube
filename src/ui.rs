@@ -1,8 +1,9 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::buffer::Buffer;
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap};
 
 use crate::app::{ActiveParam, App, AppMode, VizMode};
 use crate::presets::{PRESETS, SEQUENCES, freq_band_name, freq_color};
@@ -11,179 +12,202 @@ use crate::visualization::{
     render_harmonic_lattice, render_penrose, render_spectrum_bars,
 };
 
-// Color palette tuned for dark backgrounds (~#383c4a)
-const DIM: ratatui::style::Color = ratatui::style::Color::Rgb(150, 150, 170);
-const BRIGHT: ratatui::style::Color = ratatui::style::Color::Rgb(230, 230, 240);
-const BORDER: ratatui::style::Color = ratatui::style::Color::Rgb(100, 105, 130);
+const BG_TOP: Color = Color::Rgb(5, 7, 14);
+const BG_MID: Color = Color::Rgb(12, 14, 28);
+const BG_BOTTOM: Color = Color::Rgb(4, 10, 18);
+const PANEL_BG: Color = Color::Rgb(9, 12, 22);
+const PANEL_ALT: Color = Color::Rgb(13, 17, 29);
+const DIM: Color = Color::Rgb(138, 146, 168);
+const SOFT: Color = Color::Rgb(178, 184, 204);
+const BRIGHT: Color = Color::Rgb(236, 240, 248);
+const BORDER: Color = Color::Rgb(88, 98, 128);
+const SHADOW: Color = Color::Rgb(2, 4, 8);
+
+struct MeterSpec {
+    param: ActiveParam,
+    label: &'static str,
+    value: String,
+    ratio: f32,
+    color: Color,
+}
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.area();
     app.frame_count += 1;
 
-    if size.width < 64 || size.height < 22 {
-        let msg = Paragraph::new("Terminal too small\nMinimum: 64x22")
-            .style(Style::default().fg(ratatui::style::Color::Red));
+    if size.width < 76 || size.height < 26 {
+        let msg = Paragraph::new("Terminal too small\nMinimum: 76x26")
+            .style(Style::default().fg(Color::Red).bg(BG_TOP))
+            .alignment(Alignment::Center);
+        draw_backdrop(
+            f.buffer_mut(),
+            size,
+            app.start_time.elapsed().as_secs_f64(),
+            Color::Red,
+        );
         f.render_widget(msg, size);
         return;
     }
 
+    let elapsed = app.start_time.elapsed().as_secs_f64();
     let beat_freq = app.params.get_beat_freq();
     let accent = freq_color(beat_freq);
+    let border_color = breathing_color(accent, elapsed);
 
-    // Breathing pulse on border
-    let elapsed = app.start_time.elapsed().as_secs_f64();
-    let breath = (elapsed * 0.4 * std::f64::consts::PI).sin();
-    let border_color = dim_color(accent, 0.5 + 0.15 * breath as f32);
+    draw_backdrop(f.buffer_mut(), size, elapsed, accent);
+    let shell = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(BG_TOP))
+        .title(Line::from(Span::styled(
+            " MICROTUBE ",
+            Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
+        )))
+        .title_bottom(Line::from(Span::styled(
+            " vi keys preserved: h j k l ",
+            Style::default().fg(DIM),
+        )));
+    let shell_inner = shell.inner(size);
+    f.render_widget(shell, size);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Title
-            Constraint::Min(8),    // Visualization
-            Constraint::Length(8), // Status panel
-            Constraint::Length(3), // Controls
+            Constraint::Length(5),
+            Constraint::Min(9),
+            Constraint::Length(9),
+            Constraint::Length(3),
         ])
-        .split(size);
+        .split(shell_inner);
 
-    draw_title(f, chunks[0], accent, border_color, app);
-    draw_visualization(f, chunks[1], app, accent);
+    draw_header(f, chunks[0], app, accent);
+    draw_visualization(f, chunks[1], app, accent, border_color);
     draw_status(f, chunks[2], app, accent, border_color);
     draw_controls(f, chunks[3], accent, border_color);
 
     match app.mode {
         AppMode::PresetSelect => draw_preset_menu(f, size, app, accent),
-        AppMode::SequenceSelect => draw_sequence_menu(f, size, app),
+        AppMode::SequenceSelect => draw_sequence_menu(f, size, app, accent),
         AppMode::Help => draw_help(f, size, accent),
         AppMode::Normal => {}
     }
 }
 
-fn draw_title(
-    f: &mut Frame,
-    area: Rect,
-    accent: ratatui::style::Color,
-    border: ratatui::style::Color,
-    app: &App,
-) {
+fn draw_header(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     let playing = app
         .params
         .playing
         .load(std::sync::atomic::Ordering::Relaxed);
+    let status = if playing { "PLAY" } else { "PAUSE" };
     let status_icon = if playing { "\u{25B6}" } else { "\u{23F8}" };
     let beat_freq = app.params.get_beat_freq();
+    let base_freq = app.params.get_base_freq();
     let band = freq_band_name(beat_freq);
-
+    let right_freq = base_freq + beat_freq;
     let secs = app.session_elapsed() as u32;
-    let timer = format!("{}:{:02}", secs / 60, secs % 60);
+    let timer = format!("{:02}:{:02}", secs / 60, secs % 60);
+    let preset = app
+        .current_preset
+        .map(|idx| PRESETS[idx].name)
+        .unwrap_or("Custom");
 
-    let emergence = app.params.get_emergence();
-    let em_indicator = if emergence > 0.01 {
-        format!(" \u{2234}{:.0}%", emergence * 100.0)
-    } else {
-        String::new()
-    };
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("  \u{25C8} ", Style::default().fg(accent)),
+            Span::styled(
+                "M I C R O T U B E",
+                Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  \u{2500}\u{2500}  ", Style::default().fg(BORDER)),
+            Span::styled(status_icon, Style::default().fg(accent)),
+            Span::styled(
+                format!(" {status} "),
+                Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!("{band} "), Style::default().fg(accent)),
+            Span::styled(format!("{beat_freq:.1}Hz"), Style::default().fg(BRIGHT)),
+        ])
+        .centered(),
+        Line::from(vec![
+            Span::styled(" L ", Style::default().fg(DIM)),
+            Span::styled(format!("{base_freq:.1}Hz"), Style::default().fg(BRIGHT)),
+            Span::styled("   R ", Style::default().fg(DIM)),
+            Span::styled(format!("{right_freq:.1}Hz"), Style::default().fg(BRIGHT)),
+            Span::styled("   preset ", Style::default().fg(DIM)),
+            Span::styled(preset, Style::default().fg(accent)),
+            Span::styled("   viz ", Style::default().fg(DIM)),
+            Span::styled(app.viz_mode.label(), Style::default().fg(BRIGHT)),
+            Span::styled("   time ", Style::default().fg(DIM)),
+            Span::styled(timer, Style::default().fg(BRIGHT)),
+        ])
+        .centered(),
+        spectral_ribbon(beat_freq),
+        Line::from(Span::styled(
+            make_phase_wave(app.session_elapsed(), area.width as usize / 3),
+            Style::default().fg(dim_color(accent, 0.62)),
+        ))
+        .centered(),
+    ];
 
-    let title = Line::from(vec![
-        Span::styled(" \u{2B22} ", Style::default().fg(accent)),
-        Span::styled(
-            "MICROTUBE",
-            Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" \u{2500}\u{2500}\u{2500} ", Style::default().fg(BORDER)),
-        Span::styled(status_icon, Style::default().fg(accent)),
-        Span::styled(
-            format!(" {band}"),
-            Style::default().fg(accent).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(format!("  {beat_freq:.1} Hz"), Style::default().fg(BRIGHT)),
-        Span::styled(em_indicator, Style::default().fg(accent)),
-        Span::styled(format!("  \u{23F1} {timer}"), Style::default().fg(DIM)),
-    ]);
-
-    let viz_label = app.viz_mode.label();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border))
-        .title_bottom(
-            Line::from(Span::styled(
-                format!(" {viz_label} "),
-                Style::default().fg(DIM),
-            ))
-            .centered(),
-        );
-
-    f.render_widget(Paragraph::new(title).block(block), area);
+    f.render_widget(
+        Paragraph::new(lines).style(Style::default().bg(BG_TOP)),
+        area,
+    );
 }
 
-fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: ratatui::style::Color) {
+fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: Color, border: Color) {
     let (samples_l, samples_r) = if let Ok(buf) = app.viz_buffer.try_lock() {
         buf.read_ordered()
     } else {
         return;
     };
 
+    let title = Line::from(vec![
+        Span::styled(" \u{25C7} ", Style::default().fg(accent)),
+        Span::styled(
+            format!("{} ", app.viz_mode.label()),
+            Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("audiovisual plane ", Style::default().fg(DIM)),
+    ]);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border))
+        .style(Style::default().bg(PANEL_BG))
+        .title(title)
+        .title_bottom(mode_rail(app.viz_mode, accent));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let elapsed = app.start_time.elapsed().as_secs_f64();
+    draw_visual_backdrop(f.buffer_mut(), inner, elapsed, accent);
+
     match app.viz_mode {
         VizMode::Waveform => {
-            let viz_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(area);
-
-            let block_l = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(" L ", Style::default().fg(accent)));
-            let inner_l = block_l.inner(viz_chunks[0]);
-            f.render_widget(block_l, viz_chunks[0]);
-
-            let block_r = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(" R ", Style::default().fg(accent)));
-            let inner_r = block_r.inner(viz_chunks[1]);
-            f.render_widget(block_r, viz_chunks[1]);
-
-            let buf = f.buffer_mut();
-            render_braille_waveform(buf, inner_l, &samples_l, accent);
-            let r_color = shift_color(accent, 30, 0, 30);
-            render_braille_waveform(buf, inner_r, &samples_r, r_color);
+            render_waveform_stage(f.buffer_mut(), inner, &samples_l, &samples_r, accent)
         }
         VizMode::Spectrum => {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(
-                    " \u{2261} Spectrum ",
-                    Style::default().fg(accent),
-                ));
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-
             let combined: Vec<f32> = samples_l
                 .iter()
                 .zip(&samples_r)
-                .map(|(l, r)| (l + r) * 0.5)
+                .map(|(left, right)| (left + right) * 0.5)
                 .collect();
-            let buf = f.buffer_mut();
-            render_spectrum_bars(buf, inner, &combined, &mut app.spectrum_bars, accent);
+            render_spectrum_bars(
+                f.buffer_mut(),
+                inner,
+                &combined,
+                &mut app.spectrum_bars,
+                accent,
+            );
+            draw_spectrum_floor(f.buffer_mut(), inner, accent);
         }
         VizMode::Harmonics => {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(
-                    " \u{223F} Harmonics ",
-                    Style::default().fg(accent),
-                ));
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-
-            let elapsed = app.start_time.elapsed().as_secs_f64();
             let beat_freq = app.params.get_beat_freq() as f64;
             let harmonics = app.params.get_harmonics() as f64;
-            let buf = f.buffer_mut();
             render_harmonic_lattice(
-                buf,
+                f.buffer_mut(),
                 inner,
                 HarmonicLattice {
                     samples_l: &samples_l,
@@ -196,199 +220,174 @@ fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: ratatui:
             );
         }
         VizMode::Envelope => {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(
-                    " \u{223F} Beat Envelope ",
-                    Style::default().fg(accent),
-                ));
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-
-            let elapsed = app.start_time.elapsed().as_secs_f64();
             let beat_freq = app.params.get_beat_freq() as f64;
-            let buf = f.buffer_mut();
-            render_beat_envelope(buf, inner, elapsed, beat_freq, accent);
+            render_beat_envelope(f.buffer_mut(), inner, elapsed, beat_freq, accent);
         }
         VizMode::Penrose => {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(
-                    " \u{2B22} Penrose ",
-                    Style::default().fg(accent),
-                ));
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-
-            let elapsed = app.start_time.elapsed().as_secs_f64();
             let beat_freq = app.params.get_beat_freq() as f64;
-            let buf = f.buffer_mut();
-            render_penrose(buf, inner, elapsed, beat_freq, accent);
+            render_penrose(f.buffer_mut(), inner, elapsed, beat_freq, accent);
         }
         VizMode::Emergence => {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(
-                    " \u{2234} Emergence ",
-                    Style::default().fg(accent),
-                ));
-            let inner = block.inner(area);
-            f.render_widget(block, area);
-
             let snapshot = if let Ok(snap) = app.emergence_snapshot.try_lock() {
                 snap.clone()
             } else {
                 return;
             };
-            let elapsed = app.start_time.elapsed().as_secs_f64();
-            let buf = f.buffer_mut();
-            render_emergence(buf, inner, &snapshot, elapsed, accent);
+            render_emergence(f.buffer_mut(), inner, &snapshot, elapsed, accent);
         }
     }
 }
 
-fn draw_status(
-    f: &mut Frame,
+fn render_waveform_stage(
+    buf: &mut Buffer,
     area: Rect,
-    app: &App,
-    accent: ratatui::style::Color,
-    border: ratatui::style::Color,
+    samples_l: &[f32],
+    samples_r: &[f32],
+    accent: Color,
 ) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
+    let halves = Layout::default()
+        .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
+    let mid_y = halves[0].y + halves[0].height.saturating_sub(1);
+    for x in area.x..area.x + area.width {
+        let cell = &mut buf[(x, mid_y)];
+        cell.set_char('\u{2500}');
+        cell.set_fg(dim_color(accent, 0.34));
+        cell.set_bg(PANEL_BG);
+    }
 
-    let base_freq = app.params.get_base_freq();
-    let beat_freq = app.params.get_beat_freq();
-    let volume = app.params.get_volume();
-    let noise = app.params.get_noise_level();
-    let harmonics = app.params.get_harmonics();
-    let emergence = app.params.get_emergence();
-
-    let param_style = |p: ActiveParam| -> Style {
-        if p == app.active_param {
-            Style::default().fg(accent).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(BRIGHT)
-        }
+    let left_area = Rect {
+        y: halves[0].y + 1,
+        height: halves[0].height.saturating_sub(1),
+        ..halves[0]
     };
-
-    let arrow = |p: ActiveParam| -> &'static str {
-        if p == app.active_param {
-            "\u{25B8} "
-        } else {
-            "  "
-        }
+    let right_area = Rect {
+        y: halves[1].y,
+        height: halves[1].height.saturating_sub(1),
+        ..halves[1]
     };
+    render_braille_waveform(buf, left_area, samples_l, accent);
+    render_braille_waveform(buf, right_area, samples_r, shift_color(accent, 34, 8, 44));
 
-    let params_text = vec![
-        Line::from(vec![
-            Span::raw(arrow(ActiveParam::BaseFreq)),
-            Span::styled(
-                format!("Base:   {:>6.1} Hz", base_freq),
-                param_style(ActiveParam::BaseFreq),
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw(arrow(ActiveParam::BeatFreq)),
-            Span::styled(
-                format!("Beat:   {:>6.1} Hz", beat_freq),
-                param_style(ActiveParam::BeatFreq),
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw(arrow(ActiveParam::Volume)),
-            Span::styled(
-                format!("Vol:    {} {:>3.0}%", make_bar(volume, 8), volume * 100.0),
-                param_style(ActiveParam::Volume),
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw(arrow(ActiveParam::Harmonics)),
-            Span::styled(
-                format!(
-                    "Warmth: {} {:>3.0}%",
-                    make_bar(harmonics, 8),
-                    harmonics * 100.0
-                ),
-                param_style(ActiveParam::Harmonics),
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw(arrow(ActiveParam::Emergence)),
-            Span::styled(
-                format!(
-                    "Emerge: {} {:>3.0}%",
-                    make_bar(emergence, 8),
-                    emergence * 100.0
-                ),
-                param_style(ActiveParam::Emergence),
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw(arrow(ActiveParam::NoiseLevel)),
-            Span::styled(
-                format!("Noise:  {} {:>3.0}%", make_bar(noise, 8), noise * 100.0),
-                param_style(ActiveParam::NoiseLevel),
-            ),
-        ]),
+    write_str(
+        buf,
+        area,
+        2,
+        0,
+        "LEFT EAR",
+        Style::default().fg(dim_color(accent, 0.82)).bg(PANEL_BG),
+    );
+    write_str(
+        buf,
+        area,
+        2,
+        halves[0].height,
+        "RIGHT EAR",
+        Style::default()
+            .fg(shift_color(accent, 34, 8, 44))
+            .bg(PANEL_BG),
+    );
+}
+
+fn draw_status(f: &mut Frame, area: Rect, app: &App, accent: Color, border: Color) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(47),
+            Constraint::Percentage(33),
+            Constraint::Percentage(20),
+        ])
+        .split(area);
+
+    draw_parameter_panel(f, chunks[0], app, accent, border);
+    draw_session_panel(f, chunks[1], app, accent, border);
+    draw_harmonic_panel(f, chunks[2], app, accent, border);
+}
+
+fn draw_parameter_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, border: Color) {
+    let block = panel_block(" PARAMETERS ", border);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let base = app.params.get_base_freq();
+    let beat = app.params.get_beat_freq();
+    let specs = [
+        MeterSpec {
+            param: ActiveParam::BaseFreq,
+            label: "base",
+            value: format!("{base:>5.1} Hz"),
+            ratio: (base - 50.0) / 450.0,
+            color: Color::Rgb(80, 220, 245),
+        },
+        MeterSpec {
+            param: ActiveParam::BeatFreq,
+            label: "beat",
+            value: format!("{beat:>5.1} Hz"),
+            ratio: beat / 100.0,
+            color: accent,
+        },
+        MeterSpec {
+            param: ActiveParam::Volume,
+            label: "gain",
+            value: format!("{:>3.0}%", app.params.get_volume() * 100.0),
+            ratio: app.params.get_volume(),
+            color: Color::Rgb(84, 240, 150),
+        },
+        MeterSpec {
+            param: ActiveParam::Harmonics,
+            label: "warm",
+            value: format!("{:>3.0}%", app.params.get_harmonics() * 100.0),
+            ratio: app.params.get_harmonics(),
+            color: Color::Rgb(250, 210, 92),
+        },
+        MeterSpec {
+            param: ActiveParam::Emergence,
+            label: "life",
+            value: format!("{:>3.0}%", app.params.get_emergence() * 100.0),
+            ratio: app.params.get_emergence(),
+            color: Color::Rgb(210, 145, 255),
+        },
+        MeterSpec {
+            param: ActiveParam::NoiseLevel,
+            label: "mist",
+            value: format!("{:>3.0}%", app.params.get_noise_level() * 100.0),
+            ratio: app.params.get_noise_level(),
+            color: Color::Rgb(120, 170, 255),
+        },
     ];
 
-    let left_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border))
-        .title(Span::styled(" Parameters ", Style::default().fg(DIM)));
-    f.render_widget(Paragraph::new(params_text).block(left_block), chunks[0]);
+    let meter_width = inner.width.saturating_sub(24).clamp(5, 18) as usize;
+    let rows: Vec<Line> = specs
+        .into_iter()
+        .map(|spec| meter_line(spec, app.active_param, meter_width))
+        .collect();
+    f.render_widget(
+        Paragraph::new(rows).style(Style::default().bg(PANEL_BG)),
+        inner,
+    );
+}
 
-    // Right panel
-    let preset_name = app
+fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, border: Color) {
+    let block = panel_block(" SESSION ", border);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let beat = app.params.get_beat_freq();
+    let preset = app
         .current_preset
-        .map(|i| PRESETS[i].name)
+        .map(|idx| PRESETS[idx].name)
         .unwrap_or("Custom");
-
-    let (sequence_name, sequence_progress) = if let Some(idx) = app.current_sequence {
-        let elapsed = app.sequence_elapsed().unwrap_or(0.0);
-        let total = SEQUENCES[idx].total_duration_secs;
-        let mins = elapsed as u32 / 60;
-        let secs = elapsed as u32 % 60;
-        let total_mins = total as u32 / 60;
-        let progress = elapsed / total;
-        (
-            SEQUENCES[idx].name,
-            format!(
-                "{} {mins}:{secs:02}/{total_mins}:00",
-                make_progress_bar(progress, 10),
-            ),
-        )
-    } else {
-        ("None", String::new())
-    };
-
-    let band = freq_band_name(beat_freq);
-
-    // Breathing indicator
-    let breath_elapsed = app.start_time.elapsed().as_secs_f64();
-    let breath_cycle = 7.5;
-    let breath_phase = (breath_elapsed % breath_cycle) / breath_cycle;
-    let breath_char = if breath_phase < 0.4 {
-        "\u{2581}\u{2582}\u{2583}\u{2584}\u{2585}\u{2586}\u{2587}"
-    } else if breath_phase < 0.5 {
-        "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}"
-    } else if breath_phase < 0.9 {
-        "\u{2587}\u{2586}\u{2585}\u{2584}\u{2583}\u{2582}\u{2581}"
-    } else {
-        "\u{2581}\u{2581}\u{2581}\u{2581}\u{2581}\u{2581}\u{2581}"
-    };
-
-    // Emergence status
+    let band = freq_band_name(beat);
+    let seconds = app.session_elapsed() as u32;
+    let timer = format!("{:02}:{:02}", seconds / 60, seconds % 60);
+    let sequence = sequence_status(app);
+    let breath = breath_meter(app.session_elapsed() as f64);
+    let emergence = app.params.get_emergence();
     let em_status = if emergence > 0.01 {
         if let Ok(snap) = app.emergence_snapshot.try_lock() {
             format!(
-                "{} voices, gen {}",
+                "{} voices / gen {}",
                 snap.voices.len(),
                 snap.generation_count
             )
@@ -396,257 +395,580 @@ fn draw_status(
             "active".to_string()
         }
     } else {
-        "off".to_string()
+        "quiet".to_string()
     };
 
-    let right_text = vec![
+    let rows = vec![
+        data_line("preset", preset, accent),
+        data_line("band", band, accent),
+        data_line("visual", app.viz_mode.label(), BRIGHT),
+        data_line("time", &timer, BRIGHT),
+        data_line("seq", &sequence, SOFT),
+        data_line("life", &em_status, accent),
         Line::from(vec![
-            Span::styled("  Preset:  ", Style::default().fg(DIM)),
-            Span::styled(preset_name, Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Band:    ", Style::default().fg(DIM)),
-            Span::styled(band, Style::default().fg(accent)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Seq:     ", Style::default().fg(DIM)),
-            Span::styled(sequence_name, Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Prog:    ", Style::default().fg(DIM)),
-            Span::styled(sequence_progress, Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Emerge:  ", Style::default().fg(DIM)),
-            Span::styled(em_status, Style::default().fg(accent)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Breath:  ", Style::default().fg(DIM)),
-            Span::styled(breath_char, Style::default().fg(accent)),
+            Span::styled(" breath ", Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(breath, Style::default().fg(accent).bg(PANEL_BG)),
         ]),
     ];
-
-    let right_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border))
-        .title(Span::styled(" Session ", Style::default().fg(DIM)));
-    f.render_widget(Paragraph::new(right_text).block(right_block), chunks[1]);
+    f.render_widget(
+        Paragraph::new(rows).style(Style::default().bg(PANEL_BG)),
+        inner,
+    );
 }
 
-fn draw_controls(
-    f: &mut Frame,
-    area: Rect,
-    accent: ratatui::style::Color,
-    border: ratatui::style::Color,
-) {
-    let controls = Line::from(vec![
-        Span::styled(" h/l", Style::default().fg(accent)),
-        Span::styled(" adj ", Style::default().fg(DIM)),
-        Span::styled("j/k", Style::default().fg(accent)),
-        Span::styled(" sel ", Style::default().fg(DIM)),
-        Span::styled("H/L", Style::default().fg(accent)),
-        Span::styled(" big ", Style::default().fg(DIM)),
-        Span::styled("p", Style::default().fg(accent)),
-        Span::styled("re ", Style::default().fg(DIM)),
-        Span::styled("s", Style::default().fg(accent)),
-        Span::styled("eq ", Style::default().fg(DIM)),
-        Span::styled("v/V", Style::default().fg(accent)),
-        Span::styled("iz ", Style::default().fg(DIM)),
-        Span::styled("e", Style::default().fg(accent)),
-        Span::styled("merge ", Style::default().fg(DIM)),
-        Span::styled("n", Style::default().fg(accent)),
-        Span::styled("oise ", Style::default().fg(DIM)),
-        Span::styled("?", Style::default().fg(accent)),
-        Span::styled("help ", Style::default().fg(DIM)),
-        Span::styled("q", Style::default().fg(accent)),
-        Span::styled("uit", Style::default().fg(DIM)),
-    ]);
+fn draw_harmonic_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, border: Color) {
+    let block = panel_block(" RATIOS ", border);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
+    let harmonics = app.params.get_harmonics();
+    let beat = app.params.get_beat_freq();
+    let ratios = [
+        ("1:1", "root"),
+        ("5:4", "third"),
+        ("4:3", "fourth"),
+        ("3:2", "fifth"),
+        ("phi", "gold"),
+        ("2:1", "oct"),
+    ];
+    let mut rows = Vec::with_capacity(7);
+    for (idx, (ratio, label)) in ratios.iter().enumerate() {
+        let glow = 0.44 + harmonics * 0.42 + idx as f32 * 0.02;
+        rows.push(Line::from(vec![
+            Span::styled(
+                " \u{2219} ",
+                Style::default().fg(dim_color(accent, glow)).bg(PANEL_BG),
+            ),
+            Span::styled(
+                format!("{ratio:<4}"),
+                Style::default()
+                    .fg(dim_color(accent, glow + 0.12))
+                    .bg(PANEL_BG)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!(" {label}"), Style::default().fg(DIM).bg(PANEL_BG)),
+        ]));
+    }
+    rows.push(Line::from(vec![
+        Span::styled(" beat ", Style::default().fg(DIM).bg(PANEL_BG)),
+        Span::styled(
+            format!("{beat:.1}Hz"),
+            Style::default().fg(BRIGHT).bg(PANEL_BG),
+        ),
+    ]));
+    f.render_widget(
+        Paragraph::new(rows).style(Style::default().bg(PANEL_BG)),
+        inner,
+    );
+}
+
+fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border));
-    f.render_widget(Paragraph::new(controls).centered().block(block), area);
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border))
+        .style(Style::default().bg(PANEL_ALT));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let controls = if inner.width < 106 {
+        Line::from(vec![
+            key_chip("h/l", accent),
+            key_chip("j/k", Color::Rgb(84, 240, 150)),
+            key_chip("H/L", Color::Rgb(250, 210, 92)),
+            key_chip("p", Color::Rgb(120, 170, 255)),
+            key_chip("s", Color::Rgb(210, 145, 255)),
+            key_chip("v/V", accent),
+            key_chip("e", Color::Rgb(210, 145, 255)),
+            key_chip("n", Color::Rgb(120, 170, 255)),
+            key_chip("?", BRIGHT),
+            key_chip("q", DIM),
+        ])
+    } else {
+        Line::from(vec![
+            command_chip("h/l", "tune", accent),
+            command_chip("j/k", "select", Color::Rgb(84, 240, 150)),
+            command_chip("H/L", "coarse", Color::Rgb(250, 210, 92)),
+            command_chip("p", "preset", Color::Rgb(120, 170, 255)),
+            command_chip("s", "sequence", Color::Rgb(210, 145, 255)),
+            command_chip("v/V", "visual", accent),
+            command_chip("e", "life", Color::Rgb(210, 145, 255)),
+            command_chip("n", "noise", Color::Rgb(120, 170, 255)),
+            command_chip("?", "help", BRIGHT),
+            command_chip("q", "quit", DIM),
+        ])
+    };
+    f.render_widget(
+        Paragraph::new(controls)
+            .centered()
+            .style(Style::default().bg(PANEL_ALT)),
+        inner,
+    );
 }
 
-fn draw_preset_menu(f: &mut Frame, area: Rect, app: &App, accent: ratatui::style::Color) {
-    let menu_area = centered_rect(55, 55, area);
-    f.render_widget(Clear, menu_area);
+fn draw_preset_menu(f: &mut Frame, area: Rect, app: &App, accent: Color) {
+    f.render_widget(Clear, area);
+    draw_backdrop(f.buffer_mut(), area, app.session_elapsed() as f64, accent);
+    let menu_area = centered_rect(68, 56, area);
+    draw_modal_shadow(f.buffer_mut(), menu_area);
 
     let items: Vec<ListItem> = PRESETS
         .iter()
         .enumerate()
-        .map(|(i, p)| {
-            let style = if i == app.menu_index {
-                Style::default()
-                    .fg(ratatui::style::Color::Rgb(30, 30, 40))
-                    .bg(p.color)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(p.color)
-            };
+        .map(|(idx, preset)| {
+            let selected = idx == app.menu_index;
+            let fg = if selected { BG_TOP } else { preset.color };
+            let bg = if selected { preset.color } else { PANEL_BG };
             ListItem::new(Line::from(vec![
-                Span::styled(format!(" {} ", i + 1), Style::default().fg(DIM)),
-                Span::styled(format!("{:<14}", p.name), style),
-                Span::styled(format!(" {}", p.description), Style::default().fg(DIM)),
+                Span::styled(
+                    format!(" {} ", idx + 1),
+                    Style::default()
+                        .fg(if selected { BG_TOP } else { DIM })
+                        .bg(bg),
+                ),
+                Span::styled(
+                    format!("{:<14}", preset.name),
+                    Style::default().fg(fg).bg(bg).add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ),
+                Span::styled(
+                    format!("  {}", preset.description),
+                    Style::default()
+                        .fg(if selected { BG_TOP } else { SOFT })
+                        .bg(bg),
+                ),
             ]))
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(accent))
-            .title(Span::styled(
-                " Presets (j/k, Enter, Esc) ",
-                Style::default().fg(accent).add_modifier(Modifier::BOLD),
-            )),
-    );
+    let list = List::new(items).block(modal_block(" PRESETS  j/k Enter Esc ", accent));
     f.render_widget(list, menu_area);
 }
 
-fn draw_sequence_menu(f: &mut Frame, area: Rect, app: &App) {
-    let menu_area = centered_rect(58, 55, area);
-    f.render_widget(Clear, menu_area);
+fn draw_sequence_menu(f: &mut Frame, area: Rect, app: &App, accent: Color) {
+    f.render_widget(Clear, area);
+    draw_backdrop(f.buffer_mut(), area, app.session_elapsed() as f64, accent);
+    let menu_area = centered_rect(72, 56, area);
+    draw_modal_shadow(f.buffer_mut(), menu_area);
 
     let items: Vec<ListItem> = SEQUENCES
         .iter()
         .enumerate()
-        .map(|(i, s)| {
-            let style = if i == app.menu_index {
-                Style::default()
-                    .fg(ratatui::style::Color::Rgb(30, 30, 40))
-                    .bg(ratatui::style::Color::Rgb(255, 220, 80))
-                    .add_modifier(Modifier::BOLD)
+        .map(|(idx, sequence)| {
+            let selected = idx == app.menu_index;
+            let fg = if selected { BG_TOP } else { BRIGHT };
+            let bg = if selected {
+                Color::Rgb(250, 210, 92)
             } else {
-                Style::default().fg(BRIGHT)
+                PANEL_BG
             };
             ListItem::new(Line::from(vec![
-                Span::styled(format!(" {} ", i + 1), Style::default().fg(DIM)),
-                Span::styled(format!("{:<18}", s.name), style),
-                Span::styled(format!(" {}", s.description), Style::default().fg(DIM)),
+                Span::styled(
+                    format!(" {} ", idx + 1),
+                    Style::default()
+                        .fg(if selected { BG_TOP } else { DIM })
+                        .bg(bg),
+                ),
+                Span::styled(
+                    format!("{:<18}", sequence.name),
+                    Style::default().fg(fg).bg(bg).add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ),
+                Span::styled(
+                    format!("  {}", sequence.description),
+                    Style::default()
+                        .fg(if selected { BG_TOP } else { SOFT })
+                        .bg(bg),
+                ),
             ]))
         })
         .collect();
 
-    let list = List::new(items).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(ratatui::style::Color::Rgb(255, 220, 80)))
-            .title(Span::styled(
-                " Sequences (j/k, Enter, Esc) ",
-                Style::default()
-                    .fg(ratatui::style::Color::Rgb(255, 220, 80))
-                    .add_modifier(Modifier::BOLD),
-            )),
-    );
+    let list = List::new(items).block(modal_block(" SEQUENCES  j/k Enter Esc ", accent));
     f.render_widget(list, menu_area);
 }
 
-fn draw_help(f: &mut Frame, area: Rect, accent: ratatui::style::Color) {
-    let help_area = centered_rect(62, 80, area);
-    f.render_widget(Clear, help_area);
+fn draw_help(f: &mut Frame, area: Rect, accent: Color) {
+    f.render_widget(Clear, area);
+    draw_backdrop(f.buffer_mut(), area, 0.0, accent);
+    let help_area = centered_rect(72, 78, area);
+    draw_modal_shadow(f.buffer_mut(), help_area);
 
     let help_text = vec![
         Line::from(""),
-        Line::from(Span::styled(
-            "  Navigation",
-            Style::default().fg(accent).add_modifier(Modifier::BOLD),
-        )),
         Line::from(vec![
-            Span::styled("    j / \u{2193}     ", Style::default().fg(accent)),
-            Span::styled("Next parameter", Style::default().fg(BRIGHT)),
+            Span::styled("   navigation   ", Style::default().fg(BG_TOP).bg(accent)),
+            Span::styled(
+                "  j/k choose parameter    h/l adjust    H/L coarse",
+                Style::default().fg(BRIGHT),
+            ),
         ]),
+        Line::from(""),
         Line::from(vec![
-            Span::styled("    k / \u{2191}     ", Style::default().fg(accent)),
-            Span::styled("Previous parameter", Style::default().fg(BRIGHT)),
+            Span::styled(
+                "   playback     ",
+                Style::default().fg(BG_TOP).bg(Color::Rgb(84, 240, 150)),
+            ),
+            Span::styled(
+                "  Space play or pause    q/Esc leave",
+                Style::default().fg(BRIGHT),
+            ),
         ]),
+        Line::from(""),
         Line::from(vec![
-            Span::styled("    h / \u{2190}     ", Style::default().fg(accent)),
-            Span::styled("Decrease value", Style::default().fg(BRIGHT)),
+            Span::styled(
+                "   programs     ",
+                Style::default().fg(BG_TOP).bg(Color::Rgb(250, 210, 92)),
+            ),
+            Span::styled(
+                "  1-5 quick presets    p presets    s sequences",
+                Style::default().fg(BRIGHT),
+            ),
         ]),
+        Line::from(""),
         Line::from(vec![
-            Span::styled("    l / \u{2192}     ", Style::default().fg(accent)),
-            Span::styled("Increase value", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    H / L       ", Style::default().fg(accent)),
-            Span::styled("Big decrease / increase", Style::default().fg(BRIGHT)),
+            Span::styled(
+                "   spectacle    ",
+                Style::default().fg(BG_TOP).bg(Color::Rgb(210, 145, 255)),
+            ),
+            Span::styled(
+                "  v/V cycle visual planes    e emergence    n noise",
+                Style::default().fg(BRIGHT),
+            ),
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            "  Controls",
-            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+            "   Emergence voices spawn by simple harmonic ratios, mutate gently, and fade by consonance.",
+            Style::default().fg(SOFT),
         )),
-        Line::from(vec![
-            Span::styled("    Space       ", Style::default().fg(accent)),
-            Span::styled("Play / Pause", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    p           ", Style::default().fg(accent)),
-            Span::styled("Preset menu", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    s           ", Style::default().fg(accent)),
-            Span::styled("Sequence menu", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    v / V       ", Style::default().fg(accent)),
-            Span::styled("Next / previous visualization", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    e           ", Style::default().fg(accent)),
-            Span::styled("Toggle emergence mode", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    n           ", Style::default().fg(accent)),
-            Span::styled("Toggle noise", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    1-5         ", Style::default().fg(accent)),
-            Span::styled("Quick preset select", Style::default().fg(BRIGHT)),
-        ]),
-        Line::from(vec![
-            Span::styled("    q / Esc     ", Style::default().fg(accent)),
-            Span::styled("Quit", Style::default().fg(BRIGHT)),
-        ]),
+        Line::from(Span::styled(
+            "   Harmonics view maps the stereo phase trace onto a just-intonation / golden-ratio lattice.",
+            Style::default().fg(SOFT),
+        )),
         Line::from(""),
         Line::from(Span::styled(
-            "  Emergence",
+            "   Press any key to return.",
             Style::default().fg(accent).add_modifier(Modifier::BOLD),
-        )),
-        Line::from(Span::styled(
-            "    Voices spawn at harmonic intervals, interact via",
-            Style::default().fg(DIM),
-        )),
-        Line::from(Span::styled(
-            "    consonance rules, and decay. A Bach-like canon of",
-            Style::default().fg(DIM),
-        )),
-        Line::from(Span::styled(
-            "    living sound. Adjust intensity with the Emerge param.",
-            Style::default().fg(DIM),
         )),
     ];
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(accent))
-        .title(Span::styled(
-            " Help (press any key) ",
-            Style::default().fg(accent).add_modifier(Modifier::BOLD),
-        ));
-    f.render_widget(Paragraph::new(help_text).block(block), help_area);
+    let block = modal_block(" HELP ", accent);
+    f.render_widget(
+        Paragraph::new(help_text)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .style(Style::default().bg(PANEL_BG)),
+        help_area,
+    );
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let v = Layout::default()
+fn draw_backdrop(buf: &mut Buffer, area: Rect, elapsed: f64, accent: Color) {
+    let tick = (elapsed * 9.0) as u16;
+    for y in 0..area.height {
+        let t = y as f32 / area.height.max(1) as f32;
+        let base = if t < 0.55 {
+            blend_color(BG_TOP, BG_MID, t / 0.55)
+        } else {
+            blend_color(BG_MID, BG_BOTTOM, (t - 0.55) / 0.45)
+        };
+        for x in 0..area.width {
+            let cell = &mut buf[(area.x + x, area.y + y)];
+            cell.set_char(' ');
+            cell.set_bg(base);
+            let hash = x
+                .wrapping_mul(37)
+                .wrapping_add(y.wrapping_mul(17))
+                .wrapping_add(tick);
+            if hash % 41 == 0 {
+                let drift = ((x as f64 * 0.17 + elapsed * 0.6).sin()
+                    + (y as f64 * 0.31 + elapsed * 0.3).cos())
+                    * 0.5;
+                if drift > -0.2 {
+                    cell.set_char(if hash % 82 == 0 {
+                        '\u{2219}'
+                    } else {
+                        '\u{00B7}'
+                    });
+                    cell.set_fg(dim_color(accent, 0.20 + drift as f32 * 0.18));
+                }
+            }
+        }
+    }
+}
+
+fn draw_visual_backdrop(buf: &mut Buffer, area: Rect, elapsed: f64, accent: Color) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    for y in 0..area.height {
+        let t = y as f32 / area.height.max(1) as f32;
+        let bg = blend_color(PANEL_BG, PANEL_ALT, t * 0.6);
+        for x in 0..area.width {
+            let cell = &mut buf[(area.x + x, area.y + y)];
+            cell.set_char(' ');
+            cell.set_bg(bg);
+            let wave =
+                (x as f64 * 0.12 + elapsed * 0.8).sin() + (y as f64 * 0.23 - elapsed * 0.4).cos();
+            if (x + y * 3 + elapsed as u16).is_multiple_of(23) && wave > 0.4 {
+                cell.set_char('\u{00B7}');
+                cell.set_fg(dim_color(accent, 0.24));
+            }
+        }
+    }
+}
+
+fn draw_spectrum_floor(buf: &mut Buffer, area: Rect, accent: Color) {
+    if area.height < 2 {
+        return;
+    }
+    let labels = [
+        ("Delta", 1),
+        ("Theta", 2),
+        ("Alpha", 4),
+        ("Beta", 7),
+        ("Gamma", 11),
+    ];
+    let y = area.height.saturating_sub(1);
+    for (label, position) in labels {
+        let x = area.width.saturating_mul(position) / 12;
+        write_str(
+            buf,
+            area,
+            x,
+            y,
+            label,
+            Style::default().fg(dim_color(accent, 0.56)).bg(PANEL_BG),
+        );
+    }
+}
+
+fn spectral_ribbon(beat_freq: f32) -> Line<'static> {
+    let bands = [
+        ("Delta", 2.0, Color::Rgb(180, 120, 255)),
+        ("Theta", 6.0, Color::Rgb(140, 100, 255)),
+        ("Alpha", 10.0, Color::Rgb(80, 230, 230)),
+        ("Beta", 18.0, Color::Rgb(80, 255, 140)),
+        ("Gamma", 40.0, Color::Rgb(255, 220, 80)),
+    ];
+    let mut spans = Vec::with_capacity(bands.len() * 3);
+    for (idx, (name, center, color)) in bands.into_iter().enumerate() {
+        let active = (beat_freq - center).abs()
+            <= match idx {
+                0 => 2.0,
+                1 => 2.0,
+                2 => 3.0,
+                3 => 12.0,
+                _ => 80.0,
+            };
+        let style = if active {
+            Style::default()
+                .fg(BG_TOP)
+                .bg(color)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(dim_color(color, 0.65)).bg(BG_TOP)
+        };
+        spans.push(Span::styled(" ", Style::default().bg(BG_TOP)));
+        spans.push(Span::styled(format!(" {name} "), style));
+        spans.push(Span::styled(" ", Style::default().fg(DIM).bg(BG_TOP)));
+    }
+    Line::from(spans).centered()
+}
+
+fn mode_rail(active: VizMode, accent: Color) -> Line<'static> {
+    let modes = [
+        VizMode::Waveform,
+        VizMode::Spectrum,
+        VizMode::Harmonics,
+        VizMode::Envelope,
+        VizMode::Penrose,
+        VizMode::Emergence,
+    ];
+    let mut spans = Vec::with_capacity(modes.len() * 2);
+    for mode in modes {
+        let style = if mode == active {
+            Style::default()
+                .fg(BG_TOP)
+                .bg(accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(DIM).bg(PANEL_BG)
+        };
+        spans.push(Span::styled(format!(" {} ", mode.label()), style));
+        spans.push(Span::styled(" ", Style::default().fg(BORDER).bg(PANEL_BG)));
+    }
+    Line::from(spans).centered()
+}
+
+fn meter_line(spec: MeterSpec, active: ActiveParam, width: usize) -> Line<'static> {
+    let is_active = spec.param == active;
+    let mut spans = Vec::with_capacity(8);
+    spans.push(Span::styled(
+        if is_active { " \u{25B8}" } else { "  " },
+        Style::default().fg(spec.color).bg(PANEL_BG),
+    ));
+    spans.push(Span::styled(
+        format!(" {:<5}", spec.label),
+        Style::default()
+            .fg(if is_active { BRIGHT } else { SOFT })
+            .bg(PANEL_BG)
+            .add_modifier(if is_active {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            }),
+    ));
+    spans.push(Span::styled(
+        format!(" {:>8} ", spec.value),
+        Style::default().fg(DIM).bg(PANEL_BG),
+    ));
+    spans.extend(meter_bar(spec.ratio, width, spec.color));
+    Line::from(spans)
+}
+
+fn meter_bar(value: f32, width: usize, color: Color) -> Vec<Span<'static>> {
+    let filled = (value.clamp(0.0, 1.0) * width as f32).round() as usize;
+    let empty = width.saturating_sub(filled);
+    vec![
+        Span::styled(
+            "\u{258C}",
+            Style::default().fg(dim_color(color, 0.45)).bg(PANEL_BG),
+        ),
+        Span::styled(
+            "\u{2588}".repeat(filled),
+            Style::default().fg(color).bg(PANEL_BG),
+        ),
+        Span::styled(
+            "\u{2591}".repeat(empty),
+            Style::default().fg(dim_color(color, 0.25)).bg(PANEL_BG),
+        ),
+        Span::styled(
+            "\u{2590}",
+            Style::default().fg(dim_color(color, 0.45)).bg(PANEL_BG),
+        ),
+    ]
+}
+
+fn data_line(label: &'static str, value: &str, color: Color) -> Line<'static> {
+    Line::from(vec![
+        Span::styled(
+            format!(" {label:<7}"),
+            Style::default().fg(DIM).bg(PANEL_BG),
+        ),
+        Span::styled(value.to_string(), Style::default().fg(color).bg(PANEL_BG)),
+    ])
+}
+
+fn sequence_status(app: &App) -> String {
+    if let Some(idx) = app.current_sequence {
+        let elapsed = app.sequence_elapsed().unwrap_or(0.0);
+        let total = SEQUENCES[idx].total_duration_secs;
+        let progress = elapsed / total;
+        let mins = elapsed as u32 / 60;
+        let secs = elapsed as u32 % 60;
+        format!(
+            "{} {} {mins}:{secs:02}",
+            SEQUENCES[idx].name,
+            make_progress_bar(progress, 8)
+        )
+    } else {
+        "free running".to_string()
+    }
+}
+
+fn breath_meter(elapsed: f64) -> String {
+    let cycle = 7.5;
+    let phase = (elapsed % cycle) / cycle;
+    let width = 10usize;
+    let fill = if phase < 0.4 {
+        (phase / 0.4 * width as f64).round() as usize
+    } else if phase < 0.5 {
+        width
+    } else if phase < 0.9 {
+        ((0.9 - phase) / 0.4 * width as f64).round() as usize
+    } else {
+        1
+    };
+    format!(
+        "{}{}",
+        "\u{2588}".repeat(fill.min(width)),
+        "\u{2591}".repeat(width.saturating_sub(fill.min(width)))
+    )
+}
+
+fn command_chip(key: &'static str, label: &'static str, color: Color) -> Span<'static> {
+    Span::styled(
+        format!(" {key} {label} "),
+        Style::default()
+            .fg(if color == DIM { SOFT } else { BG_TOP })
+            .bg(color)
+            .add_modifier(Modifier::BOLD),
+    )
+}
+
+fn key_chip(key: &'static str, color: Color) -> Span<'static> {
+    Span::styled(
+        format!(" {key} "),
+        Style::default()
+            .fg(if color == DIM { SOFT } else { BG_TOP })
+            .bg(color)
+            .add_modifier(Modifier::BOLD),
+    )
+}
+
+fn panel_block(title: &'static str, border: Color) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border))
+        .style(Style::default().bg(PANEL_BG))
+        .title(Span::styled(title, Style::default().fg(DIM)))
+}
+
+fn modal_block(title: &'static str, accent: Color) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Double)
+        .border_style(Style::default().fg(accent))
+        .style(Style::default().bg(PANEL_BG))
+        .title(Span::styled(
+            title,
+            Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
+        ))
+}
+
+fn draw_modal_shadow(buf: &mut Buffer, area: Rect) {
+    let shadow_x = area.x.saturating_add(2);
+    let shadow_y = area.y.saturating_add(1);
+    let shadow = Rect {
+        x: shadow_x,
+        y: shadow_y,
+        width: area.width,
+        height: area.height,
+    };
+    for y in shadow.y..shadow.y.saturating_add(shadow.height).min(buf.area.height) {
+        for x in shadow.x..shadow.x.saturating_add(shadow.width).min(buf.area.width) {
+            let cell = &mut buf[(x, y)];
+            cell.set_bg(SHADOW);
+        }
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Percentage((100 - percent_y) / 2),
             Constraint::Percentage(percent_y),
             Constraint::Percentage((100 - percent_y) / 2),
         ])
-        .split(r);
+        .split(area);
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -654,43 +976,86 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage(percent_x),
             Constraint::Percentage((100 - percent_x) / 2),
         ])
-        .split(v[1])[1]
+        .split(vertical[1])[1]
 }
 
-fn make_bar(value: f32, width: usize) -> String {
-    let filled = (value * width as f32) as usize;
-    let empty = width.saturating_sub(filled);
-    format!("{}{}", "\u{2588}".repeat(filled), "\u{2591}".repeat(empty))
+fn make_phase_wave(elapsed: f32, width: usize) -> String {
+    let width = width.clamp(18, 44);
+    let glyphs = [
+        '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
+        '\u{2588}',
+    ];
+    (0..width)
+        .map(|idx| {
+            let phase = elapsed as f64 * 2.0 + idx as f64 * 0.42;
+            let value = ((phase.sin() + 1.0) * 0.5 * (glyphs.len() - 1) as f64).round() as usize;
+            glyphs[value.min(glyphs.len() - 1)]
+        })
+        .collect()
 }
 
 fn make_progress_bar(value: f32, width: usize) -> String {
-    let filled = (value.clamp(0.0, 1.0) * width as f32) as usize;
+    let filled = (value.clamp(0.0, 1.0) * width as f32).round() as usize;
     let empty = width.saturating_sub(filled);
-    format!(
-        "\u{2523}{}\u{2501}{}\u{252B}",
-        "\u{2501}".repeat(filled),
-        "\u{2500}".repeat(empty)
-    )
+    format!("{}{}", "\u{25AC}".repeat(filled), "\u{25AD}".repeat(empty))
 }
 
-fn dim_color(color: ratatui::style::Color, factor: f32) -> ratatui::style::Color {
-    match color {
-        ratatui::style::Color::Rgb(r, g, b) => ratatui::style::Color::Rgb(
-            (r as f32 * factor) as u8,
-            (g as f32 * factor) as u8,
-            (b as f32 * factor) as u8,
-        ),
-        c => c,
+fn write_str(buf: &mut Buffer, area: Rect, x: u16, y: u16, text: &str, style: Style) {
+    if y >= area.height {
+        return;
+    }
+    for (offset, ch) in text.chars().enumerate() {
+        let cell_x = x.saturating_add(offset as u16);
+        if cell_x >= area.width {
+            break;
+        }
+        let cell = &mut buf[(area.x + cell_x, area.y + y)];
+        cell.set_char(ch);
+        cell.set_style(style);
     }
 }
 
-fn shift_color(color: ratatui::style::Color, dr: u8, dg: u8, db: u8) -> ratatui::style::Color {
+fn breathing_color(color: Color, elapsed: f64) -> Color {
+    let pulse = 0.62 + 0.22 * (elapsed * 0.8).sin().abs() as f32;
+    dim_color(color, pulse)
+}
+
+fn dim_color(color: Color, factor: f32) -> Color {
     match color {
-        ratatui::style::Color::Rgb(r, g, b) => ratatui::style::Color::Rgb(
-            r.saturating_add(dr),
-            g.saturating_add(dg),
-            b.saturating_add(db),
+        Color::Rgb(red, green, blue) => Color::Rgb(
+            (red as f32 * factor).clamp(0.0, 255.0) as u8,
+            (green as f32 * factor).clamp(0.0, 255.0) as u8,
+            (blue as f32 * factor).clamp(0.0, 255.0) as u8,
         ),
-        c => c,
+        other => other,
+    }
+}
+
+fn shift_color(color: Color, red_delta: u8, green_delta: u8, blue_delta: u8) -> Color {
+    match color {
+        Color::Rgb(red, green, blue) => Color::Rgb(
+            red.saturating_add(red_delta),
+            green.saturating_add(green_delta),
+            blue.saturating_add(blue_delta),
+        ),
+        other => other,
+    }
+}
+
+fn blend_color(start: Color, end: Color, amount: f32) -> Color {
+    let (sr, sg, sb) = rgb_from_color(start);
+    let (er, eg, eb) = rgb_from_color(end);
+    let t = amount.clamp(0.0, 1.0);
+    Color::Rgb(
+        (sr as f32 + (er as f32 - sr as f32) * t) as u8,
+        (sg as f32 + (eg as f32 - sg as f32) * t) as u8,
+        (sb as f32 + (eb as f32 - sb as f32) * t) as u8,
+    )
+}
+
+fn rgb_from_color(color: Color) -> (u8, u8, u8) {
+    match color {
+        Color::Rgb(red, green, blue) => (red, green, blue),
+        _ => (128, 128, 128),
     }
 }
