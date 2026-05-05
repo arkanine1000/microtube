@@ -21,29 +21,29 @@ const MAX_VOICES: usize = 12;
 
 /// Harmonic ratios that voices can spawn at (just intonation + golden)
 const SPAWN_RATIOS: &[f64] = &[
-    1.0 / PHI,     // Sub-golden
-    0.5,           // Octave below
-    2.0 / 3.0,    // Perfect fifth below
-    3.0 / 4.0,    // Perfect fourth below
-    1.0,           // Unison (canon)
-    5.0 / 4.0,    // Major third
-    4.0 / 3.0,    // Perfect fourth
-    3.0 / 2.0,    // Perfect fifth
-    PHI,           // Golden ratio
-    2.0,           // Octave
-    PHI * PHI,    // Golden squared (approaching next octave)
+    1.0 / PHI, // Sub-golden
+    0.5,       // Octave below
+    2.0 / 3.0, // Perfect fifth below
+    3.0 / 4.0, // Perfect fourth below
+    1.0,       // Unison (canon)
+    5.0 / 4.0, // Major third
+    4.0 / 3.0, // Perfect fourth
+    3.0 / 2.0, // Perfect fifth
+    PHI,       // Golden ratio
+    2.0,       // Octave
+    PHI * PHI, // Golden squared (approaching next octave)
 ];
 
 /// A single emergent voice in the system.
 #[derive(Clone)]
 pub struct Voice {
-    pub freq_ratio: f64,    // Ratio to base frequency
-    pub amplitude: f64,     // Current amplitude (0.0 - 1.0)
-    pub phase: f64,         // Phase accumulator
-    pub age: f64,           // Seconds since birth
-    pub lifetime: f64,      // Total expected lifetime
-    pub generation: u8,     // How many ancestors spawned this voice
-    pub pan: f64,           // -1.0 (left) to 1.0 (right)
+    pub freq_ratio: f64, // Ratio to base frequency
+    pub amplitude: f64,  // Current amplitude (0.0 - 1.0)
+    pub phase: f64,      // Phase accumulator
+    pub age: f64,        // Seconds since birth
+    pub lifetime: f64,   // Total expected lifetime
+    pub generation: u8,  // How many ancestors spawned this voice
+    pub pan: f64,        // -1.0 (left) to 1.0 (right)
     alive: bool,
 }
 
@@ -113,12 +113,12 @@ pub struct EmergenceEngine {
     time: f64,
     sample_rate: f64,
     spawn_timer: f64,
-    spawn_interval: f64,   // Seconds between potential spawns
+    spawn_interval: f64, // Seconds between potential spawns
     epoch: u32,
     /// Canon pattern: a sequence of ratio indices that repeats
     canon_pattern: Vec<usize>,
     canon_position: usize,
-    canon_offset: f64,     // Pitch offset for canon repetition
+    canon_offset: f64, // Pitch offset for canon repetition
 }
 
 impl EmergenceEngine {
@@ -239,7 +239,7 @@ impl EmergenceEngine {
         self.canon_position += 1;
 
         // Every 8 spawns, shift the canon offset (like a fugue answer)
-        if self.canon_position % 8 == 0 {
+        if self.canon_position.is_multiple_of(8) {
             self.canon_offset = SPAWN_RATIOS[(self.epoch as usize / 8) % SPAWN_RATIOS.len()];
         }
 
@@ -258,7 +258,9 @@ impl EmergenceEngine {
         let lifetime = base_lifetime * (0.8 + self.xorshift() * 0.4);
 
         // Generation: child of the strongest current voice
-        let parent_gen = self.voices.iter()
+        let parent_gen = self
+            .voices
+            .iter()
             .max_by(|a, b| a.amplitude.partial_cmp(&b.amplitude).unwrap())
             .map(|v| v.generation)
             .unwrap_or(0);
@@ -267,7 +269,8 @@ impl EmergenceEngine {
         // Pan: spread voices across the stereo field
         let pan = (self.xorshift() * 2.0 - 1.0) * 0.7; // -0.7 to 0.7
 
-        self.voices.push(Voice::new(final_ratio, lifetime, generation, pan));
+        self.voices
+            .push(Voice::new(final_ratio, lifetime, generation, pan));
     }
 
     /// Score how consonant a frequency ratio is (0.0 = dissonant, 1.0 = perfect).
@@ -275,13 +278,13 @@ impl EmergenceEngine {
     fn consonance_score(&self, ratio: f64) -> f64 {
         // Check proximity to simple ratios
         let simple_ratios = [
-            (1.0, 1.0),   // Unison
-            (2.0, 0.95),  // Octave
-            (1.5, 0.9),   // Fifth
-            (4.0/3.0, 0.85), // Fourth
-            (5.0/4.0, 0.8),  // Major third
-            (6.0/5.0, 0.75), // Minor third
-            (PHI, 0.7),      // Golden (special)
+            (1.0, 1.0),        // Unison
+            (2.0, 0.95),       // Octave
+            (1.5, 0.9),        // Fifth
+            (4.0 / 3.0, 0.85), // Fourth
+            (5.0 / 4.0, 0.8),  // Major third
+            (6.0 / 5.0, 0.75), // Minor third
+            (PHI, 0.7),        // Golden (special)
         ];
 
         let mut best_score = 0.0;
@@ -300,7 +303,9 @@ impl EmergenceEngine {
 
     /// Take a snapshot of current state for visualization.
     pub fn snapshot(&self) -> EmergenceSnapshot {
-        let voices: Vec<VoiceInfo> = self.voices.iter()
+        let voices: Vec<VoiceInfo> = self
+            .voices
+            .iter()
             .filter(|v| v.is_alive() && v.amplitude > 0.001)
             .map(|v| VoiceInfo {
                 freq_ratio: v.freq_ratio as f32,

@@ -13,10 +13,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::execute;
-use ratatui::backend::CrosstermBackend;
+use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 
 use app::{App, AppMode, AudioParams, VizBuffer};
 use audio::AudioEngine;
@@ -70,12 +70,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-        if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    handle_key(&mut app, key.code, key.modifiers);
-                }
-            }
+        if event::poll(timeout)?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            handle_key(&mut app, key.code, key.modifiers);
         }
 
         if last_tick.elapsed() >= tick_rate {
@@ -108,7 +107,9 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         AppMode::Normal => handle_normal(app, code),
         AppMode::PresetSelect => handle_menu(app, code, PRESETS.len(), true),
         AppMode::SequenceSelect => handle_menu(app, code, SEQUENCES.len(), false),
-        AppMode::Help => { app.mode = AppMode::Normal; }
+        AppMode::Help => {
+            app.mode = AppMode::Normal;
+        }
     }
 }
 
@@ -186,25 +187,35 @@ fn handle_menu(app: &mut App, code: KeyCode, len: usize, is_preset: bool) {
         KeyCode::Esc | KeyCode::Char('q') => app.mode = AppMode::Normal,
 
         KeyCode::Char('j') | KeyCode::Down => {
-            if app.menu_index < len - 1 { app.menu_index += 1; }
+            if app.menu_index < len - 1 {
+                app.menu_index += 1;
+            }
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            if app.menu_index > 0 { app.menu_index -= 1; }
+            if app.menu_index > 0 {
+                app.menu_index -= 1;
+            }
         }
         KeyCode::Char('g') => app.menu_index = 0,
         KeyCode::Char('G') => app.menu_index = len - 1,
 
         KeyCode::Enter | KeyCode::Char('l') => {
-            if is_preset { app.apply_preset(app.menu_index); }
-            else { app.start_sequence(app.menu_index); }
+            if is_preset {
+                app.apply_preset(app.menu_index);
+            } else {
+                app.start_sequence(app.menu_index);
+            }
             app.mode = AppMode::Normal;
         }
 
         KeyCode::Char(c @ '1'..='9') => {
             let idx = (c as usize) - ('1' as usize);
             if idx < len {
-                if is_preset { app.apply_preset(idx); }
-                else { app.start_sequence(idx); }
+                if is_preset {
+                    app.apply_preset(idx);
+                } else {
+                    app.start_sequence(idx);
+                }
                 app.mode = AppMode::Normal;
             }
         }

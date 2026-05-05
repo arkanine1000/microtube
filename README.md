@@ -38,6 +38,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 **Visualization**
 - Braille-character waveforms (2x4 sub-cell resolution per character)
 - Cava-style spectrum bars with gravity falloff
+- Harmonic phase portrait with just-intonation and golden-ratio lattice nodes
 - Beat envelope showing the interference pattern
 - Penrose-inspired rotating geometric patterns (golden spiral, concentric polygons)
 - Emergence constellation (living nodes connected by harmonic relationships)
@@ -54,7 +55,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 
 - Linux with PipeWire (or ALSA-compatible audio)
 - A modern terminal emulator (alacritty, kitty, wezterm, foot)
-- Rust toolchain (1.70+)
+- Rust toolchain (1.85+; edition 2024)
 - Headphones (binaural beats require stereo separation)
 
 ## Installation
@@ -86,7 +87,7 @@ cargo run --release
 | `1`-`5` | Quick preset |
 | `p` | Preset menu |
 | `s` | Sequence menu |
-| `v` | Cycle visualization |
+| `v` / `V` | Next / previous visualization |
 | `e` | Toggle emergence |
 | `n` | Toggle pink noise |
 | `?` | Help |

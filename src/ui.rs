@@ -1,14 +1,14 @@
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
-use ratatui::Frame;
 
 use crate::app::{ActiveParam, App, AppMode, VizMode};
-use crate::presets::{freq_band_name, freq_color, PRESETS, SEQUENCES};
+use crate::presets::{PRESETS, SEQUENCES, freq_band_name, freq_color};
 use crate::visualization::{
-    render_beat_envelope, render_braille_waveform, render_emergence, render_penrose,
-    render_spectrum_bars,
+    HarmonicLattice, render_beat_envelope, render_braille_waveform, render_emergence,
+    render_harmonic_lattice, render_penrose, render_spectrum_bars,
 };
 
 // Color palette tuned for dark backgrounds (~#383c4a)
@@ -20,8 +20,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.area();
     app.frame_count += 1;
 
-    if size.width < 50 || size.height < 15 {
-        let msg = Paragraph::new("Terminal too small\nMinimum: 50x15")
+    if size.width < 64 || size.height < 22 {
+        let msg = Paragraph::new("Terminal too small\nMinimum: 64x22")
             .style(Style::default().fg(ratatui::style::Color::Red));
         f.render_widget(msg, size);
         return;
@@ -38,9 +38,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
+            Constraint::Length(3), // Title
             Constraint::Min(8),    // Visualization
-            Constraint::Length(7), // Status panel
+            Constraint::Length(8), // Status panel
             Constraint::Length(3), // Controls
         ])
         .split(size);
@@ -65,7 +65,10 @@ fn draw_title(
     border: ratatui::style::Color,
     app: &App,
 ) {
-    let playing = app.params.playing.load(std::sync::atomic::Ordering::Relaxed);
+    let playing = app
+        .params
+        .playing
+        .load(std::sync::atomic::Ordering::Relaxed);
     let status_icon = if playing { "\u{25B6}" } else { "\u{23F8}" };
     let beat_freq = app.params.get_beat_freq();
     let band = freq_band_name(beat_freq);
@@ -102,7 +105,11 @@ fn draw_title(
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border))
         .title_bottom(
-            Line::from(Span::styled(format!(" {viz_label} "), Style::default().fg(DIM))).centered(),
+            Line::from(Span::styled(
+                format!(" {viz_label} "),
+                Style::default().fg(DIM),
+            ))
+            .centered(),
         );
 
     f.render_widget(Paragraph::new(title).block(block), area);
@@ -145,19 +152,57 @@ fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: ratatui:
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(" \u{2261} Spectrum ", Style::default().fg(accent)));
+                .title(Span::styled(
+                    " \u{2261} Spectrum ",
+                    Style::default().fg(accent),
+                ));
             let inner = block.inner(area);
             f.render_widget(block, area);
 
-            let combined: Vec<f32> = samples_l.iter().zip(&samples_r).map(|(l, r)| (l + r) * 0.5).collect();
+            let combined: Vec<f32> = samples_l
+                .iter()
+                .zip(&samples_r)
+                .map(|(l, r)| (l + r) * 0.5)
+                .collect();
             let buf = f.buffer_mut();
             render_spectrum_bars(buf, inner, &combined, &mut app.spectrum_bars, accent);
+        }
+        VizMode::Harmonics => {
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(BORDER))
+                .title(Span::styled(
+                    " \u{223F} Harmonics ",
+                    Style::default().fg(accent),
+                ));
+            let inner = block.inner(area);
+            f.render_widget(block, area);
+
+            let elapsed = app.start_time.elapsed().as_secs_f64();
+            let beat_freq = app.params.get_beat_freq() as f64;
+            let harmonics = app.params.get_harmonics() as f64;
+            let buf = f.buffer_mut();
+            render_harmonic_lattice(
+                buf,
+                inner,
+                HarmonicLattice {
+                    samples_l: &samples_l,
+                    samples_r: &samples_r,
+                    elapsed,
+                    beat_freq,
+                    harmonics,
+                    color: accent,
+                },
+            );
         }
         VizMode::Envelope => {
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(" \u{223F} Beat Envelope ", Style::default().fg(accent)));
+                .title(Span::styled(
+                    " \u{223F} Beat Envelope ",
+                    Style::default().fg(accent),
+                ));
             let inner = block.inner(area);
             f.render_widget(block, area);
 
@@ -170,7 +215,10 @@ fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: ratatui:
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(BORDER))
-                .title(Span::styled(" \u{2B22} Penrose ", Style::default().fg(accent)));
+                .title(Span::styled(
+                    " \u{2B22} Penrose ",
+                    Style::default().fg(accent),
+                ));
             let inner = block.inner(area);
             f.render_widget(block, area);
 
@@ -230,33 +278,63 @@ fn draw_status(
     };
 
     let arrow = |p: ActiveParam| -> &'static str {
-        if p == app.active_param { "\u{25B8} " } else { "  " }
+        if p == app.active_param {
+            "\u{25B8} "
+        } else {
+            "  "
+        }
     };
 
     let params_text = vec![
         Line::from(vec![
             Span::raw(arrow(ActiveParam::BaseFreq)),
-            Span::styled(format!("Base:   {:>6.1} Hz", base_freq), param_style(ActiveParam::BaseFreq)),
+            Span::styled(
+                format!("Base:   {:>6.1} Hz", base_freq),
+                param_style(ActiveParam::BaseFreq),
+            ),
         ]),
         Line::from(vec![
             Span::raw(arrow(ActiveParam::BeatFreq)),
-            Span::styled(format!("Beat:   {:>6.1} Hz", beat_freq), param_style(ActiveParam::BeatFreq)),
+            Span::styled(
+                format!("Beat:   {:>6.1} Hz", beat_freq),
+                param_style(ActiveParam::BeatFreq),
+            ),
         ]),
         Line::from(vec![
             Span::raw(arrow(ActiveParam::Volume)),
-            Span::styled(format!("Vol:    {} {:>3.0}%", make_bar(volume, 8), volume * 100.0), param_style(ActiveParam::Volume)),
+            Span::styled(
+                format!("Vol:    {} {:>3.0}%", make_bar(volume, 8), volume * 100.0),
+                param_style(ActiveParam::Volume),
+            ),
         ]),
         Line::from(vec![
             Span::raw(arrow(ActiveParam::Harmonics)),
-            Span::styled(format!("Warmth: {} {:>3.0}%", make_bar(harmonics, 8), harmonics * 100.0), param_style(ActiveParam::Harmonics)),
+            Span::styled(
+                format!(
+                    "Warmth: {} {:>3.0}%",
+                    make_bar(harmonics, 8),
+                    harmonics * 100.0
+                ),
+                param_style(ActiveParam::Harmonics),
+            ),
         ]),
         Line::from(vec![
             Span::raw(arrow(ActiveParam::Emergence)),
-            Span::styled(format!("Emerge: {} {:>3.0}%", make_bar(emergence, 8), emergence * 100.0), param_style(ActiveParam::Emergence)),
+            Span::styled(
+                format!(
+                    "Emerge: {} {:>3.0}%",
+                    make_bar(emergence, 8),
+                    emergence * 100.0
+                ),
+                param_style(ActiveParam::Emergence),
+            ),
         ]),
         Line::from(vec![
             Span::raw(arrow(ActiveParam::NoiseLevel)),
-            Span::styled(format!("Noise:  {} {:>3.0}%", make_bar(noise, 8), noise * 100.0), param_style(ActiveParam::NoiseLevel)),
+            Span::styled(
+                format!("Noise:  {} {:>3.0}%", make_bar(noise, 8), noise * 100.0),
+                param_style(ActiveParam::NoiseLevel),
+            ),
         ]),
     ];
 
@@ -267,22 +345,27 @@ fn draw_status(
     f.render_widget(Paragraph::new(params_text).block(left_block), chunks[0]);
 
     // Right panel
-    let preset_name = app.current_preset.map(|i| PRESETS[i].name).unwrap_or("Custom");
+    let preset_name = app
+        .current_preset
+        .map(|i| PRESETS[i].name)
+        .unwrap_or("Custom");
 
-    let seq_info = if let Some(idx) = app.current_sequence {
+    let (sequence_name, sequence_progress) = if let Some(idx) = app.current_sequence {
         let elapsed = app.sequence_elapsed().unwrap_or(0.0);
         let total = SEQUENCES[idx].total_duration_secs;
         let mins = elapsed as u32 / 60;
         let secs = elapsed as u32 % 60;
         let total_mins = total as u32 / 60;
         let progress = elapsed / total;
-        format!(
-            "{}\n    {} {mins}:{secs:02}/{total_mins}:00",
+        (
             SEQUENCES[idx].name,
-            make_progress_bar(progress, 14),
+            format!(
+                "{} {mins}:{secs:02}/{total_mins}:00",
+                make_progress_bar(progress, 10),
+            ),
         )
     } else {
-        "None".to_string()
+        ("None", String::new())
     };
 
     let band = freq_band_name(beat_freq);
@@ -304,7 +387,11 @@ fn draw_status(
     // Emergence status
     let em_status = if emergence > 0.01 {
         if let Ok(snap) = app.emergence_snapshot.try_lock() {
-            format!("{} voices, gen {}", snap.voices.len(), snap.generation_count)
+            format!(
+                "{} voices, gen {}",
+                snap.voices.len(),
+                snap.generation_count
+            )
         } else {
             "active".to_string()
         }
@@ -323,7 +410,11 @@ fn draw_status(
         ]),
         Line::from(vec![
             Span::styled("  Seq:     ", Style::default().fg(DIM)),
-            Span::styled(seq_info, Style::default().fg(BRIGHT)),
+            Span::styled(sequence_name, Style::default().fg(BRIGHT)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Prog:    ", Style::default().fg(DIM)),
+            Span::styled(sequence_progress, Style::default().fg(BRIGHT)),
         ]),
         Line::from(vec![
             Span::styled("  Emerge:  ", Style::default().fg(DIM)),
@@ -359,7 +450,7 @@ fn draw_controls(
         Span::styled("re ", Style::default().fg(DIM)),
         Span::styled("s", Style::default().fg(accent)),
         Span::styled("eq ", Style::default().fg(DIM)),
-        Span::styled("v", Style::default().fg(accent)),
+        Span::styled("v/V", Style::default().fg(accent)),
         Span::styled("iz ", Style::default().fg(DIM)),
         Span::styled("e", Style::default().fg(accent)),
         Span::styled("merge ", Style::default().fg(DIM)),
@@ -457,7 +548,10 @@ fn draw_help(f: &mut Frame, area: Rect, accent: ratatui::style::Color) {
 
     let help_text = vec![
         Line::from(""),
-        Line::from(Span::styled("  Navigation", Style::default().fg(accent).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "  Navigation",
+            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        )),
         Line::from(vec![
             Span::styled("    j / \u{2193}     ", Style::default().fg(accent)),
             Span::styled("Next parameter", Style::default().fg(BRIGHT)),
@@ -479,7 +573,10 @@ fn draw_help(f: &mut Frame, area: Rect, accent: ratatui::style::Color) {
             Span::styled("Big decrease / increase", Style::default().fg(BRIGHT)),
         ]),
         Line::from(""),
-        Line::from(Span::styled("  Controls", Style::default().fg(accent).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "  Controls",
+            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        )),
         Line::from(vec![
             Span::styled("    Space       ", Style::default().fg(accent)),
             Span::styled("Play / Pause", Style::default().fg(BRIGHT)),
@@ -493,8 +590,8 @@ fn draw_help(f: &mut Frame, area: Rect, accent: ratatui::style::Color) {
             Span::styled("Sequence menu", Style::default().fg(BRIGHT)),
         ]),
         Line::from(vec![
-            Span::styled("    v           ", Style::default().fg(accent)),
-            Span::styled("Cycle visualization", Style::default().fg(BRIGHT)),
+            Span::styled("    v / V       ", Style::default().fg(accent)),
+            Span::styled("Next / previous visualization", Style::default().fg(BRIGHT)),
         ]),
         Line::from(vec![
             Span::styled("    e           ", Style::default().fg(accent)),
@@ -513,7 +610,10 @@ fn draw_help(f: &mut Frame, area: Rect, accent: ratatui::style::Color) {
             Span::styled("Quit", Style::default().fg(BRIGHT)),
         ]),
         Line::from(""),
-        Line::from(Span::styled("  Emergence", Style::default().fg(accent).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "  Emergence",
+            Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        )),
         Line::from(Span::styled(
             "    Voices spawn at harmonic intervals, interact via",
             Style::default().fg(DIM),
@@ -566,7 +666,11 @@ fn make_bar(value: f32, width: usize) -> String {
 fn make_progress_bar(value: f32, width: usize) -> String {
     let filled = (value.clamp(0.0, 1.0) * width as f32) as usize;
     let empty = width.saturating_sub(filled);
-    format!("\u{2523}{}\u{2501}{}\u{252B}", "\u{2501}".repeat(filled), "\u{2500}".repeat(empty))
+    format!(
+        "\u{2523}{}\u{2501}{}\u{252B}",
+        "\u{2501}".repeat(filled),
+        "\u{2500}".repeat(empty)
+    )
 }
 
 fn dim_color(color: ratatui::style::Color, factor: f32) -> ratatui::style::Color {
@@ -582,9 +686,11 @@ fn dim_color(color: ratatui::style::Color, factor: f32) -> ratatui::style::Color
 
 fn shift_color(color: ratatui::style::Color, dr: u8, dg: u8, db: u8) -> ratatui::style::Color {
     match color {
-        ratatui::style::Color::Rgb(r, g, b) => {
-            ratatui::style::Color::Rgb(r.saturating_add(dr), g.saturating_add(dg), b.saturating_add(db))
-        }
+        ratatui::style::Color::Rgb(r, g, b) => ratatui::style::Color::Rgb(
+            r.saturating_add(dr),
+            g.saturating_add(dg),
+            b.saturating_add(db),
+        ),
         c => c,
     }
 }

@@ -5,12 +5,7 @@ use ratatui::style::Color;
 use crate::emergence::EmergenceSnapshot;
 
 /// Render a waveform using braille characters into a ratatui Buffer.
-pub fn render_braille_waveform(
-    buf: &mut Buffer,
-    area: Rect,
-    samples: &[f32],
-    color: Color,
-) {
+pub fn render_braille_waveform(buf: &mut Buffer, area: Rect, samples: &[f32], color: Color) {
     if area.width == 0 || area.height == 0 || samples.is_empty() {
         return;
     }
@@ -20,35 +15,27 @@ pub fn render_braille_waveform(
     let center_y = dots_h / 2;
 
     let step = samples.len() as f64 / dots_w as f64;
-    let mut dots = vec![vec![false; dots_w]; dots_h];
+    let mut cells = vec![0u8; area.width as usize * area.height as usize];
 
     for x in 0..dots_w {
         let sample_idx = ((x as f64 * step) as usize).min(samples.len() - 1);
         let sample = samples[sample_idx];
 
         let y = center_y as f64 - sample as f64 * (center_y as f64 * 0.9);
-        let y = (y as usize).clamp(0, dots_h - 1);
+        let y = y.round().clamp(0.0, (dots_h - 1) as f64) as usize;
 
-        dots[y][x] = true;
-        if y > 0 { dots[y - 1][x] = true; }
-        if y + 1 < dots_h { dots[y + 1][x] = true; }
+        set_braille_dot(&mut cells, area.width as usize, x, y);
+        if y > 0 {
+            set_braille_dot(&mut cells, area.width as usize, x, y - 1);
+        }
+        if y + 1 < dots_h {
+            set_braille_dot(&mut cells, area.width as usize, x, y + 1);
+        }
     }
 
     for cy in 0..area.height as usize {
         for cx in 0..area.width as usize {
-            let mut code: u8 = 0;
-            let dx = cx * 2;
-            let dy = cy * 4;
-
-            if dy < dots_h && dx < dots_w && dots[dy][dx] { code |= 0x01; }
-            if dy + 1 < dots_h && dx < dots_w && dots[dy + 1][dx] { code |= 0x02; }
-            if dy + 2 < dots_h && dx < dots_w && dots[dy + 2][dx] { code |= 0x04; }
-            if dy + 3 < dots_h && dx < dots_w && dots[dy + 3][dx] { code |= 0x40; }
-            if dy < dots_h && dx + 1 < dots_w && dots[dy][dx + 1] { code |= 0x08; }
-            if dy + 1 < dots_h && dx + 1 < dots_w && dots[dy + 1][dx + 1] { code |= 0x10; }
-            if dy + 2 < dots_h && dx + 1 < dots_w && dots[dy + 2][dx + 1] { code |= 0x20; }
-            if dy + 3 < dots_h && dx + 1 < dots_w && dots[dy + 3][dx + 1] { code |= 0x80; }
-
+            let code = cells[cy * area.width as usize + cx];
             if code != 0 {
                 let ch = char::from_u32(0x2800 + code as u32).unwrap_or(' ');
                 let cell = &mut buf[(area.x + cx as u16, area.y + cy as u16)];
@@ -57,6 +44,28 @@ pub fn render_braille_waveform(
             }
         }
     }
+}
+
+fn set_braille_dot(cells: &mut [u8], cell_width: usize, dot_x: usize, dot_y: usize) {
+    let cell_x = dot_x / 2;
+    let cell_y = dot_y / 4;
+    let idx = cell_y * cell_width + cell_x;
+    if idx >= cells.len() {
+        return;
+    }
+
+    let bit = match (dot_x % 2, dot_y % 4) {
+        (0, 0) => 0x01,
+        (0, 1) => 0x02,
+        (0, 2) => 0x04,
+        (0, _) => 0x40,
+        (1, 0) => 0x08,
+        (1, 1) => 0x10,
+        (1, 2) => 0x20,
+        (1, _) => 0x80,
+        _ => 0,
+    };
+    cells[idx] |= bit;
 }
 
 /// Render spectrum bars (cava-style) with gravity falloff.
@@ -75,18 +84,27 @@ pub fn render_spectrum_bars(
     bars.resize(num_bars, 0.0);
 
     let bin_size = samples.len() / num_bars;
-    if bin_size == 0 { return; }
+    if bin_size == 0 {
+        return;
+    }
 
-    for i in 0..num_bars {
+    for (i, bar) in bars.iter_mut().enumerate().take(num_bars) {
         let start = i * bin_size;
         let end = (start + bin_size).min(samples.len());
         let energy: f32 = samples[start..end].iter().map(|s| s * s).sum::<f32>() / bin_size as f32;
         let amplitude = energy.sqrt() * 3.0;
 
-        if amplitude > bars[i] { bars[i] = amplitude; } else { bars[i] *= 0.92; }
+        if amplitude > *bar {
+            *bar = amplitude;
+        } else {
+            *bar *= 0.92;
+        }
     }
 
-    let block_chars = [' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}', '\u{2588}'];
+    let block_chars = [
+        ' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
+        '\u{2588}',
+    ];
     let height = area.height as f32;
     let (cr, cg, cb) = rgb_from_color(color);
 
@@ -117,6 +135,162 @@ pub fn render_spectrum_bars(
     }
 }
 
+pub struct HarmonicLattice<'a> {
+    pub samples_l: &'a [f32],
+    pub samples_r: &'a [f32],
+    pub elapsed: f64,
+    pub beat_freq: f64,
+    pub harmonics: f64,
+    pub color: Color,
+}
+
+/// Render a harmonic phase portrait: L/R stereo phase, just-intonation nodes,
+/// and golden-angle connections in one terminal-native view.
+pub fn render_harmonic_lattice(buf: &mut Buffer, area: Rect, lattice: HarmonicLattice<'_>) {
+    if area.width < 8 || area.height < 4 {
+        return;
+    }
+
+    let samples_l = lattice.samples_l;
+    let samples_r = lattice.samples_r;
+    let elapsed = lattice.elapsed;
+    let beat_freq = lattice.beat_freq;
+    let harmonics = lattice.harmonics;
+    let color = lattice.color;
+
+    let w = area.width as f64;
+    let h = area.height as f64;
+    let cx = w / 2.0;
+    let cy = h / 2.0;
+    let rx = w * 0.42;
+    let ry = h * 0.38;
+
+    let phi = 1.618033988749895_f64;
+    let beat_phase = (std::f64::consts::PI * beat_freq * elapsed).cos().abs();
+    let pulse = 0.86 + 0.14 * beat_phase;
+    let rotation = elapsed * 0.11;
+    let (cr, cg, cb) = rgb_from_color(color);
+
+    for ring in 1..=3 {
+        let ring_scale = ring as f64 / 3.6 * pulse;
+        let ring_color = Color::Rgb(
+            (cr as f32 * 0.16) as u8,
+            (cg as f32 * 0.16) as u8,
+            (cb as f32 * 0.20) as u8,
+        );
+        let steps = (area.width as usize).saturating_mul(2).max(24);
+        for i in (0..steps).step_by(3) {
+            let theta = i as f64 / steps as f64 * std::f64::consts::TAU + rotation;
+            let x = cx + theta.cos() * rx * ring_scale;
+            let y = cy + theta.sin() * ry * ring_scale;
+            put_cell(buf, area, x, y, '\u{00B7}', ring_color);
+        }
+    }
+
+    let ratios: &[(f64, &str, char)] = &[
+        (1.0, "1", '\u{25CF}'),
+        (5.0 / 4.0, "5:4", '\u{25C6}'),
+        (4.0 / 3.0, "4:3", '\u{25C7}'),
+        (3.0 / 2.0, "3:2", '\u{2B21}'),
+        (phi, "phi", '\u{2726}'),
+        (2.0, "2", '\u{25CB}'),
+        (phi * phi, "phi2", '\u{25CC}'),
+        (3.0, "3", '\u{25B3}'),
+    ];
+
+    let mut positions = Vec::with_capacity(ratios.len());
+    for (i, &(ratio, _, _)) in ratios.iter().enumerate() {
+        let golden_angle = i as f64 * std::f64::consts::TAU / (phi * phi);
+        let octave_turn = ratio.log2() * std::f64::consts::TAU;
+        let angle = rotation + golden_angle + octave_turn * 0.35;
+        let radius = (0.28 + (i as f64 / ratios.len() as f64).sqrt() * 0.7) * pulse;
+        let x = cx + angle.cos() * rx * radius;
+        let y = cy + angle.sin() * ry * radius;
+        positions.push((x, y));
+    }
+
+    for i in 0..ratios.len() {
+        for j in (i + 1)..ratios.len() {
+            let ratio = if ratios[i].0 > ratios[j].0 {
+                ratios[i].0 / ratios[j].0
+            } else {
+                ratios[j].0 / ratios[i].0
+            };
+
+            if is_near_simple_ratio(ratio as f32) {
+                let strength = (0.15 + harmonics * 0.35 + beat_phase * 0.15) as f32;
+                let line_color = Color::Rgb(
+                    (cr as f32 * strength) as u8,
+                    (cg as f32 * strength) as u8,
+                    (cb as f32 * strength) as u8,
+                );
+                draw_line(
+                    buf,
+                    area,
+                    positions[i],
+                    positions[j],
+                    '\u{2219}',
+                    line_color,
+                );
+            }
+        }
+    }
+
+    let sample_count = samples_l.len().min(samples_r.len());
+    if sample_count > 1 {
+        let max_points = 640usize;
+        let step = (sample_count / max_points).max(1);
+        let theta = rotation * 0.7;
+        let cos_t = theta.cos();
+        let sin_t = theta.sin();
+
+        for (point_idx, sample_idx) in (0..sample_count).step_by(step).enumerate() {
+            let l = samples_l[sample_idx].clamp(-1.0, 1.0) as f64;
+            let r = samples_r[sample_idx].clamp(-1.0, 1.0) as f64;
+            let x = l * rx * 0.62;
+            let y = r * ry * 0.78;
+            let rotated_x = x * cos_t - y * sin_t;
+            let rotated_y = x * sin_t + y * cos_t;
+
+            let age = point_idx as f32 / max_points as f32;
+            let harmonic_glow = harmonics as f32;
+            let brightness = (0.25 + age * 0.45 + harmonic_glow * 0.30).min(1.0);
+            let sample_color = Color::Rgb(
+                (cr as f32 * brightness).max(35.0) as u8,
+                (cg as f32 * (0.65 + brightness * 0.35)).max(35.0) as u8,
+                (cb as f32 * (0.65 + harmonic_glow * 0.35)).max(45.0) as u8,
+            );
+            let ch = if harmonics > 0.65 {
+                '\u{2736}'
+            } else if harmonics > 0.30 {
+                '\u{2219}'
+            } else {
+                '\u{00B7}'
+            };
+            put_cell(buf, area, cx + rotated_x, cy + rotated_y, ch, sample_color);
+        }
+    }
+
+    for (i, &(ratio, label, ch)) in ratios.iter().enumerate() {
+        let (x, y) = positions[i];
+        let node_gain = if i == 0 {
+            1.0
+        } else {
+            (0.55 + harmonics * 0.45) * (1.0 - (ratio.log2() * 0.08).min(0.25))
+        };
+        let node_color = Color::Rgb(
+            (cr as f64 * node_gain).max(45.0) as u8,
+            (cg as f64 * node_gain).max(40.0) as u8,
+            (cb as f64 * node_gain).max(45.0) as u8,
+        );
+        put_cell(buf, area, x, y, ch, node_color);
+
+        if area.width > 48 && area.height > 10 {
+            draw_text(buf, area, x + 1.0, y, label, node_color);
+        }
+    }
+}
+
 /// Render beat envelope visualization.
 pub fn render_beat_envelope(
     buf: &mut Buffer,
@@ -125,9 +299,14 @@ pub fn render_beat_envelope(
     beat_freq: f64,
     color: Color,
 ) {
-    if area.width == 0 || area.height == 0 { return; }
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
 
-    let block_chars = [' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}', '\u{2588}'];
+    let block_chars = [
+        ' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
+        '\u{2588}',
+    ];
     let (cr, cg, cb) = rgb_from_color(color);
 
     for x in 0..area.width as usize {
@@ -160,14 +339,10 @@ pub fn render_beat_envelope(
 }
 
 /// Penrose-inspired geometric visualization.
-pub fn render_penrose(
-    buf: &mut Buffer,
-    area: Rect,
-    elapsed: f64,
-    beat_freq: f64,
-    color: Color,
-) {
-    if area.width < 4 || area.height < 4 { return; }
+pub fn render_penrose(buf: &mut Buffer, area: Rect, elapsed: f64, beat_freq: f64, color: Color) {
+    if area.width < 4 || area.height < 4 {
+        return;
+    }
 
     let w = area.width as f64;
     let h = area.height as f64;
@@ -216,7 +391,8 @@ pub fn render_penrose(
                 cell.set_fg(layer_color);
             }
 
-            let next_angle = layer_rotation + ((i + 1) as f64 * std::f64::consts::TAU / sides as f64);
+            let next_angle =
+                layer_rotation + ((i + 1) as f64 * std::f64::consts::TAU / sides as f64);
             let nx = cx + radius * next_angle.cos() * 2.0;
             let ny = cy + radius * next_angle.sin();
 
@@ -250,7 +426,8 @@ pub fn render_penrose(
         let iy = sy as u16;
         if ix < area.width && iy < area.height {
             let cell = &mut buf[(area.x + ix, area.y + iy)];
-            let brightness = (0.5 + 0.5 * (t * std::f64::consts::TAU * beat_freq + elapsed).sin()) as f32;
+            let brightness =
+                (0.5 + 0.5 * (t * std::f64::consts::TAU * beat_freq + elapsed).sin()) as f32;
             let r = (cr as f32 * brightness * 0.8) as u8;
             let g = (cg as f32 * brightness * 0.8) as u8;
             let b = (cb as f32 * brightness * 0.8) as u8;
@@ -270,7 +447,9 @@ pub fn render_emergence(
     elapsed: f64,
     color: Color,
 ) {
-    if area.width < 6 || area.height < 4 { return; }
+    if area.width < 6 || area.height < 4 {
+        return;
+    }
 
     let w = area.width as f64;
     let h = area.height as f64;
@@ -289,7 +468,9 @@ pub fn render_emergence(
 
             // Connect if ratio is near a simple fraction
             let is_consonant = is_near_simple_ratio(ratio);
-            if !is_consonant { continue; }
+            if !is_consonant {
+                continue;
+            }
 
             let (x1, y1) = voice_position(v1.freq_ratio, v1.pan, cx, cy, elapsed);
             let (x2, y2) = voice_position(v2.freq_ratio, v2.pan, cx, cy, elapsed);
@@ -301,7 +482,7 @@ pub fn render_emergence(
             let b = (cb as f32 * connection_brightness * 0.4) as u8;
             let line_color = Color::Rgb(r.max(30), g.max(30), b.max(30));
 
-            draw_line(buf, area, x1, y1, x2, y2, '\u{2500}', line_color);
+            draw_line(buf, area, (x1, y1), (x2, y2), '\u{2500}', line_color);
         }
     }
 
@@ -311,7 +492,9 @@ pub fn render_emergence(
         let ix = vx as u16;
         let iy = vy as u16;
 
-        if ix >= area.width || iy >= area.height { continue; }
+        if ix >= area.width || iy >= area.height {
+            continue;
+        }
 
         // Brightness based on amplitude
         let amp = voice.amplitude.min(1.0);
@@ -402,19 +585,50 @@ fn is_near_simple_ratio(ratio: f32) -> bool {
     simple.iter().any(|&r| (ratio - r).abs() < 0.15)
 }
 
+fn put_cell(buf: &mut Buffer, area: Rect, x: f64, y: f64, ch: char, color: Color) {
+    let ix = x.round() as i16;
+    let iy = y.round() as i16;
+    if ix >= 0 && iy >= 0 && (ix as u16) < area.width && (iy as u16) < area.height {
+        let cell = &mut buf[(area.x + ix as u16, area.y + iy as u16)];
+        cell.set_char(ch);
+        cell.set_fg(color);
+    }
+}
+
+fn draw_text(buf: &mut Buffer, area: Rect, x: f64, y: f64, text: &str, color: Color) {
+    let start_x = x.round() as i16;
+    let iy = y.round() as i16;
+    if iy < 0 || (iy as u16) >= area.height {
+        return;
+    }
+
+    for (offset, ch) in text.chars().enumerate() {
+        let ix = start_x + offset as i16;
+        if ix >= 0 && (ix as u16) < area.width {
+            let cell = &mut buf[(area.x + ix as u16, area.y + iy as u16)];
+            cell.set_char(ch);
+            cell.set_fg(color);
+        }
+    }
+}
+
 /// Draw a line between two points using a character.
 fn draw_line(
     buf: &mut Buffer,
     area: Rect,
-    x1: f64, y1: f64,
-    x2: f64, y2: f64,
+    from: (f64, f64),
+    to: (f64, f64),
     ch: char,
     color: Color,
 ) {
+    let (x1, y1) = from;
+    let (x2, y2) = to;
     let dx = x2 - x1;
     let dy = y2 - y1;
     let steps = (dx.abs().max(dy.abs())) as usize;
-    if steps == 0 { return; }
+    if steps == 0 {
+        return;
+    }
 
     let steps = steps.min(40); // Cap to avoid excessive iteration
     for s in 0..=steps {

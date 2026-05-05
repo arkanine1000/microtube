@@ -62,19 +62,23 @@ impl AudioParams {
     }
 
     pub fn set_volume(&self, v: f32) {
-        self.volume.store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        self.volume
+            .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
     pub fn set_noise_level(&self, v: f32) {
-        self.noise_level.store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        self.noise_level
+            .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
     pub fn set_harmonics(&self, v: f32) {
-        self.harmonics.store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        self.harmonics
+            .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
     pub fn set_emergence(&self, v: f32) {
-        self.emergence.store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+        self.emergence
+            .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 }
 

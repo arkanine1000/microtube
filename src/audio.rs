@@ -155,12 +155,17 @@ impl AudioEngine {
                         return;
                     }
 
-                    let target_base = f32::from_bits(params.base_freq.load(Ordering::Relaxed)) as f64;
-                    let target_beat = f32::from_bits(params.beat_freq.load(Ordering::Relaxed)) as f64;
+                    let target_base =
+                        f32::from_bits(params.base_freq.load(Ordering::Relaxed)) as f64;
+                    let target_beat =
+                        f32::from_bits(params.beat_freq.load(Ordering::Relaxed)) as f64;
                     let target_vol = f32::from_bits(params.volume.load(Ordering::Relaxed)) as f64;
-                    let target_noise = f32::from_bits(params.noise_level.load(Ordering::Relaxed)) as f64;
-                    let target_harmonics = f32::from_bits(params.harmonics.load(Ordering::Relaxed)) as f64;
-                    let target_emergence = f32::from_bits(params.emergence.load(Ordering::Relaxed)) as f64;
+                    let target_noise =
+                        f32::from_bits(params.noise_level.load(Ordering::Relaxed)) as f64;
+                    let target_harmonics =
+                        f32::from_bits(params.harmonics.load(Ordering::Relaxed)) as f64;
+                    let target_emergence =
+                        f32::from_bits(params.emergence.load(Ordering::Relaxed)) as f64;
 
                     for frame in data.chunks_mut(channels) {
                         // Smooth parameter transitions
@@ -168,8 +173,10 @@ impl AudioEngine {
                         state.current_beat += (target_beat - state.current_beat) * smooth_alpha;
                         state.current_vol += (target_vol - state.current_vol) * smooth_alpha;
                         state.current_noise += (target_noise - state.current_noise) * smooth_alpha;
-                        state.current_harmonics += (target_harmonics - state.current_harmonics) * smooth_alpha;
-                        state.current_emergence += (target_emergence - state.current_emergence) * smooth_alpha;
+                        state.current_harmonics +=
+                            (target_harmonics - state.current_harmonics) * smooth_alpha;
+                        state.current_emergence +=
+                            (target_emergence - state.current_emergence) * smooth_alpha;
 
                         let freq_l = state.current_base;
                         let freq_r = state.current_base + state.current_beat;
@@ -181,10 +188,9 @@ impl AudioEngine {
 
                         // Emergence voices
                         if state.current_emergence > 0.01 {
-                            let (em_l, em_r) = state.emergence.process(
-                                state.current_base,
-                                state.current_emergence,
-                            );
+                            let (em_l, em_r) = state
+                                .emergence
+                                .process(state.current_base, state.current_emergence);
                             sample_l += em_l * state.current_vol;
                             sample_r += em_r * state.current_vol;
                         }
@@ -207,10 +213,10 @@ impl AudioEngine {
 
                         // Viz buffer
                         state.viz_counter += 1;
-                        if state.viz_counter % 4 == 0 {
-                            if let Ok(mut buf) = viz_buffer.try_lock() {
-                                buf.push(sample_l as f32, sample_r as f32);
-                            }
+                        if state.viz_counter.is_multiple_of(4)
+                            && let Ok(mut buf) = viz_buffer.try_lock()
+                        {
+                            buf.push(sample_l as f32, sample_r as f32);
                         }
 
                         // Emergence snapshot (periodic)
@@ -234,7 +240,9 @@ impl AudioEngine {
             )
             .map_err(|e| format!("Failed to build audio stream: {e}"))?;
 
-        stream.play().map_err(|e| format!("Failed to start audio: {e}"))?;
+        stream
+            .play()
+            .map_err(|e| format!("Failed to start audio: {e}"))?;
 
         Ok(Self { _stream: stream })
     }
