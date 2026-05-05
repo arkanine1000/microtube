@@ -5,7 +5,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, SampleRate, Stream, StreamConfig};
 
 use crate::app::{AudioParams, MistType, VizBuffer};
-use crate::emergence::{EmergenceEngine, EmergenceSnapshot};
+use crate::emergence::{EmergenceEngine, EmergenceSnapshot, SpawnMode};
 
 struct SynthState {
     phase_l: f64,
@@ -204,6 +204,11 @@ impl AudioEngine {
                         f32::from_bits(params.harmonics.load(Ordering::Relaxed)) as f64;
                     let target_emergence =
                         f32::from_bits(params.emergence.load(Ordering::Relaxed)) as f64;
+                    let target_spawn_mode =
+                        SpawnMode::from_u32(params.spawn_mode.load(Ordering::Relaxed));
+                    if state.emergence.spawn_mode() != target_spawn_mode {
+                        state.emergence.set_spawn_mode(target_spawn_mode);
+                    }
 
                     for frame in data.chunks_mut(channels) {
                         // Smooth parameter transitions

@@ -16,7 +16,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 **Emergence Engine**
 - Generative audio system inspired by Conway's Game of Life and Bach canons
 - Up to 12 simultaneous voices spawning at harmonic/golden-ratio intervals
-- Canon pattern repeats and transposes like a fugue
+- Two spawn modes: a fugue-style canon, or a Penrose Conway-worm walk
 - Consonance-based lifetime: harmonically pure voices live longer
 - Energy conservation: total amplitude is bounded, voices compete
 - Random mutations introduce organic variation
@@ -76,6 +76,7 @@ cargo run --release
 | `s` | Sequence menu |
 | `v` / `V` | Next / previous visualization |
 | `e` | Toggle emergence |
+| `g` | Switch spawn mode (canon ↔ penrose) |
 | `n` | Toggle mist layer |
 | `m` | Cycle mist type |
 | `?` | Help |
@@ -111,6 +112,16 @@ Press `e` to bring the system to life. Voices emerge from silence, interact thro
 
 The system follows a repeating canon pattern through harmonic ratios (perfect fifths, major thirds, golden ratio intervals), transposing every 8 spawns like a fugue shifting key. Voice lifetimes are proportional to their consonance with the harmonic series — the universe rewards simplicity but tolerates novelty.
 
+Press `g` to switch the spawn engine to **Penrose** mode. Each spawn now advances a step along a Conway worm — a row of parallel rhombs through a Penrose P3 tiling — whose tile sequence is the Fibonacci word, the canonical 1D quasicrystal. The substitution `L → LS, S → L` produces an aperiodic but self-similar binary stream; pairs of consecutive tiles select the harmonic move:
+
+| Pair | Ratio | Move | Asymptotic frequency |
+|------|-------|------|----------------------|
+| LL | 3:2 | perfect fifth (anchor) | 1/φ³ ≈ 23.6% |
+| LS | 5:4 | major third (descent) | 1/φ² ≈ 38.2% |
+| SL | 4:3 | perfect fourth (ascent) | 1/φ² ≈ 38.2% |
+
+(SS never occurs in the Fibonacci word — every short rhomb is bracketed by long ones.) The resulting harmonic stream is structurally aperiodic at every scale and yet bound to a small consonant palette, so it never repeats but always sounds like itself.
+
 ## Architecture
 
 ```
@@ -121,6 +132,7 @@ src/
 ├── emergence.rs       Generative voice engine (canon + cellular rules)
 ├── presets.rs         Brainwave presets and timed sequences
 ├── ui.rs              ratatui layout and widget composition
+├── penrose.rs         Fibonacci-word walk (Penrose P3 Conway worm)
 └── visualization.rs   Braille waveforms, spectrum, Penrose, emergence viz
 ```
 
@@ -164,9 +176,6 @@ Extend the emergence engine with rhythmic awareness — voices spawn not just at
 
 **Stochastic Resonance**
 Add noise not as a masking agent but as a functional component — at certain levels, noise actually enhances the brain's ability to detect weak periodic signals (stochastic resonance). An adaptive noise floor that maximizes this effect.
-
-**Geometric Audio Mapping**
-Use the Penrose tiling as a compositional structure — each tile type maps to a frequency ratio, and traversal paths through the tiling generate melodic sequences. An aperiodic tiling produces never-repeating but self-similar musical structure.
 
 **Biofeedback Loop**
 Read heart rate variability or breathing rate (via external sensor) and use it as a control signal. The system responds to your state rather than imposing one — speeding up when you're drowsy during focus sessions, deepening when your breathing slows during meditation.

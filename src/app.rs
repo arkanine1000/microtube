@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::emergence::EmergenceSnapshot;
+use crate::emergence::{EmergenceSnapshot, SpawnMode};
 use crate::presets::{PRESETS, SEQUENCES};
 
 /// Lock-free audio parameters shared between UI and audio thread.
@@ -15,6 +15,7 @@ pub struct AudioParams {
     pub mist_type: AtomicU32,
     pub harmonics: AtomicU32,
     pub emergence: AtomicU32, // Emergence intensity 0.0-1.0
+    pub spawn_mode: AtomicU32,
 }
 
 impl AudioParams {
@@ -28,6 +29,7 @@ impl AudioParams {
             mist_type: AtomicU32::new(MistType::Pink as u32),
             harmonics: AtomicU32::new(0.3_f32.to_bits()),
             emergence: AtomicU32::new(0.0_f32.to_bits()),
+            spawn_mode: AtomicU32::new(SpawnMode::Canon as u32),
         }
     }
 
@@ -89,6 +91,14 @@ impl AudioParams {
     pub fn set_emergence(&self, v: f32) {
         self.emergence
             .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_spawn_mode(&self) -> SpawnMode {
+        SpawnMode::from_u32(self.spawn_mode.load(Ordering::Relaxed))
+    }
+
+    pub fn set_spawn_mode(&self, mode: SpawnMode) {
+        self.spawn_mode.store(mode as u32, Ordering::Relaxed);
     }
 }
 
@@ -391,6 +401,17 @@ impl App {
     pub fn clear_emergence_snapshot(&self) {
         if let Ok(mut snapshot) = self.emergence_snapshot.try_lock() {
             *snapshot = EmergenceSnapshot::empty();
+        }
+    }
+
+    pub fn toggle_spawn_mode(&mut self) {
+        let next = self.params.get_spawn_mode().toggled();
+        self.params.set_spawn_mode(next);
+        if next == SpawnMode::Penrose
+            && self.params.get_emergence() > 0.01
+            && self.viz_mode != VizMode::Penrose
+        {
+            self.viz_mode = VizMode::Penrose;
         }
     }
 

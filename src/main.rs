@@ -3,6 +3,7 @@
 mod app;
 mod audio;
 mod emergence;
+mod penrose;
 mod presets;
 mod ui;
 mod visualization;
@@ -169,6 +170,7 @@ fn handle_normal(app: &mut App, code: KeyCode) {
             }
         }
         KeyCode::Char('m') => app.cycle_mist_type(),
+        KeyCode::Char('g') => app.toggle_spawn_mode(),
 
         // Quick presets
         KeyCode::Char('1') => app.apply_preset(0),

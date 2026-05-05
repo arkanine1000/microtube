@@ -13,6 +13,8 @@
 
 use std::f64::consts::{PI, TAU};
 
+use crate::penrose::{self, PenroseWalk, Tile};
+
 /// Golden ratio - the fundamental proportion of emergence
 const PHI: f64 = 1.618033988749895;
 
@@ -77,6 +79,40 @@ impl Voice {
     }
 }
 
+/// How spawn ratios are chosen.
+///
+/// `Canon` follows the original repeating ratio table (a Bach-style fugue).
+/// `Penrose` reads ratios from a Fibonacci-word walk — the 1D quasicrystal
+/// that traces a Conway worm through a Penrose P3 tiling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpawnMode {
+    Canon,
+    Penrose,
+}
+
+impl SpawnMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Canon => "canon",
+            Self::Penrose => "penrose",
+        }
+    }
+
+    pub fn toggled(self) -> Self {
+        match self {
+            Self::Canon => Self::Penrose,
+            Self::Penrose => Self::Canon,
+        }
+    }
+
+    pub fn from_u32(value: u32) -> Self {
+        match value {
+            1 => Self::Penrose,
+            _ => Self::Canon,
+        }
+    }
+}
+
 /// State shared with the visualization (snapshot of current voices).
 #[derive(Clone)]
 pub struct EmergenceSnapshot {
@@ -84,6 +120,10 @@ pub struct EmergenceSnapshot {
     pub total_energy: f32,
     pub generation_count: u8,
     pub epoch: u32, // How many spawn cycles have occurred
+    pub spawn_mode: SpawnMode,
+    /// Recent Fibonacci-word tiles (newest last). Empty when not in Penrose mode.
+    pub recent_tiles: Vec<Tile>,
+    pub walk_position: usize,
 }
 
 impl EmergenceSnapshot {
@@ -93,6 +133,9 @@ impl EmergenceSnapshot {
             total_energy: 0.0,
             generation_count: 0,
             epoch: 0,
+            spawn_mode: SpawnMode::Canon,
+            recent_tiles: Vec::new(),
+            walk_position: 0,
         }
     }
 }
@@ -119,6 +162,8 @@ pub struct EmergenceEngine {
     canon_pattern: Vec<usize>,
     canon_position: usize,
     canon_offset: f64, // Pitch offset for canon repetition
+    spawn_mode: SpawnMode,
+    penrose_walk: PenroseWalk,
 }
 
 impl EmergenceEngine {
@@ -134,10 +179,20 @@ impl EmergenceEngine {
             canon_pattern: vec![7, 5, 6, 8, 4, 9, 3, 10], // Fifths, thirds, golden
             canon_position: 0,
             canon_offset: 1.0,
+            spawn_mode: SpawnMode::Canon,
+            penrose_walk: PenroseWalk::new(),
         };
         // Seed with a root voice
         engine.voices.push(Voice::new(1.0, 8.0, 0, 0.0));
         engine
+    }
+
+    pub fn set_spawn_mode(&mut self, mode: SpawnMode) {
+        self.spawn_mode = mode;
+    }
+
+    pub fn spawn_mode(&self) -> SpawnMode {
+        self.spawn_mode
     }
 
     fn xorshift(&mut self) -> f64 {
@@ -234,16 +289,28 @@ impl EmergenceEngine {
 
         self.epoch += 1;
 
-        // Canon logic: follow the pattern, with occasional mutations
-        let ratio_idx = self.canon_pattern[self.canon_position % self.canon_pattern.len()];
-        self.canon_position += 1;
+        // Choose the base ratio according to the active spawn mode.
+        let base_ratio = match self.spawn_mode {
+            SpawnMode::Canon => {
+                let idx = self.canon_pattern[self.canon_position % self.canon_pattern.len()];
+                self.canon_position += 1;
+                SPAWN_RATIOS[idx % SPAWN_RATIOS.len()]
+            }
+            SpawnMode::Penrose => {
+                // Each spawn advances the Conway worm by one rhomb; the
+                // (previous, current) tile pair selects the harmonic move.
+                let (prev, curr) = self.penrose_walk.step();
+                self.canon_position += 1;
+                penrose::pair_ratio(prev, curr)
+            }
+        };
 
-        // Every 8 spawns, shift the canon offset (like a fugue answer)
+        // Every 8 spawns, shift the canon offset (like a fugue answer).
+        // Penrose mode reuses the same transposition cadence so the walk
+        // sweeps across registers without losing its quasicrystal cadence.
         if self.canon_position.is_multiple_of(8) {
             self.canon_offset = SPAWN_RATIOS[(self.epoch as usize / 8) % SPAWN_RATIOS.len()];
         }
-
-        let base_ratio = SPAWN_RATIOS[ratio_idx % SPAWN_RATIOS.len()];
 
         // Apply canon offset and slight random mutation
         let mutation = 1.0 + (self.xorshift() - 0.5) * 0.02 * intensity;
@@ -319,11 +386,20 @@ impl EmergenceEngine {
         let total_energy = voices.iter().map(|v| v.amplitude).sum();
         let generation_count = voices.iter().map(|v| v.generation).max().unwrap_or(0);
 
+        let recent_tiles = if self.spawn_mode == SpawnMode::Penrose {
+            self.penrose_walk.recent(24)
+        } else {
+            Vec::new()
+        };
+
         EmergenceSnapshot {
             voices,
             total_energy,
             generation_count,
             epoch: self.epoch,
+            spawn_mode: self.spawn_mode,
+            recent_tiles,
+            walk_position: self.penrose_walk.position(),
         }
     }
 }
