@@ -4,26 +4,12 @@ A terminal-native binaural beats engine with generative audio, built in Rust.
 
 MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeWire, and renders animated visualizations using Unicode braille characters — all within your terminal emulator.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ ⬡ MICROTUBE ─── ▶ α Alpha  10.0 Hz  ∴50%  ⏱ 4:20                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ⠀⠀⠀⠀⠀⠀⡠⠊⠉⠉⠢⡀⠀⠀⠀⠀⠀⠀⠀⡠⠊⠉⠉⠢⡀⠀⠀⠀⠀⠀⠀⡠⠊⠉⠉⠢⡀⠀⠀⠀⠀⠀⠀⡠⠊⠉⠉⠢⡀     │
-│  ⠀⠀⠀⠀⡰⠁⠀⠀⠀⠀⠈⠢⡀⠀⠀⠀⡰⠁⠀⠀⠀⠀⠈⠢⡀⠀⠀⠀⡰⠁⠀⠀⠀⠀⠈⠢⡀⠀⠀⠀⡰⠁⠀⠀⠀⠀⠈⠢   │
-│  ⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤  │
-│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠢⡰⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠢⡰⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠢⡰⠁⠀⠀⠀⠀⠀⠀   │
-│  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
 ## Features
 
 **Audio Synthesis**
 - Phase-accumulator binaural beat generation (drift-free, runs indefinitely)
 - Harmonic overtones (2nd/3rd/4th partials) for warm, organ-like timbre
-- 7-octave Voss-McCartney pink noise with xorshift64 PRNG
+- Selectable mist algorithms: pink, white, brown, blue, and velvet textures
 - Exponential parameter smoothing (~50ms) eliminates clicks on transitions
 - Soft-clip limiter prevents digital distortion
 
@@ -90,7 +76,8 @@ cargo run --release
 | `s` | Sequence menu |
 | `v` / `V` | Next / previous visualization |
 | `e` | Toggle emergence |
-| `n` | Toggle pink noise |
+| `n` | Toggle mist layer |
+| `m` | Cycle mist type |
 | `?` | Help |
 | `q` / `Esc` | Quit |
 
@@ -198,7 +185,7 @@ Log which frequencies and sequences correlate with self-reported states over tim
 
 ## License
 
-MIT
+Unlicense
 
 ## Acknowledgments
 

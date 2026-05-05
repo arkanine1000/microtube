@@ -398,15 +398,22 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
         "quiet".to_string()
     };
 
+    let mist = format!(
+        "{} / {}",
+        app.params.get_mist_type().label(),
+        app.params.get_mist_type().texture()
+    );
     let rows = vec![
         data_line("preset", preset, accent),
         data_line("band", band, accent),
         data_line("visual", app.viz_mode.label(), BRIGHT),
         data_line("time", &timer, BRIGHT),
         data_line("seq", &sequence, SOFT),
-        data_line("life", &em_status, accent),
+        data_line("mist", &mist, Color::Rgb(120, 170, 255)),
         Line::from(vec![
-            Span::styled(" breath ", Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(" life   ", Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(em_status, Style::default().fg(accent).bg(PANEL_BG)),
+            Span::styled("  ", Style::default().bg(PANEL_BG)),
             Span::styled(breath, Style::default().fg(accent).bg(PANEL_BG)),
         ]),
     ];
@@ -471,7 +478,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let controls = if inner.width < 106 {
+    let controls = if inner.width < 118 {
         Line::from(vec![
             key_chip("h/l", accent),
             key_chip("j/k", Color::Rgb(84, 240, 150)),
@@ -481,6 +488,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             key_chip("v/V", accent),
             key_chip("e", Color::Rgb(210, 145, 255)),
             key_chip("n", Color::Rgb(120, 170, 255)),
+            key_chip("m", Color::Rgb(120, 170, 255)),
             key_chip("?", BRIGHT),
             key_chip("q", DIM),
         ])
@@ -494,6 +502,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             command_chip("v/V", "visual", accent),
             command_chip("e", "life", Color::Rgb(210, 145, 255)),
             command_chip("n", "noise", Color::Rgb(120, 170, 255)),
+            command_chip("m", "mist", Color::Rgb(120, 170, 255)),
             command_chip("?", "help", BRIGHT),
             command_chip("q", "quit", DIM),
         ])
@@ -638,7 +647,7 @@ fn draw_help(f: &mut Frame, area: Rect, accent: Color) {
                 Style::default().fg(BG_TOP).bg(Color::Rgb(210, 145, 255)),
             ),
             Span::styled(
-                "  v/V cycle visual planes    e emergence    n noise",
+                "  v/V cycle visual planes    e emergence    n noise    m mist type",
                 Style::default().fg(BRIGHT),
             ),
         ]),

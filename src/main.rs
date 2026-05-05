@@ -168,6 +168,7 @@ fn handle_normal(app: &mut App, code: KeyCode) {
                 app.params.set_noise_level(0.15);
             }
         }
+        KeyCode::Char('m') => app.cycle_mist_type(),
 
         // Quick presets
         KeyCode::Char('1') => app.apply_preset(0),

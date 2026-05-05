@@ -12,6 +12,7 @@ pub struct AudioParams {
     pub volume: AtomicU32,
     pub playing: AtomicBool,
     pub noise_level: AtomicU32,
+    pub mist_type: AtomicU32,
     pub harmonics: AtomicU32,
     pub emergence: AtomicU32, // Emergence intensity 0.0-1.0
 }
@@ -24,6 +25,7 @@ impl AudioParams {
             volume: AtomicU32::new(0.7_f32.to_bits()),
             playing: AtomicBool::new(true),
             noise_level: AtomicU32::new(0.0_f32.to_bits()),
+            mist_type: AtomicU32::new(MistType::Pink as u32),
             harmonics: AtomicU32::new(0.3_f32.to_bits()),
             emergence: AtomicU32::new(0.0_f32.to_bits()),
         }
@@ -43,6 +45,10 @@ impl AudioParams {
 
     pub fn get_noise_level(&self) -> f32 {
         f32::from_bits(self.noise_level.load(Ordering::Relaxed))
+    }
+
+    pub fn get_mist_type(&self) -> MistType {
+        MistType::from_u32(self.mist_type.load(Ordering::Relaxed))
     }
 
     pub fn get_harmonics(&self) -> f32 {
@@ -71,6 +77,10 @@ impl AudioParams {
             .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
+    pub fn set_mist_type(&self, v: MistType) {
+        self.mist_type.store(v as u32, Ordering::Relaxed);
+    }
+
     pub fn set_harmonics(&self, v: f32) {
         self.harmonics
             .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
@@ -79,6 +89,57 @@ impl AudioParams {
     pub fn set_emergence(&self, v: f32) {
         self.emergence
             .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum MistType {
+    Pink = 0,
+    White = 1,
+    Brown = 2,
+    Blue = 3,
+    Velvet = 4,
+}
+
+impl MistType {
+    pub fn from_u32(value: u32) -> Self {
+        match value {
+            1 => Self::White,
+            2 => Self::Brown,
+            3 => Self::Blue,
+            4 => Self::Velvet,
+            _ => Self::Pink,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Pink => Self::White,
+            Self::White => Self::Brown,
+            Self::Brown => Self::Blue,
+            Self::Blue => Self::Velvet,
+            Self::Velvet => Self::Pink,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pink => "Pink",
+            Self::White => "White",
+            Self::Brown => "Brown",
+            Self::Blue => "Blue",
+            Self::Velvet => "Velvet",
+        }
+    }
+
+    pub fn texture(self) -> &'static str {
+        match self {
+            Self::Pink => "warm",
+            Self::White => "air",
+            Self::Brown => "surf",
+            Self::Blue => "glass",
+            Self::Velvet => "sparks",
+        }
     }
 }
 
@@ -331,6 +392,15 @@ impl App {
         if let Ok(mut snapshot) = self.emergence_snapshot.try_lock() {
             *snapshot = EmergenceSnapshot::empty();
         }
+    }
+
+    pub fn cycle_mist_type(&mut self) {
+        let next = self.params.get_mist_type().next();
+        self.params.set_mist_type(next);
+        if self.params.get_noise_level() <= 0.01 {
+            self.params.set_noise_level(0.15);
+        }
+        self.current_preset = None;
     }
 
     pub fn adjust_param(&mut self, delta: f32) {

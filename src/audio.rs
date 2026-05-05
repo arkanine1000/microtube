@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, SampleRate, Stream, StreamConfig};
 
-use crate::app::{AudioParams, VizBuffer};
+use crate::app::{AudioParams, MistType, VizBuffer};
 use crate::emergence::{EmergenceEngine, EmergenceSnapshot};
 
 struct SynthState {
@@ -21,6 +21,10 @@ struct SynthState {
     current_emergence: f64,
     pink_state: [f64; 7],
     pink_counter: u32,
+    brown_state: f64,
+    last_white: f64,
+    last_white_2: f64,
+    velvet_state: f64,
     rng: u64,
     viz_counter: u32,
     emergence: EmergenceEngine,
@@ -43,6 +47,10 @@ impl SynthState {
             current_emergence: 0.0,
             pink_state: [0.0; 7],
             pink_counter: 0,
+            brown_state: 0.0,
+            last_white: 0.0,
+            last_white_2: 0.0,
+            velvet_state: 0.0,
             rng: 0xDEADBEEFCAFE1234,
             viz_counter: 0,
             emergence: EmergenceEngine::new(sample_rate),
@@ -67,6 +75,34 @@ impl SynthState {
             sum += self.pink_state[i];
         }
         sum / 7.0
+    }
+
+    fn mist_sample(&mut self, mist_type: MistType) -> f64 {
+        match mist_type {
+            MistType::Pink => self.pink_noise(),
+            MistType::White => self.xorshift64() * 0.58,
+            MistType::Brown => {
+                let white = self.xorshift64();
+                self.brown_state = (self.brown_state * 0.996 + white * 0.035).clamp(-1.0, 1.0);
+                self.brown_state * 1.4
+            }
+            MistType::Blue => {
+                let white = self.xorshift64();
+                let blue = white - self.last_white * 0.72 + self.last_white_2 * 0.12;
+                self.last_white_2 = self.last_white;
+                self.last_white = white;
+                blue * 0.42
+            }
+            MistType::Velvet => {
+                let trigger = (self.xorshift64() + 1.0) * 0.5;
+                if trigger < 0.0025 {
+                    self.velvet_state = if self.xorshift64() >= 0.0 { 1.0 } else { -1.0 };
+                }
+                let sample = self.velvet_state;
+                self.velvet_state *= 0.88;
+                sample * 0.75
+            }
+        }
     }
 
     fn generate_tone(&mut self, freq_l: f64, freq_r: f64) -> (f64, f64) {
@@ -162,6 +198,8 @@ impl AudioEngine {
                     let target_vol = f32::from_bits(params.volume.load(Ordering::Relaxed)) as f64;
                     let target_noise =
                         f32::from_bits(params.noise_level.load(Ordering::Relaxed)) as f64;
+                    let target_mist_type =
+                        MistType::from_u32(params.mist_type.load(Ordering::Relaxed));
                     let target_harmonics =
                         f32::from_bits(params.harmonics.load(Ordering::Relaxed)) as f64;
                     let target_emergence =
@@ -195,9 +233,11 @@ impl AudioEngine {
                             sample_r += em_r * state.current_vol;
                         }
 
-                        // Pink noise
+                        // Mist/noise layer
                         if state.current_noise > 0.001 {
-                            let noise = state.pink_noise() * state.current_noise * 0.3;
+                            let noise = state.mist_sample(target_mist_type)
+                                * state.current_noise
+                                * mist_gain(target_mist_type);
                             sample_l += noise;
                             sample_r += noise;
                         }
@@ -255,5 +295,16 @@ fn soft_clip(x: f64) -> f64 {
         x // Fast path: no processing needed for normal levels
     } else {
         x.tanh()
+    }
+}
+
+#[inline]
+fn mist_gain(mist_type: MistType) -> f64 {
+    match mist_type {
+        MistType::Pink => 0.30,
+        MistType::White => 0.24,
+        MistType::Brown => 0.22,
+        MistType::Blue => 0.20,
+        MistType::Velvet => 0.26,
     }
 }
