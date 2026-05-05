@@ -10,6 +10,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 - Phase-accumulator binaural beat generation (drift-free, runs indefinitely)
 - Harmonic overtones (2nd/3rd/4th partials) for warm, organ-like timbre
 - Selectable mist algorithms: pink, white, brown, blue, and velvet textures
+- Shepard-Risset glissando: a 7-octave stack under a raised-cosine bell, endlessly rising or falling
 - Exponential parameter smoothing (~50ms) eliminates clicks on transitions
 - Soft-clip limiter prevents digital distortion
 
@@ -48,7 +49,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 ## Installation
 
 ```bash
-git clone https://github.com/YOU/microtube.git
+git clone https://github.com/arkanine1000/microtube.git
 cd microtube
 cargo build --release
 ```
@@ -77,6 +78,8 @@ cargo run --release
 | `v` / `V` | Next / previous visualization |
 | `e` | Toggle emergence |
 | `g` | Switch spawn mode (canon ↔ penrose) |
+| `r` | Toggle Shepard-Risset drift |
+| `R` | Reverse drift direction (rising ↔ falling) |
 | `n` | Toggle mist layer |
 | `m` | Cycle mist type |
 | `?` | Help |
@@ -122,6 +125,12 @@ Press `g` to switch the spawn engine to **Penrose** mode. Each spawn now advance
 
 (SS never occurs in the Fibonacci word — every short rhomb is bracketed by long ones.) The resulting harmonic stream is structurally aperiodic at every scale and yet bound to a small consonant palette, so it never repeats but always sounds like itself.
 
+### Shepard-Risset Drift
+
+Press `r` to layer a continuous Shepard-Risset glissando over the binaural carrier; press `R` to flip its direction. Seven sine oscillators spaced one octave apart sweep in parallel through a raised-cosine amplitude window centered around 370 Hz; the bell fully silences each oscillator at the spectrum's edge, so the wrap-around is inaudible and the pitch appears to rise (or fall) forever.
+
+The default rate is 36 seconds per octave — slow enough to feel ambient, fast enough that the motion remains legible. Descending drift pairs naturally with the meditation/sleep presets ("a feeling of falling", per Mainsbridge & Marques 2016); rising drift adds momentum to focus and flow sessions. The layer is summed mono and mixed equally to both ears so it does not interfere with the binaural difference frequency.
+
 ## Architecture
 
 ```
@@ -133,6 +142,7 @@ src/
 ├── presets.rs         Brainwave presets and timed sequences
 ├── ui.rs              ratatui layout and widget composition
 ├── penrose.rs         Fibonacci-word walk (Penrose P3 Conway worm)
+├── shepard.rs         Shepard-Risset glissando engine
 └── visualization.rs   Braille waveforms, spectrum, Penrose, emergence viz
 ```
 
@@ -179,9 +189,6 @@ Add noise not as a masking agent but as a functional component — at certain le
 
 **Biofeedback Loop**
 Read heart rate variability or breathing rate (via external sensor) and use it as a control signal. The system responds to your state rather than imposing one — speeding up when you're drowsy during focus sessions, deepening when your breathing slows during meditation.
-
-**Shepard-Risset Integration**
-Continuously ascending/descending Shepard tones layered with the binaural beat. The auditory illusion of infinite ascent combined with entrainment creates a powerful sense of momentum or deepening.
 
 **Network Emergence**
 Multiple MicroTube instances communicating over the network, each contributing voices to a shared emergence pool. Distributed generative music — a flock of synthesizers finding consonance together.

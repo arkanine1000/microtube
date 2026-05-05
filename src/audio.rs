@@ -6,6 +6,7 @@ use cpal::{SampleFormat, SampleRate, Stream, StreamConfig};
 
 use crate::app::{AudioParams, MistType, VizBuffer};
 use crate::emergence::{EmergenceEngine, EmergenceSnapshot, SpawnMode};
+use crate::shepard::{Direction, ShepardEngine};
 
 struct SynthState {
     phase_l: f64,
@@ -19,6 +20,7 @@ struct SynthState {
     current_noise: f64,
     current_harmonics: f64,
     current_emergence: f64,
+    current_shepard: f64,
     pink_state: [f64; 7],
     pink_counter: u32,
     brown_state: f64,
@@ -28,6 +30,7 @@ struct SynthState {
     rng: u64,
     viz_counter: u32,
     emergence: EmergenceEngine,
+    shepard: ShepardEngine,
     snapshot_counter: u32,
 }
 
@@ -45,6 +48,7 @@ impl SynthState {
             current_noise: 0.0,
             current_harmonics: 0.3,
             current_emergence: 0.0,
+            current_shepard: 0.0,
             pink_state: [0.0; 7],
             pink_counter: 0,
             brown_state: 0.0,
@@ -54,6 +58,7 @@ impl SynthState {
             rng: 0xDEADBEEFCAFE1234,
             viz_counter: 0,
             emergence: EmergenceEngine::new(sample_rate),
+            shepard: ShepardEngine::new(sample_rate),
             snapshot_counter: 0,
         }
     }
@@ -209,6 +214,10 @@ impl AudioEngine {
                     if state.emergence.spawn_mode() != target_spawn_mode {
                         state.emergence.set_spawn_mode(target_spawn_mode);
                     }
+                    let target_shepard =
+                        f32::from_bits(params.shepard.load(Ordering::Relaxed)) as f64;
+                    let shepard_direction =
+                        Direction::from_u32(params.shepard_direction.load(Ordering::Relaxed));
 
                     for frame in data.chunks_mut(channels) {
                         // Smooth parameter transitions
@@ -220,6 +229,8 @@ impl AudioEngine {
                             (target_harmonics - state.current_harmonics) * smooth_alpha;
                         state.current_emergence +=
                             (target_emergence - state.current_emergence) * smooth_alpha;
+                        state.current_shepard +=
+                            (target_shepard - state.current_shepard) * smooth_alpha;
 
                         let freq_l = state.current_base;
                         let freq_r = state.current_base + state.current_beat;
@@ -236,6 +247,17 @@ impl AudioEngine {
                                 .process(state.current_base, state.current_emergence);
                             sample_l += em_l * state.current_vol;
                             sample_r += em_r * state.current_vol;
+                        }
+
+                        // Shepard-Risset glissando — mono, mixed equally L/R
+                        // so it doesn't disturb the binaural phase difference.
+                        if state.current_shepard > 0.001 {
+                            let s = state
+                                .shepard
+                                .process(shepard_direction, state.current_shepard)
+                                * state.current_vol;
+                            sample_l += s;
+                            sample_r += s;
                         }
 
                         // Mist/noise layer

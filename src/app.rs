@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use crate::emergence::{EmergenceSnapshot, SpawnMode};
 use crate::presets::{PRESETS, SEQUENCES};
+use crate::shepard::Direction;
 
 /// Lock-free audio parameters shared between UI and audio thread.
 pub struct AudioParams {
@@ -16,6 +17,8 @@ pub struct AudioParams {
     pub harmonics: AtomicU32,
     pub emergence: AtomicU32, // Emergence intensity 0.0-1.0
     pub spawn_mode: AtomicU32,
+    pub shepard: AtomicU32, // Shepard intensity 0.0-1.0
+    pub shepard_direction: AtomicU32,
 }
 
 impl AudioParams {
@@ -30,6 +33,8 @@ impl AudioParams {
             harmonics: AtomicU32::new(0.3_f32.to_bits()),
             emergence: AtomicU32::new(0.0_f32.to_bits()),
             spawn_mode: AtomicU32::new(SpawnMode::Canon as u32),
+            shepard: AtomicU32::new(0.0_f32.to_bits()),
+            shepard_direction: AtomicU32::new(Direction::Down as u32),
         }
     }
 
@@ -99,6 +104,23 @@ impl AudioParams {
 
     pub fn set_spawn_mode(&self, mode: SpawnMode) {
         self.spawn_mode.store(mode as u32, Ordering::Relaxed);
+    }
+
+    pub fn get_shepard(&self) -> f32 {
+        f32::from_bits(self.shepard.load(Ordering::Relaxed))
+    }
+
+    pub fn set_shepard(&self, v: f32) {
+        self.shepard
+            .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_shepard_direction(&self) -> Direction {
+        Direction::from_u32(self.shepard_direction.load(Ordering::Relaxed))
+    }
+
+    pub fn set_shepard_direction(&self, d: Direction) {
+        self.shepard_direction.store(d as u32, Ordering::Relaxed);
     }
 }
 
@@ -205,6 +227,7 @@ pub enum ActiveParam {
     Volume,
     Harmonics,
     Emergence,
+    Shepard,
     NoiseLevel,
 }
 
@@ -215,7 +238,8 @@ impl ActiveParam {
             Self::BeatFreq => Self::Volume,
             Self::Volume => Self::Harmonics,
             Self::Harmonics => Self::Emergence,
-            Self::Emergence => Self::NoiseLevel,
+            Self::Emergence => Self::Shepard,
+            Self::Shepard => Self::NoiseLevel,
             Self::NoiseLevel => Self::BaseFreq,
         }
     }
@@ -227,7 +251,8 @@ impl ActiveParam {
             Self::Volume => Self::BeatFreq,
             Self::Harmonics => Self::Volume,
             Self::Emergence => Self::Harmonics,
-            Self::NoiseLevel => Self::Emergence,
+            Self::Shepard => Self::Emergence,
+            Self::NoiseLevel => Self::Shepard,
         }
     }
 
@@ -239,6 +264,7 @@ impl ActiveParam {
             Self::NoiseLevel => "Noise",
             Self::Harmonics => "Warmth",
             Self::Emergence => "Emergence",
+            Self::Shepard => "Shepard",
         }
     }
 }
@@ -453,7 +479,25 @@ impl App {
                     self.clear_emergence_snapshot();
                 }
             }
+            ActiveParam::Shepard => {
+                let v = (self.params.get_shepard() + delta * 0.05).clamp(0.0, 1.0);
+                self.params.set_shepard(v);
+            }
         }
         self.current_preset = None;
+    }
+
+    pub fn toggle_shepard(&self) {
+        let current = self.params.get_shepard();
+        if current > 0.01 {
+            self.params.set_shepard(0.0);
+        } else {
+            self.params.set_shepard(0.35);
+        }
+    }
+
+    pub fn reverse_shepard(&self) {
+        let next = self.params.get_shepard_direction().flipped();
+        self.params.set_shepard_direction(next);
     }
 }

@@ -349,6 +349,17 @@ fn draw_parameter_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, bor
             color: Color::Rgb(210, 145, 255),
         },
         MeterSpec {
+            param: ActiveParam::Shepard,
+            label: "drift",
+            value: format!(
+                "{} {:>3.0}%",
+                app.params.get_shepard_direction().glyph(),
+                app.params.get_shepard() * 100.0
+            ),
+            ratio: app.params.get_shepard(),
+            color: Color::Rgb(255, 170, 110),
+        },
+        MeterSpec {
             param: ActiveParam::NoiseLevel,
             label: "mist",
             value: format!("{:>3.0}%", app.params.get_noise_level() * 100.0),
@@ -480,7 +491,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    let controls = if inner.width < 130 {
+    let controls = if inner.width < 144 {
         Line::from(vec![
             key_chip("h/l", accent),
             key_chip("j/k", Color::Rgb(84, 240, 150)),
@@ -490,6 +501,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             key_chip("v/V", accent),
             key_chip("e", Color::Rgb(210, 145, 255)),
             key_chip("g", Color::Rgb(250, 210, 92)),
+            key_chip("r/R", Color::Rgb(255, 170, 110)),
             key_chip("n", Color::Rgb(120, 170, 255)),
             key_chip("m", Color::Rgb(120, 170, 255)),
             key_chip("?", BRIGHT),
@@ -505,6 +517,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             command_chip("v/V", "visual", accent),
             command_chip("e", "life", Color::Rgb(210, 145, 255)),
             command_chip("g", "geom", Color::Rgb(250, 210, 92)),
+            command_chip("r/R", "drift", Color::Rgb(255, 170, 110)),
             command_chip("n", "noise", Color::Rgb(120, 170, 255)),
             command_chip("m", "mist", Color::Rgb(120, 170, 255)),
             command_chip("?", "help", BRIGHT),
@@ -651,7 +664,7 @@ fn draw_help(f: &mut Frame, area: Rect, accent: Color) {
                 Style::default().fg(BG_TOP).bg(Color::Rgb(210, 145, 255)),
             ),
             Span::styled(
-                "  v/V visual    e emergence    g geometric (canon/penrose)    n noise    m mist",
+                "  v/V visual    e emergence    g geom    r/R drift (toggle/reverse)    n noise    m mist",
                 Style::default().fg(BRIGHT),
             ),
         ]),
@@ -666,6 +679,10 @@ fn draw_help(f: &mut Frame, area: Rect, accent: Color) {
         )),
         Line::from(Span::styled(
             "   Penrose mode walks a Fibonacci-word Conway worm; tile pairs (LL/LS/SL) pick 3:2 / 5:4 / 4:3.",
+            Style::default().fg(SOFT),
+        )),
+        Line::from(Span::styled(
+            "   Drift adds a Shepard-Risset glissando: 7 octaves under a bell window, endlessly rising or falling.",
             Style::default().fg(SOFT),
         )),
         Line::from(""),
