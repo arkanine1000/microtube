@@ -385,10 +385,15 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
     f.render_widget(block, area);
 
     let beat = app.params.get_beat_freq();
-    let preset = app
-        .current_preset
-        .map(|idx| PRESETS[idx].name)
-        .unwrap_or("Custom");
+    let epoch_or_preset = if let Some(name) = app.current_step_name() {
+        data_line("epoch", name, accent)
+    } else {
+        let preset = app
+            .current_preset
+            .map(|idx| PRESETS[idx].name)
+            .unwrap_or("Custom");
+        data_line("preset", preset, accent)
+    };
     let band = freq_band_name(beat);
     let seconds = app.session_elapsed() as u32;
     let timer = format!("{:02}:{:02}", seconds / 60, seconds % 60);
@@ -417,7 +422,7 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
         app.params.get_mist_type().texture()
     );
     let rows = vec![
-        data_line("preset", preset, accent),
+        epoch_or_preset,
         data_line("band", band, accent),
         data_line("visual", app.viz_mode.label(), BRIGHT),
         data_line("time", &timer, BRIGHT),

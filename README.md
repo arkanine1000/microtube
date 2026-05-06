@@ -33,9 +33,10 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 **Interface**
 - Vim-inspired keybindings (h/j/k/l navigation)
 - 5 brainwave presets with quick-select
-- 5 timed sequences with smooth interpolation
+- 6 timed sequences with smooth interpolation, including the 25½-minute *Journey Through the Cosmos*
+- Sequence steps automate every audible & visible parameter (frequencies, timbre, mist, Shepard direction, spawn mode, visualisation) — not just the binaural carrier
 - Aurora-style terminal stage with animated backdrop and spectral control deck
-- Session timer and breathing pacer
+- Session timer, breathing pacer, and live `epoch` indicator during journey-class sequences
 - Context-sensitive help overlay
 - Color palette tuned for dark terminal backgrounds
 
@@ -97,13 +98,14 @@ cargo run --release
 
 ### Sequences
 
-Timed programs that smoothly transition between brainwave bands:
+Timed programs that smoothly transition between brainwave bands. The first five automate `beat_freq` and `base_freq` and leave every other parameter under manual control. The sixth — **Journey Through the Cosmos** — automates every parameter in the program: timbre, mist texture, Shepard intensity and direction, emergence intensity, spawn mode, even the active visualisation. See the companion essay [JOURNEY_THROUGH_THE_COSMOS.md](JOURNEY_THROUGH_THE_COSMOS.md) for the design notes, the science (Penrose–Hameroff, Babcock superradiance, Schumann resonance, Fibonacci quasicrystals, Shepard–Risset), and a full citation list.
 
 - **Deep Focus** (25 min) — Beta to Alpha to Theta
 - **Wake Up** (10 min) — Delta through Theta and Alpha to Beta
 - **Power Nap** (20 min) — Alpha descent into Theta, then back up
 - **Deep Meditation** (30 min) — Alpha into deep Theta territory and return
 - **Orch-OR** (25 min) — Gamma to Schumann resonance (7.83 Hz) and back; inspired by Penrose-Hameroff theory
+- **Journey Through the Cosmos** (25½ min) — A 13-step strange loop. Microtubule → Synapse → Brain → Body → Earth (Schumann) → Lunar → Solar → Stellar → Galactic → Cosmic Web → Background Radiation → Singularity → back to Microtubule. Step durations follow the Fibonacci sequence (21, 34, 55, 89, 144, 233, 377 s rising and descending symmetrically); base frequency descends monotonically from 432 Hz to 55 Hz before snapping back; beat frequency traces a U from gamma through delta to gamma; Shepard direction flips Down once, at the singularity. Headphones, dimmed lights, no interruptions.
 
 ### Emergence Mode
 
@@ -208,6 +210,11 @@ Unlicense
 - [ratatui](https://ratatui.rs) — Terminal UI framework
 - [cpal](https://github.com/RustAudio/cpal) — Cross-platform audio
 - Roger Penrose — For the geometry, the impossible triangles, and the audacious claim that consciousness arises from quantum gravity
+- Stuart Hameroff — For taking that claim into the operating theatre, and for the 2014 *Physics of Life Reviews* paper that re-frames EEG bands as beat frequencies of microtubule vibrations
+- N. S. Babcock, P. Kurian, and collaborators — For the 2024 *J. Phys. Chem. B* result on collective superradiance in tryptophan mega-networks, which puts the warm-wet-brain decoherence objection into a different, kinder light
 - Douglas Hofstadter — For *Gödel, Escher, Bach* and the concept of strange loops
-- John Conway — For showing that simple rules generate unbounded complexity
-- J.S. Bach — For proving that counterpoint is the mathematics of the soul
+- W. O. Schumann and Herbert König — For showing the Earth has a fundamental frequency, and that it sits inside the alpha-theta band
+- Roger Shepard and Jean-Claude Risset — For the auditory illusion that lets a tone climb forever
+- John Conway — For showing that simple rules generate unbounded complexity, and for the worms
+- M. C. Escher — For hands drawing hands
+- J. S. Bach — For *Canon per Tonos*, the contrapuntal Shepard tone, and for proving that counterpoint is the mathematics of the soul

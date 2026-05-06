@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::emergence::{EmergenceSnapshot, SpawnMode};
-use crate::presets::{PRESETS, SEQUENCES};
+use crate::presets::{PRESETS, SEQUENCES, SequenceStep};
 use crate::shepard::Direction;
 
 /// Lock-free audio parameters shared between UI and audio thread.
@@ -433,8 +433,45 @@ impl App {
         self.current_preset = None;
         let seq = &SEQUENCES[idx];
         if let Some(step) = seq.steps.first() {
-            self.params.set_base_freq(step.base_freq);
-            self.params.set_beat_freq(step.beat_freq);
+            self.snap_to_step(step);
+        }
+    }
+
+    /// Snap every parameter that the step automates to its starting value.
+    /// Used at sequence entry so the listener never sees a one-frame flicker
+    /// from prior state before `update_sequence` takes over.
+    fn snap_to_step(&mut self, step: &SequenceStep) {
+        self.params.set_base_freq(step.base_freq);
+        self.params.set_beat_freq(step.beat_freq);
+        if let Some(v) = step.volume {
+            self.params.set_volume(v);
+        }
+        if let Some(v) = step.noise_level {
+            self.params.set_noise_level(v);
+        }
+        if let Some(v) = step.harmonics {
+            self.params.set_harmonics(v);
+        }
+        if let Some(v) = step.emergence {
+            self.params.set_emergence(v);
+        }
+        if let Some(v) = step.shepard {
+            self.params.set_shepard(v);
+        }
+        if let Some(t) = step.timbre {
+            self.params.set_timbre(t);
+        }
+        if let Some(m) = step.mist_type {
+            self.params.set_mist_type(m);
+        }
+        if let Some(d) = step.shepard_direction {
+            self.params.set_shepard_direction(d);
+        }
+        if let Some(sm) = step.spawn_mode {
+            self.params.set_spawn_mode(sm);
+        }
+        if let Some(vm) = step.viz_mode {
+            self.viz_mode = vm;
         }
     }
 
@@ -462,14 +499,80 @@ impl App {
                 } else {
                     step
                 };
+
+                // Always-automated continuous params.
                 let beat = step.beat_freq + (next.beat_freq - step.beat_freq) * progress;
                 let base = step.base_freq + (next.base_freq - step.base_freq) * progress;
                 self.params.set_beat_freq(beat);
                 self.params.set_base_freq(base);
+
+                // Optionally-automated continuous params: lerp toward the
+                // next step's value, falling back to the current step when
+                // the next step leaves the field unset.
+                if let Some(v) = step.volume {
+                    let target = next.volume.unwrap_or(v);
+                    self.params.set_volume(v + (target - v) * progress);
+                }
+                if let Some(v) = step.noise_level {
+                    let target = next.noise_level.unwrap_or(v);
+                    self.params.set_noise_level(v + (target - v) * progress);
+                }
+                if let Some(v) = step.harmonics {
+                    let target = next.harmonics.unwrap_or(v);
+                    self.params.set_harmonics(v + (target - v) * progress);
+                }
+                if let Some(v) = step.emergence {
+                    let target = next.emergence.unwrap_or(v);
+                    self.params.set_emergence(v + (target - v) * progress);
+                }
+                if let Some(v) = step.shepard {
+                    let target = next.shepard.unwrap_or(v);
+                    self.params.set_shepard(v + (target - v) * progress);
+                }
+
+                // Discrete params: snap to the current step's value every
+                // tick. Atomic stores are idempotent and the audio thread's
+                // 50 ms exponential smoothing handles the boundary gracefully.
+                if let Some(t) = step.timbre {
+                    self.params.set_timbre(t);
+                }
+                if let Some(m) = step.mist_type {
+                    self.params.set_mist_type(m);
+                }
+                if let Some(d) = step.shepard_direction {
+                    self.params.set_shepard_direction(d);
+                }
+                if let Some(sm) = step.spawn_mode {
+                    self.params.set_spawn_mode(sm);
+                }
+                if let Some(vm) = step.viz_mode {
+                    self.viz_mode = vm;
+                }
                 break;
             }
             acc += step.duration_secs;
         }
+    }
+
+    /// Name of the currently-active sequence step, if it has one.
+    pub fn current_step_name(&self) -> Option<&'static str> {
+        let (seq_idx, start) = match (self.current_sequence, self.sequence_start) {
+            (Some(i), Some(s)) => (i, s),
+            _ => return None,
+        };
+        let seq = &SEQUENCES[seq_idx];
+        let elapsed = start.elapsed().as_secs_f32();
+        if elapsed >= seq.total_duration_secs {
+            return None;
+        }
+        let mut acc = 0.0_f32;
+        for step in seq.steps {
+            if elapsed < acc + step.duration_secs {
+                return step.name;
+            }
+            acc += step.duration_secs;
+        }
+        None
     }
 
     pub fn sequence_elapsed(&self) -> Option<f32> {
