@@ -520,6 +520,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             command_chip("r/R", "drift", Color::Rgb(255, 170, 110)),
             command_chip("n", "noise", Color::Rgb(120, 170, 255)),
             command_chip("m", "mist", Color::Rgb(120, 170, 255)),
+            command_chip("t", "timbre", Color::Rgb(170, 255, 120)),
             command_chip("?", "help", BRIGHT),
             command_chip("q", "quit", DIM),
         ])

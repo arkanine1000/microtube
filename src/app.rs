@@ -19,6 +19,7 @@ pub struct AudioParams {
     pub spawn_mode: AtomicU32,
     pub shepard: AtomicU32, // Shepard intensity 0.0-1.0
     pub shepard_direction: AtomicU32,
+    pub timbre: AtomicU32,
 }
 
 impl AudioParams {
@@ -35,6 +36,7 @@ impl AudioParams {
             spawn_mode: AtomicU32::new(SpawnMode::Canon as u32),
             shepard: AtomicU32::new(0.0_f32.to_bits()),
             shepard_direction: AtomicU32::new(Direction::Down as u32),
+            timbre: AtomicU32::new(Timbre::Organ as u32),
         }
     }
 
@@ -121,6 +123,60 @@ impl AudioParams {
 
     pub fn set_shepard_direction(&self, d: Direction) {
         self.shepard_direction.store(d as u32, Ordering::Relaxed);
+    }
+
+    pub fn get_timbre(&self) -> Timbre {
+        Timbre::from_u32(self.timbre.load(Ordering::Relaxed))
+    }
+
+    pub fn set_timbre(&self, t: Timbre) {
+        self.timbre.store(t as u32, Ordering::Relaxed);
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Timbre {
+    Organ = 0,
+    Flute = 1,
+    Bell = 2,
+    Saw = 3,
+}
+
+impl Timbre {
+    pub fn from_u32(value: u32) -> Self {
+        match value {
+            1 => Self::Flute,
+            2 => Self::Bell,
+            3 => Self::Saw,
+            _ => Self::Organ,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Organ => Self::Flute,
+            Self::Flute => Self::Bell,
+            Self::Bell => Self::Saw,
+            Self::Saw => Self::Organ,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Organ => "Organ",
+            Self::Flute => "Flute",
+            Self::Bell => "Bell",
+            Self::Saw => "Saw",
+        }
+    }
+
+    pub fn weights(self) -> [f64; 5] {
+        match self {
+            Self::Organ => [0.5, 0.25, 0.125, 0.0625, 0.03125],
+            Self::Flute => [0.0, 0.5, 0.0, 0.125, 0.0],
+            Self::Bell => [1.0, 0.0, 0.5, 0.0, 0.25],
+            Self::Saw => [0.5, 0.333, 0.25, 0.2, 0.166],
+        }
     }
 }
 
@@ -447,6 +503,12 @@ impl App {
         if self.params.get_noise_level() <= 0.01 {
             self.params.set_noise_level(0.15);
         }
+        self.current_preset = None;
+    }
+
+    pub fn cycle_timbre(&mut self) {
+        let next = self.params.get_timbre().next();
+        self.params.set_timbre(next);
         self.current_preset = None;
     }
 

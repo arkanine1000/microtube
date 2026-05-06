@@ -4,15 +4,16 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, SampleRate, Stream, StreamConfig};
 
-use crate::app::{AudioParams, MistType, VizBuffer};
+use crate::app::{AudioParams, MistType, Timbre, VizBuffer};
 use crate::emergence::{EmergenceEngine, EmergenceSnapshot, SpawnMode};
 use crate::shepard::{Direction, ShepardEngine};
 
 struct SynthState {
     phase_l: f64,
     phase_r: f64,
-    harm_phase_l: [f64; 3],
-    harm_phase_r: [f64; 3],
+    harm_phase_l: [f64; 5],
+    harm_phase_r: [f64; 5],
+    current_harm_weights: [f64; 5],
     sample_rate: f64,
     current_base: f64,
     current_beat: f64,
@@ -39,8 +40,9 @@ impl SynthState {
         Self {
             phase_l: 0.0,
             phase_r: 0.0,
-            harm_phase_l: [0.0; 3],
-            harm_phase_r: [0.0; 3],
+            harm_phase_l: [0.0; 5],
+            harm_phase_r: [0.0; 5],
+            current_harm_weights: Timbre::Organ.weights(),
             sample_rate,
             current_base: 220.0,
             current_beat: 10.0,
@@ -122,8 +124,10 @@ impl SynthState {
         let mut sample_r = (TAU * self.phase_r).sin();
 
         if self.current_harmonics > 0.01 {
-            let harm_weights = [0.5, 0.25, 0.125];
-            for (i, &weight) in harm_weights.iter().enumerate() {
+            let mut total_weight = 0.0;
+            for i in 0..5 {
+                let weight = self.current_harm_weights[i];
+                if weight < 0.001 { continue; }
                 let mult = (i + 2) as f64;
                 self.harm_phase_l[i] += (freq_l * mult) / self.sample_rate;
                 self.harm_phase_r[i] += (freq_r * mult) / self.sample_rate;
@@ -132,8 +136,9 @@ impl SynthState {
 
                 sample_l += (TAU * self.harm_phase_l[i]).sin() * weight * self.current_harmonics;
                 sample_r += (TAU * self.harm_phase_r[i]).sin() * weight * self.current_harmonics;
+                total_weight += weight;
             }
-            let norm = 1.0 + self.current_harmonics * (0.5 + 0.25 + 0.125);
+            let norm = 1.0 + self.current_harmonics * total_weight;
             sample_l /= norm;
             sample_r /= norm;
         }
@@ -218,6 +223,8 @@ impl AudioEngine {
                         f32::from_bits(params.shepard.load(Ordering::Relaxed)) as f64;
                     let shepard_direction =
                         Direction::from_u32(params.shepard_direction.load(Ordering::Relaxed));
+                    let target_timbre = params.get_timbre();
+                    let target_weights = target_timbre.weights();
 
                     for frame in data.chunks_mut(channels) {
                         // Smooth parameter transitions
@@ -231,6 +238,11 @@ impl AudioEngine {
                             (target_emergence - state.current_emergence) * smooth_alpha;
                         state.current_shepard +=
                             (target_shepard - state.current_shepard) * smooth_alpha;
+                        
+                        for i in 0..5 {
+                            state.current_harm_weights[i] +=
+                                (target_weights[i] - state.current_harm_weights[i]) * smooth_alpha;
+                        }
 
                         let freq_l = state.current_base;
                         let freq_r = state.current_base + state.current_beat;

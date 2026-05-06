@@ -171,6 +171,7 @@ fn handle_normal(app: &mut App, code: KeyCode) {
             }
         }
         KeyCode::Char('m') => app.cycle_mist_type(),
+        KeyCode::Char('t') => app.cycle_timbre(),
         KeyCode::Char('g') => app.toggle_spawn_mode(),
         KeyCode::Char('r') => app.toggle_shepard(),
         KeyCode::Char('R') => app.reverse_shepard(),
