@@ -3,6 +3,7 @@
 mod app;
 mod audio;
 mod emergence;
+mod knowledge;
 mod penrose;
 mod presets;
 mod shepard;
@@ -20,7 +21,7 @@ use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use app::{App, AppMode, AudioParams, VizBuffer};
+use app::{App, AppMode, AudioParams, Tab, VizBuffer};
 use audio::AudioEngine;
 use emergence::EmergenceSnapshot;
 use presets::{PRESETS, SEQUENCES};
@@ -105,12 +106,33 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         return;
     }
 
-    match app.mode {
-        AppMode::Normal => handle_normal(app, code),
-        AppMode::PresetSelect => handle_menu(app, code, PRESETS.len(), true),
-        AppMode::SequenceSelect => handle_menu(app, code, SEQUENCES.len(), false),
-        AppMode::Help => {
+    // Tab switching is global. Capital Q is a hard-quit reachable from
+    // either tab; lowercase q means "go back" inside Knowledge sub-views,
+    // and "quit" only from Studio Normal mode.
+    if code == KeyCode::Char('Q') {
+        app.should_quit = true;
+        return;
+    }
+    if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
+        app.tab = app.tab.flipped();
+        if app.tab == Tab::Knowledge {
+            // Close any Studio modal so it doesn't reappear on tab return.
             app.mode = AppMode::Normal;
+        }
+        return;
+    }
+
+    match app.tab {
+        Tab::Studio => match app.mode {
+            AppMode::Normal => handle_normal(app, code),
+            AppMode::PresetSelect => handle_menu(app, code, PRESETS.len(), true),
+            AppMode::SequenceSelect => handle_menu(app, code, SEQUENCES.len(), false),
+            AppMode::Help => {
+                app.mode = AppMode::Normal;
+            }
+        },
+        Tab::Knowledge => {
+            knowledge::handle_key(app, code);
         }
     }
 }

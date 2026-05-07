@@ -21,6 +21,40 @@ const PHI: f64 = 1.618033988749895;
 /// Maximum simultaneous voices
 const MAX_VOICES: usize = 12;
 
+/// Simple ratios used by [`consonance_score`]. Each entry is `(ratio, peak_score)`:
+/// a perfect match scores `peak_score`, partial matches drop linearly within
+/// a 0.1 log-distance neighborhood.
+pub const CONSONANCE_RATIOS: &[(f64, f64)] = &[
+    (1.0, 1.0),         // Unison
+    (2.0, 0.95),        // Octave
+    (3.0 / 2.0, 0.9),   // Fifth
+    (4.0 / 3.0, 0.85),  // Fourth
+    (5.0 / 4.0, 0.8),   // Major third
+    (6.0 / 5.0, 0.75),  // Minor third
+    (PHI, 0.7),         // Golden (special)
+];
+
+/// Score how consonant a frequency ratio is (0.0 = dissonant, 1.0 = perfect).
+///
+/// Each peak in [`CONSONANCE_RATIOS`] contributes a triangular kernel of
+/// half-width 0.1 in log-ratio space; the highest contribution wins. Used by
+/// the audio engine to weight voice lifetime, and by the Knowledge-tab
+/// playground to plot the landscape — single source of truth for both.
+pub fn consonance_score(ratio: f64) -> f64 {
+    let mut best_score = 0.0;
+    for &(r, score) in CONSONANCE_RATIOS {
+        let distance = ((ratio / r).ln()).abs();
+        if distance < 0.1 {
+            let proximity = 1.0 - (distance / 0.1);
+            let s = score * proximity;
+            if s > best_score {
+                best_score = s;
+            }
+        }
+    }
+    best_score
+}
+
 /// Harmonic ratios that voices can spawn at (just intonation + golden)
 const SPAWN_RATIOS: &[f64] = &[
     1.0 / PHI, // Sub-golden
@@ -343,29 +377,7 @@ impl EmergenceEngine {
     /// Score how consonant a frequency ratio is (0.0 = dissonant, 1.0 = perfect).
     /// Uses the concept of harmonic distance.
     fn consonance_score(&self, ratio: f64) -> f64 {
-        // Check proximity to simple ratios
-        let simple_ratios = [
-            (1.0, 1.0),        // Unison
-            (2.0, 0.95),       // Octave
-            (1.5, 0.9),        // Fifth
-            (4.0 / 3.0, 0.85), // Fourth
-            (5.0 / 4.0, 0.8),  // Major third
-            (6.0 / 5.0, 0.75), // Minor third
-            (PHI, 0.7),        // Golden (special)
-        ];
-
-        let mut best_score = 0.0;
-        for &(r, score) in &simple_ratios {
-            let distance = ((ratio / r).ln()).abs();
-            if distance < 0.1 {
-                let proximity = 1.0 - (distance / 0.1);
-                let s = score * proximity;
-                if s > best_score {
-                    best_score = s;
-                }
-            }
-        }
-        best_score
+        consonance_score(ratio)
     }
 
     /// Take a snapshot of current state for visualization.

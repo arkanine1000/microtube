@@ -1,0 +1,270 @@
+# Glossary entries for the Knowledge tab.
+#
+# Schema (per [entries.slug] table):
+#   term       = "Display name"           (required, string)
+#   category   = "Audio|Math|Neuroscience|Cosmology|Music"
+#   brief      = "One-line definition."
+#   expanded   = "Longer explanation."    (optional, \n breaks lines)
+#   related    = ["other_slug", ...]      (optional)
+#   wiki_ref   = "article-slug"           (optional)
+#
+# Strings are UTF-8 directly; escape sequences \", \\, \n, and \u{XXXX}
+# also work.  Greek letters and math symbols are spelled out in ASCII
+# because many terminal fonts render them as boxes.
+
+# --- Audio --------------------------------------------------------------
+
+[entries.binaural_beat]
+term = "Binaural Beat"
+category = "Audio"
+brief = "A phantom beat at the difference frequency of two tones, one per ear."
+expanded = "When two pure tones of slightly different frequency reach the brain through separate ears, the brainstem's superior olivary complex detects their difference and the listener perceives a third beat tone. Speakers destroy the effect by mixing the channels acoustically; headphones are required."
+related = ["isochronic_tone", "frequency_following_response", "alpha"]
+wiki_ref = "binaural-beats"
+
+[entries.isochronic_tone]
+term = "Isochronic Tone"
+category = "Audio"
+brief = "A pulsed mono tone that entrains directly without binaural disparity."
+expanded = "Unlike binaural beats, isochronic tones work over speakers because the pulse itself is the entrainment signal. MicroTube does not currently expose them, but they are listed in the Variations on a Theme section of the README."
+related = ["binaural_beat"]
+
+[entries.phase_accumulator]
+term = "Phase Accumulator"
+category = "Audio"
+brief = "An oscillator that maintains its current phase as a state variable."
+expanded = "Storing phase incrementally avoids the floating-point precision loss of computing sin(2*pi*f*t) directly for large t, and lets the frequency change at any sample without phase discontinuities. MicroTube uses f64 phase accumulators for every oscillator."
+related = ["sample_rate", "harmonic"]
+wiki_ref = "phase-accumulator"
+
+[entries.sample_rate]
+term = "Sample Rate"
+category = "Audio"
+brief = "Digital audio samples per second; MicroTube runs at 48,000 Hz."
+expanded = "By the Nyquist theorem the highest representable frequency is half the sample rate — 24 kHz at 48 kHz — which comfortably exceeds the upper limit of human hearing."
+
+[entries.raised_cosine]
+term = "Raised-Cosine Bell"
+category = "Audio"
+brief = "The sin^4(pi*x/N) window that silences the Shepard–Risset wrap-around."
+expanded = "A spectral envelope that is zero at both edges and peaks in the middle. Raising sin to the fourth power makes the edges silent enough that listeners cannot hear oscillators wrapping from top to bottom of the seven-octave stack."
+related = ["shepard_risset", "harmonic"]
+wiki_ref = "raised-cosine"
+
+[entries.shepard_risset]
+term = "Shepard–Risset Glissando"
+category = "Audio"
+brief = "An auditory illusion of a pitch that climbs (or falls) forever."
+expanded = "Seven sine oscillators spaced one octave apart sweep in parallel through a raised-cosine spectral envelope. As the highest oscillator fades into silence at the top, a new one fades in at the bottom — but because the envelope edges are zero, the wrap is inaudible. The pitch appears to ascend without arrival."
+related = ["raised_cosine", "harmonic"]
+wiki_ref = "raised-cosine"
+
+[entries.harmonic]
+term = "Harmonic Overtone"
+category = "Audio"
+brief = "An integer-multiple frequency above a fundamental tone."
+expanded = "MicroTube's four timbres mix the first six harmonics in different proportions. The Bell timbre emphasises the 2nd and 4th; the Flute uses only odd harmonics; the Organ decays geometrically; the Saw decays as 1/n."
+related = ["timbre", "phase_accumulator"]
+wiki_ref = "timbre-design"
+
+[entries.timbre]
+term = "Timbre"
+category = "Audio"
+brief = "Tone colour: the spectral mix of harmonic overtones above a fundamental."
+expanded = "MicroTube exposes four timbres — Organ, Flute, Bell, Saw — chosen for what they do to the binaural beat rather than to emulate real instruments. Cycle them with `t` in Studio."
+related = ["harmonic", "soft_clip"]
+wiki_ref = "timbre-design"
+
+[entries.soft_clip]
+term = "Soft-Clip Limiter"
+category = "Audio"
+brief = "A tanh-style nonlinearity that smoothly limits peak amplitude."
+expanded = "When summed harmonics or emergence voices exceed amplitude 1.0, hard clipping introduces audible aliasing. A soft clip rolls the waveform off gradually, preserving roughly the perceived loudness while removing the artefact."
+
+[entries.mist_texture]
+term = "Mist Texture"
+category = "Audio"
+brief = "A coloured-noise layer (pink/white/brown/blue/velvet) summed under the carrier."
+expanded = "Each texture has a different spectral slope. Pink is balanced, brown is low-bias, blue is bright, velvet is sparse impulses. Cycle with `m` in Studio."
+related = ["harmonic"]
+wiki_ref = "mist-textures"
+
+# --- Math ---------------------------------------------------------------
+
+[entries.golden_ratio]
+term = "Golden Ratio (phi)"
+category = "Math"
+brief = "phi = (1 + sqrt(5)) / 2 ~ 1.618. The most irrational number."
+expanded = "Phi appears as the ratio of consecutive Fibonacci numbers in the limit, the spacing of Penrose tiles, and the asymptotic frequencies of pairs in the Fibonacci word. Its continued-fraction expansion is [1; 1, 1, 1, ...] — the slowest-converging of any irrational, which is why it is in some sense the *least* approximable by simple ratios."
+related = ["fibonacci_word", "penrose_tiling", "consonance_score"]
+wiki_ref = "fibonacci-quasicrystal"
+
+[entries.fibonacci_word]
+term = "Fibonacci Word"
+category = "Math"
+brief = "The unique infinite binary sequence fixed by L -> LS, S -> L."
+expanded = "Aperiodic, self-similar, and the canonical 1D quasicrystal. MicroTube samples consecutive pairs (LL/LS/SL) to drive harmonic ratio choices in Penrose spawn mode."
+related = ["golden_ratio", "penrose_tiling", "quasicrystal", "conway_worm"]
+wiki_ref = "fibonacci-quasicrystal"
+
+[entries.penrose_tiling]
+term = "Penrose P3 Tiling"
+category = "Math"
+brief = "An aperiodic tiling by two rhombs (fat / thin) with 5-fold quasi-symmetry."
+expanded = "Discovered by Roger Penrose in 1974 as a mathematical curiosity. A row of consecutive parallel rhombs in a P3 tiling is called a Conway worm; the sequence of fat/thin rhombs along the worm is the Fibonacci word."
+related = ["fibonacci_word", "conway_worm", "quasicrystal", "golden_ratio"]
+wiki_ref = "fibonacci-quasicrystal"
+
+[entries.conway_worm]
+term = "Conway Worm"
+category = "Math"
+brief = "A row of parallel rhombs through a Penrose tiling, named for John Conway."
+expanded = "The 1D cross-section of a 2D Penrose tiling. Each rhomb is fat (L) or thin (S); the sequence is the Fibonacci word. MicroTube's Penrose spawn mode walks one of these worms."
+related = ["penrose_tiling", "fibonacci_word"]
+wiki_ref = "fibonacci-quasicrystal"
+
+[entries.quasicrystal]
+term = "Quasicrystal"
+category = "Math"
+brief = "A material with long-range order but no periodic translation symmetry."
+expanded = "Penrose tilings predicted what physicist Dan Shechtman discovered in 1982: a real metal alloy with a diffraction pattern of forbidden 5-fold symmetry. Shechtman won the Nobel Prize in Chemistry in 2011."
+related = ["penrose_tiling", "fibonacci_word"]
+
+[entries.substitution_rule]
+term = "Substitution Rule"
+category = "Math"
+brief = "A deterministic rule that rewrites every letter of a string at once."
+expanded = "Iterating a substitution rule on a starting letter generates self-similar infinite words. In Penrose tilings, the substitution corresponds to *inflation*: every tile is replaced by a configuration of smaller tiles."
+related = ["fibonacci_word", "penrose_tiling"]
+
+# --- Neuroscience -------------------------------------------------------
+
+[entries.delta]
+term = "Delta Band"
+category = "Neuroscience"
+brief = "EEG rhythms below ~4 Hz; dominant in deep dreamless sleep."
+related = ["theta", "alpha", "beta", "gamma"]
+wiki_ref = "binaural-beats"
+
+[entries.theta]
+term = "Theta Band"
+category = "Neuroscience"
+brief = "EEG rhythms ~4 to 8 Hz; meditation, drowsiness, hippocampal memory."
+related = ["delta", "alpha", "beta", "gamma"]
+wiki_ref = "binaural-beats"
+
+[entries.alpha]
+term = "Alpha Band"
+category = "Neuroscience"
+brief = "EEG rhythms ~8 to 13 Hz; relaxed wakefulness, eyes closed."
+expanded = "The dominant resting rhythm of the human cortex. The Schumann fundamental at 7.83 Hz sits at the alpha-theta boundary, which has been a recurring point of interest in the literature."
+related = ["delta", "theta", "beta", "gamma", "schumann"]
+wiki_ref = "binaural-beats"
+
+[entries.beta]
+term = "Beta Band"
+category = "Neuroscience"
+brief = "EEG rhythms ~13 to 30 Hz; active concentration, alertness."
+related = ["delta", "theta", "alpha", "gamma"]
+wiki_ref = "binaural-beats"
+
+[entries.gamma]
+term = "Gamma Band"
+category = "Neuroscience"
+brief = "EEG rhythms above ~30 Hz; binding of perception, peak performance."
+expanded = "Gamma oscillations are associated with the temporal binding of distributed neural activity into unified perceptual experience. The 40 Hz beat is the canonical gamma stimulus."
+related = ["delta", "theta", "alpha", "beta"]
+wiki_ref = "binaural-beats"
+
+[entries.frequency_following_response]
+term = "Frequency-Following Response"
+category = "Neuroscience"
+brief = "An EEG signal that follows a periodic auditory stimulus."
+expanded = "The hypothesized mechanism behind binaural-beat entrainment. Evidence is mixed: behavioural meta-analyses are positive, but EEG-level studies of literal frequency tracking are split roughly evenly."
+related = ["binaural_beat"]
+wiki_ref = "binaural-beats"
+
+[entries.orch_or]
+term = "Orch-OR"
+category = "Neuroscience"
+brief = "Penrose–Hameroff theory: consciousness arises from quantum collapse in microtubules."
+expanded = "Proposed by Stuart Hameroff and Roger Penrose in 1996. Each conscious moment is the gravitationally-triggered collapse of a quantum superposition hosted in microtubular cytoskeleton. Critics argue that the warm wet brain decoheres any such state in femtoseconds; the 2024 Babcock–Kurian superradiance result has weakened this objection without proving the theory."
+related = ["microtubule"]
+
+[entries.microtubule]
+term = "Microtubule"
+category = "Neuroscience"
+brief = "A cytoskeletal protein lattice threading every neuron; substrate of the Orch-OR hypothesis."
+related = ["orch_or"]
+
+# --- Cosmology ----------------------------------------------------------
+
+[entries.schumann]
+term = "Schumann Resonance"
+category = "Cosmology"
+brief = "Standing-wave EM resonances of the Earth-ionosphere cavity; fundamental ~7.83 Hz."
+expanded = "Predicted by Winfried Otto Schumann in 1952 and observed throughout the 1960s. The fundamental sits at the alpha-theta boundary of human EEG, which has invited a sometimes-overheated literature on bio-coupling. The 2025 review in Electromagnetic Biology and Medicine surveys the current state of evidence."
+related = ["alpha", "theta"]
+wiki_ref = "binaural-beats"
+
+[entries.strange_loop]
+term = "Strange Loop"
+category = "Cosmology"
+brief = "Hofstadter's term for a paradoxical level-crossing feedback that returns to its origin."
+expanded = "Bach's *Canon per Tonos* is a strange loop in pitch — it modulates upward and arrives an octave higher, having returned to the same key. MicroTube's *Journey Through the Cosmos* sequence is a 25.5-minute strange loop in 13 epochs."
+
+[entries.babcock_superradiance]
+term = "Babcock–Kurian Superradiance"
+category = "Cosmology"
+brief = "2024 result: tryptophan networks form coherent quantum states at body temperature."
+expanded = "A Lindblad-type model showed that tryptophan mega-networks (more than 10^5 chromophores) form Dicke-style superradiant states robust to thermal disorder. Demotes the warm-wet-brain objection to Orch-OR from impossibility to 'depends on the geometry'."
+related = ["orch_or"]
+
+# --- Music --------------------------------------------------------------
+
+[entries.consonance_score]
+term = "Consonance Score"
+category = "Music"
+brief = "A 0 to 1 score for how close a ratio is to a simple integer ratio or phi."
+expanded = "Defined in src/emergence.rs and shared with the Knowledge tab. Each peak is a triangular kernel of half-width 0.1 in log-ratio space; the highest contribution wins."
+related = ["just_intonation", "perfect_fifth", "perfect_fourth", "major_third", "octave", "golden_ratio"]
+wiki_ref = "consonance"
+
+[entries.just_intonation]
+term = "Just Intonation"
+category = "Music"
+brief = "A tuning system where intervals are exact integer ratios."
+expanded = "Unlike equal-temperament tuning, which compromises every interval to fit twelve equal semitones, just intonation uses pure simple-integer ratios (3:2 fifth, 4:3 fourth, 5:4 third). The result is more consonant per interval but does not transpose cleanly. MicroTube spawns voices at just-intonation ratios."
+related = ["perfect_fifth", "perfect_fourth", "major_third", "octave"]
+
+[entries.perfect_fifth]
+term = "Perfect Fifth (3:2)"
+category = "Music"
+brief = "Frequencies in a 3:2 ratio; the strongest consonance after the octave."
+related = ["just_intonation", "consonance_score"]
+
+[entries.perfect_fourth]
+term = "Perfect Fourth (4:3)"
+category = "Music"
+brief = "Frequencies in a 4:3 ratio; the inverse of the perfect fifth within an octave."
+related = ["just_intonation", "consonance_score", "perfect_fifth"]
+
+[entries.major_third]
+term = "Major Third (5:4)"
+category = "Music"
+brief = "Frequencies in a 5:4 ratio."
+related = ["just_intonation", "consonance_score"]
+
+[entries.octave]
+term = "Octave (2:1)"
+category = "Music"
+brief = "A doubling of frequency; the most basic consonance after unison."
+expanded = "Two notes an octave apart share strong harmonic content and are perceived as 'the same note' in different registers — a perceptual fact called *octave equivalence*."
+related = ["just_intonation", "consonance_score"]
+
+[entries.canon]
+term = "Canon"
+category = "Music"
+brief = "A piece of music in which one voice imitates another at a fixed delay and interval."
+expanded = "MicroTube's emergence engine has a Canon spawn mode that cycles through eight harmonic ratios, transposing the cycle by golden-ratio steps every eight spawns — a fugue-style modulation borrowed loosely from Bach."
+related = ["consonance_score"]

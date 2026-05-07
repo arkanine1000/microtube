@@ -5,7 +5,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap};
 
-use crate::app::{ActiveParam, App, AppMode, VizMode};
+use crate::app::{ActiveParam, App, AppMode, Tab, VizMode};
+use crate::knowledge;
 use crate::presets::{PRESETS, SEQUENCES, freq_band_name, freq_color};
 use crate::visualization::{
     HarmonicLattice, render_beat_envelope, render_braille_waveform, render_emergence,
@@ -63,35 +64,79 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .title(Line::from(Span::styled(
             " MICROTUBE ",
             Style::default().fg(BRIGHT).add_modifier(Modifier::BOLD),
-        )))
-        .title_bottom(Line::from(Span::styled(
-            " vi keys preserved: h j k l ",
-            Style::default().fg(DIM),
         )));
     let shell_inner = shell.inner(size);
     f.render_widget(shell, size);
 
-    let chunks = Layout::default()
+    let outer_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(5),
-            Constraint::Min(9),
-            Constraint::Length(9),
-            Constraint::Length(3),
-        ])
+        .constraints([Constraint::Length(1), Constraint::Min(8)])
         .split(shell_inner);
 
-    draw_header(f, chunks[0], app, accent);
-    draw_visualization(f, chunks[1], app, accent, border_color);
-    draw_status(f, chunks[2], app, accent, border_color);
-    draw_controls(f, chunks[3], accent, border_color);
+    draw_tab_strip(f, outer_chunks[0], app.tab, accent);
 
-    match app.mode {
-        AppMode::PresetSelect => draw_preset_menu(f, size, app, accent),
-        AppMode::SequenceSelect => draw_sequence_menu(f, size, app, accent),
-        AppMode::Help => draw_help(f, size, accent),
-        AppMode::Normal => {}
+    match app.tab {
+        Tab::Studio => {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(5),
+                    Constraint::Min(9),
+                    Constraint::Length(9),
+                    Constraint::Length(3),
+                ])
+                .split(outer_chunks[1]);
+
+            draw_header(f, chunks[0], app, accent);
+            draw_visualization(f, chunks[1], app, accent, border_color);
+            draw_status(f, chunks[2], app, accent, border_color);
+            draw_controls(f, chunks[3], accent, border_color);
+
+            match app.mode {
+                AppMode::PresetSelect => draw_preset_menu(f, size, app, accent),
+                AppMode::SequenceSelect => draw_sequence_menu(f, size, app, accent),
+                AppMode::Help => draw_help(f, size, accent),
+                AppMode::Normal => {}
+            }
+        }
+        Tab::Knowledge => {
+            knowledge::draw(f, outer_chunks[1], app, accent, border_color);
+        }
     }
+}
+
+fn draw_tab_strip(f: &mut Frame, area: Rect, active: Tab, accent: Color) {
+    let tabs = [Tab::Studio, Tab::Knowledge];
+    let mut spans: Vec<Span<'static>> = Vec::with_capacity(tabs.len() * 3 + 2);
+    spans.push(Span::styled(
+        "  ",
+        Style::default().bg(BG_TOP),
+    ));
+    for tab in tabs {
+        let is_active = tab == active;
+        let style = if is_active {
+            Style::default()
+                .fg(BG_TOP)
+                .bg(accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(DIM).bg(BG_TOP)
+        };
+        spans.push(Span::styled(format!("  {}  ", tab.label()), style));
+        spans.push(Span::styled(
+            "  ",
+            Style::default().bg(BG_TOP),
+        ));
+    }
+    spans.push(Span::styled(
+        "Tab to switch    Q to quit",
+        Style::default().fg(DIM).bg(BG_TOP),
+    ));
+
+    f.render_widget(
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(BG_TOP)),
+        area,
+    );
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App, accent: Color) {

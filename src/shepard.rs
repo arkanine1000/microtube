@@ -141,9 +141,28 @@ impl ShepardEngine {
     }
 }
 
-fn envelope(log_offset: f64) -> f64 {
+/// Raised-cosine spectral window: `sin⁴(π · log_offset / N)`.
+///
+/// Returns 0 at `log_offset = 0` and `log_offset = RANGE_OCTAVES`, peaks at
+/// the middle. Public so the Knowledge-tab playground can plot it.
+pub fn envelope(log_offset: f64) -> f64 {
     let phase = (std::f64::consts::PI * log_offset / RANGE_OCTAVES).sin();
     phase * phase * phase * phase
+}
+
+/// Number of octave-spaced oscillators stacked in the Shepard layer.
+pub const fn num_octaves() -> usize {
+    NUM_OCTAVES
+}
+
+/// Width of the log-frequency window the oscillators sweep through.
+pub const fn range_octaves() -> f64 {
+    RANGE_OCTAVES
+}
+
+/// Lowest oscillator frequency in Hz (when `log_offset == 0`).
+pub const fn f_min() -> f64 {
+    F_MIN
 }
 
 #[cfg(test)]

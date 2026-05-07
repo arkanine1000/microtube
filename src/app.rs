@@ -3,8 +3,34 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::emergence::{EmergenceSnapshot, SpawnMode};
+use crate::knowledge::KnowledgeState;
 use crate::presets::{PRESETS, SEQUENCES, SequenceStep};
 use crate::shepard::Direction;
+
+/// Top-level UI tab. The Studio tab is the live synth; Knowledge is the
+/// in-app wiki / glossary / playground. The two are orthogonal axes; the
+/// Studio modal-mode (`AppMode`) is dispatched only when `tab == Studio`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    Studio,
+    Knowledge,
+}
+
+impl Tab {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Studio => "Studio",
+            Self::Knowledge => "Knowledge",
+        }
+    }
+
+    pub fn flipped(self) -> Self {
+        match self {
+            Self::Studio => Self::Knowledge,
+            Self::Knowledge => Self::Studio,
+        }
+    }
+}
 
 /// Lock-free audio parameters shared between UI and audio thread.
 pub struct AudioParams {
@@ -374,6 +400,8 @@ pub struct App {
     pub params: Arc<AudioParams>,
     pub viz_buffer: Arc<Mutex<VizBuffer>>,
     pub emergence_snapshot: Arc<Mutex<EmergenceSnapshot>>,
+    pub tab: Tab,
+    pub knowledge: KnowledgeState,
     pub mode: AppMode,
     pub active_param: ActiveParam,
     pub viz_mode: VizMode,
@@ -397,6 +425,8 @@ impl App {
             params,
             viz_buffer,
             emergence_snapshot,
+            tab: Tab::Studio,
+            knowledge: KnowledgeState::new(),
             mode: AppMode::Normal,
             active_param: ActiveParam::BeatFreq,
             viz_mode: VizMode::Waveform,
