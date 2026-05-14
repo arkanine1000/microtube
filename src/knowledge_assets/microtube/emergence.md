@@ -18,8 +18,14 @@ Each voice has:
 - A frequency ratio.
 - A generation number.
 - A stereo pan position.
+- A binaural spatial position.
 - A smooth lifetime envelope.
 - The same timbre flavor as the carrier.
+
+The spatial position uses a built-in HRTF-style approximation. The engine adds
+tiny left-right timing differences, level differences, and far-ear softening.
+It is designed for headphones and real-time safety; it does not use measured
+HRIR files or convolution.
 
 ## Canon mode
 

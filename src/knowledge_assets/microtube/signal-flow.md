@@ -47,8 +47,9 @@ Emergence adds small background voices that spawn at musical ratios around the
 base tone. They fade in, live for a while, and fade out. Simple relationships
 live longer than awkward ones.
 
-This is not the main binaural beat. It is a little ecosystem around the
-carrier.
+Each voice is placed with lightweight HRTF-style cues before it is mixed into
+the stereo output. This is not the main binaural beat. It is a little ecosystem
+around the carrier.
 
 ## Drift
 
