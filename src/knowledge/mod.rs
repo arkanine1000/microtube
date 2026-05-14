@@ -1,8 +1,8 @@
 //! Knowledge tab — a wiki and glossary that ship inside the binary so
 //! the program teaches itself.
 //!
-//! The tab is structured as two sub-panes (Wiki / Glossary), each with its
-//! own state. All UI is driven by the same 30 Hz tick that drives Studio.
+//! The tab is structured as three sub-panes (MicroTube / Wiki / Glossary),
+//! each with its own state. All UI is driven by the same 30 Hz tick that drives Studio.
 //! The audio thread is never touched from this module.
 
 pub mod content;
@@ -18,6 +18,7 @@ use crate::app::App;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum KnowledgePane {
+    MicroTube,
     Wiki,
     Glossary,
 }
@@ -25,6 +26,7 @@ pub enum KnowledgePane {
 impl KnowledgePane {
     pub fn label(self) -> &'static str {
         match self {
+            Self::MicroTube => "MicroTube",
             Self::Wiki => "Wiki",
             Self::Glossary => "Glossary",
         }
@@ -33,6 +35,7 @@ impl KnowledgePane {
 
 pub struct KnowledgeState {
     pub pane: KnowledgePane,
+    pub microtube: wiki::WikiState,
     pub wiki: wiki::WikiState,
     pub glossary: glossary::GlossaryState,
 }
@@ -40,7 +43,8 @@ pub struct KnowledgeState {
 impl KnowledgeState {
     pub fn new() -> Self {
         Self {
-            pane: KnowledgePane::Wiki,
+            pane: KnowledgePane::MicroTube,
+            microtube: wiki::WikiState::new(),
             wiki: wiki::WikiState::new(),
             glossary: glossary::GlossaryState::new(),
         }
@@ -50,6 +54,7 @@ impl KnowledgeState {
     /// would otherwise switch panes.
     pub fn is_capturing_input(&self) -> bool {
         match self.pane {
+            KnowledgePane::MicroTube => self.microtube.in_reader,
             KnowledgePane::Wiki => self.wiki.in_reader,
             KnowledgePane::Glossary => self.glossary.expanded,
         }
@@ -88,6 +93,15 @@ pub fn draw(f: &mut Frame, area: Rect, app: &mut App, accent: Color, border: Col
     draw_pane_strip(f, chunks[0], app.knowledge.pane, accent);
 
     match app.knowledge.pane {
+        KnowledgePane::MicroTube => wiki::draw_articles(
+            f,
+            chunks[1],
+            &mut app.knowledge.microtube,
+            accent,
+            border,
+            content::MICROTUBE_ARTICLES,
+            "MICROTUBE",
+        ),
         KnowledgePane::Wiki => wiki::draw(f, chunks[1], &mut app.knowledge.wiki, accent, border),
         KnowledgePane::Glossary => {
             glossary::draw(f, chunks[1], &mut app.knowledge.glossary, accent, border)
@@ -101,8 +115,9 @@ fn draw_pane_strip(f: &mut Frame, area: Rect, active: KnowledgePane, accent: Col
     use ratatui::widgets::Paragraph;
 
     let panes = [
-        ('1', KnowledgePane::Wiki),
-        ('2', KnowledgePane::Glossary),
+        ('1', KnowledgePane::MicroTube),
+        ('2', KnowledgePane::Wiki),
+        ('3', KnowledgePane::Glossary),
     ];
     let dim = Color::Rgb(138, 146, 168);
     let bg_top = Color::Rgb(5, 7, 14);
@@ -142,10 +157,14 @@ pub fn handle_key(app: &mut App, code: crossterm::event::KeyCode) -> bool {
     if !app.knowledge.is_capturing_input() {
         match code {
             KeyCode::Char('1') => {
-                app.knowledge.pane = KnowledgePane::Wiki;
+                app.knowledge.pane = KnowledgePane::MicroTube;
                 return true;
             }
             KeyCode::Char('2') => {
+                app.knowledge.pane = KnowledgePane::Wiki;
+                return true;
+            }
+            KeyCode::Char('3') => {
                 app.knowledge.pane = KnowledgePane::Glossary;
                 return true;
             }
@@ -154,6 +173,11 @@ pub fn handle_key(app: &mut App, code: crossterm::event::KeyCode) -> bool {
     }
 
     match app.knowledge.pane {
+        KnowledgePane::MicroTube => wiki::handle_key_for(
+            &mut app.knowledge.microtube,
+            code,
+            content::MICROTUBE_ARTICLES.len(),
+        ),
         KnowledgePane::Wiki => wiki::handle_key(&mut app.knowledge.wiki, code),
         KnowledgePane::Glossary => glossary::handle_key(app, code),
     }

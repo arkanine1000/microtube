@@ -33,6 +33,7 @@ struct SynthState {
     emergence: EmergenceEngine,
     shepard: ShepardEngine,
     snapshot_counter: u32,
+    emergence_was_active: bool,
 }
 
 impl SynthState {
@@ -62,6 +63,7 @@ impl SynthState {
             emergence: EmergenceEngine::new(sample_rate),
             shepard: ShepardEngine::new(sample_rate),
             snapshot_counter: 0,
+            emergence_was_active: false,
         }
     }
 
@@ -127,7 +129,9 @@ impl SynthState {
             let mut total_weight = 0.0;
             for i in 0..5 {
                 let weight = self.current_harm_weights[i];
-                if weight < 0.001 { continue; }
+                if weight < 0.001 {
+                    continue;
+                }
                 let mult = (i + 2) as f64;
                 self.harm_phase_l[i] += (freq_l * mult) / self.sample_rate;
                 self.harm_phase_r[i] += (freq_r * mult) / self.sample_rate;
@@ -238,10 +242,10 @@ impl AudioEngine {
                             (target_emergence - state.current_emergence) * smooth_alpha;
                         state.current_shepard +=
                             (target_shepard - state.current_shepard) * smooth_alpha;
-                        
-                        for i in 0..5 {
+
+                        for (i, &target_weight) in target_weights.iter().enumerate() {
                             state.current_harm_weights[i] +=
-                                (target_weights[i] - state.current_harm_weights[i]) * smooth_alpha;
+                                (target_weight - state.current_harm_weights[i]) * smooth_alpha;
                         }
 
                         let freq_l = state.current_base;
@@ -254,11 +258,18 @@ impl AudioEngine {
 
                         // Emergence voices
                         if state.current_emergence > 0.01 {
-                            let (em_l, em_r) = state
-                                .emergence
-                                .process(state.current_base, state.current_emergence);
+                            state.emergence_was_active = true;
+                            let (em_l, em_r) = state.emergence.process(
+                                state.current_base,
+                                state.current_emergence,
+                                &state.current_harm_weights,
+                                state.current_harmonics,
+                            );
                             sample_l += em_l * state.current_vol;
                             sample_r += em_r * state.current_vol;
+                        } else if target_emergence <= 0.01 && state.emergence_was_active {
+                            state.emergence.reset();
+                            state.emergence_was_active = false;
                         }
 
                         // Shepard-Risset glissando — mono, mixed equally L/R

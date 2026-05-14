@@ -53,10 +53,10 @@ impl AudioParams {
         Self {
             base_freq: AtomicU32::new(220.0_f32.to_bits()),
             beat_freq: AtomicU32::new(10.0_f32.to_bits()),
-            volume: AtomicU32::new(0.7_f32.to_bits()),
+            volume: AtomicU32::new(0.5_f32.to_bits()),
             playing: AtomicBool::new(true),
             noise_level: AtomicU32::new(0.0_f32.to_bits()),
-            mist_type: AtomicU32::new(MistType::Pink as u32),
+            mist_type: AtomicU32::new(MistType::Brown as u32),
             harmonics: AtomicU32::new(0.3_f32.to_bits()),
             emergence: AtomicU32::new(0.0_f32.to_bits()),
             spawn_mode: AtomicU32::new(SpawnMode::Canon as u32),
@@ -206,7 +206,7 @@ impl Timbre {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MistType {
     Pink = 0,
     White = 1,
@@ -449,6 +449,12 @@ impl App {
         self.params.set_base_freq(preset.base_freq);
         self.params.set_beat_freq(preset.beat_freq);
         self.params.set_noise_level(preset.noise_mix);
+        if preset.noise_mix > 0.01 {
+            self.params.set_mist_type(MistType::Brown);
+        }
+        self.params.set_emergence(0.0);
+        self.params.set_shepard(0.0);
+        self.clear_emergence_snapshot();
         self.current_preset = Some(idx);
         self.current_sequence = None;
         self.sequence_start = None;
@@ -462,8 +468,26 @@ impl App {
         self.sequence_start = Some(Instant::now());
         self.current_preset = None;
         let seq = &SEQUENCES[idx];
+        self.reset_unprogrammed_sequence_layers(seq.steps);
         if let Some(step) = seq.steps.first() {
             self.snap_to_step(step);
+        }
+    }
+
+    fn reset_unprogrammed_sequence_layers(&mut self, steps: &[SequenceStep]) {
+        if !steps
+            .iter()
+            .any(|step| step.noise_level.is_some() || step.mist_type.is_some())
+        {
+            self.params.set_noise_level(0.0);
+            self.params.set_mist_type(MistType::Brown);
+        }
+        if !steps.iter().any(|step| step.emergence.is_some()) {
+            self.params.set_emergence(0.0);
+            self.clear_emergence_snapshot();
+        }
+        if !steps.iter().any(|step| step.shepard.is_some()) {
+            self.params.set_shepard(0.0);
         }
     }
 
@@ -694,5 +718,56 @@ impl App {
     pub fn reverse_shepard(&self) {
         let next = self.params.get_shepard_direction().flipped();
         self.params.set_shepard_direction(next);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app_for_tests() -> App {
+        let params = Arc::new(AudioParams::new());
+        let viz_buffer = Arc::new(Mutex::new(VizBuffer::new(64)));
+        let emergence_snapshot = Arc::new(Mutex::new(EmergenceSnapshot::empty()));
+        App::new(params, viz_buffer, emergence_snapshot)
+    }
+
+    #[test]
+    fn defaults_use_half_gain_and_brown_mist() {
+        let params = AudioParams::new();
+
+        assert_eq!(params.get_volume(), 0.5);
+        assert_eq!(params.get_mist_type(), MistType::Brown);
+    }
+
+    #[test]
+    fn quick_preset_clears_sequence_only_layers() {
+        let mut app = app_for_tests();
+        app.params.set_noise_level(0.85);
+        app.params.set_mist_type(MistType::Velvet);
+        app.params.set_emergence(0.7);
+        app.params.set_shepard(0.6);
+
+        app.apply_preset(2);
+
+        assert_eq!(app.params.get_noise_level(), 0.0);
+        assert_eq!(app.params.get_emergence(), 0.0);
+        assert_eq!(app.params.get_shepard(), 0.0);
+    }
+
+    #[test]
+    fn legacy_sequence_start_clears_unprogrammed_layers() {
+        let mut app = app_for_tests();
+        app.params.set_noise_level(0.85);
+        app.params.set_mist_type(MistType::Blue);
+        app.params.set_emergence(0.7);
+        app.params.set_shepard(0.6);
+
+        app.start_sequence(0);
+
+        assert_eq!(app.params.get_noise_level(), 0.0);
+        assert_eq!(app.params.get_mist_type(), MistType::Brown);
+        assert_eq!(app.params.get_emergence(), 0.0);
+        assert_eq!(app.params.get_shepard(), 0.0);
     }
 }
