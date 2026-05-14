@@ -28,7 +28,8 @@ Warmth controls how much harmonic color is added to the carrier.
 
 Emergence controls the little ecosystem of extra voices.
 
-Drift controls the endless rising or falling Shepard-Risset layer.
+Drift controls the loudness of the endless rising or falling Shepard-Risset
+layer. Drift Base controls the bottom frequency of that moving stack.
 
 Noise controls the mist layer.
 

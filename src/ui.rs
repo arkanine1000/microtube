@@ -8,6 +8,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragr
 use crate::app::{ActiveParam, App, AppMode, Tab, VizMode};
 use crate::knowledge;
 use crate::presets::{PRESETS, SEQUENCES, freq_band_name, freq_color};
+use crate::shepard::{MAX_BASE_FREQ_HZ, MIN_BASE_FREQ_HZ};
 use crate::visualization::{
     HARMONIC_PARTIAL_LABELS, HarmonicLattice, harmonic_partial_levels, render_beat_envelope,
     render_braille_waveform, render_emergence, render_harmonic_lattice, render_penrose,
@@ -37,8 +38,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.area();
     app.frame_count += 1;
 
-    if size.width < 76 || size.height < 26 {
-        let msg = Paragraph::new("Terminal too small\nMinimum: 76x26")
+    if size.width < 76 || size.height < 30 {
+        let msg = Paragraph::new("Terminal too small\nMinimum: 76x30")
             .style(Style::default().fg(Color::Red).bg(BG_TOP))
             .alignment(Alignment::Center);
         draw_backdrop(
@@ -83,7 +84,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 .constraints([
                     Constraint::Length(5),
                     Constraint::Min(9),
-                    Constraint::Length(9),
+                    Constraint::Length(10),
                     Constraint::Length(3),
                 ])
                 .split(outer_chunks[1]);
@@ -354,6 +355,7 @@ fn draw_parameter_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, bor
 
     let base = app.params.get_base_freq();
     let beat = app.params.get_beat_freq();
+    let shepard_base = app.params.get_shepard_base_freq();
     let specs = [
         MeterSpec {
             param: ActiveParam::BaseFreq,
@@ -400,6 +402,13 @@ fn draw_parameter_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, bor
             ),
             ratio: app.params.get_shepard(),
             color: Color::Rgb(255, 170, 110),
+        },
+        MeterSpec {
+            param: ActiveParam::ShepardBase,
+            label: "dbase",
+            value: format!("{shepard_base:>5.1} Hz"),
+            ratio: shepard_base_ratio(shepard_base),
+            color: Color::Rgb(255, 205, 135),
         },
         MeterSpec {
             param: ActiveParam::NoiseLevel,
@@ -924,6 +933,12 @@ fn meter_line(spec: MeterSpec, active: ActiveParam, width: usize) -> Line<'stati
     ));
     spans.extend(meter_bar(spec.ratio, width, spec.color));
     Line::from(spans)
+}
+
+fn shepard_base_ratio(freq: f32) -> f32 {
+    let min = MIN_BASE_FREQ_HZ as f32;
+    let max = MAX_BASE_FREQ_HZ as f32;
+    ((freq / min).log2() / (max / min).log2()).clamp(0.0, 1.0)
 }
 
 fn meter_bar(value: f32, width: usize, color: Color) -> Vec<Span<'static>> {

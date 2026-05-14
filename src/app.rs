@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::emergence::{EmergenceSnapshot, SpawnMode};
 use crate::knowledge::KnowledgeState;
 use crate::presets::{PRESETS, SEQUENCES, SequenceStep};
-use crate::shepard::Direction;
+use crate::shepard::{DEFAULT_BASE_FREQ_HZ, Direction, MAX_BASE_FREQ_HZ, MIN_BASE_FREQ_HZ};
 
 /// Top-level UI tab. The Studio tab is the live synth; Knowledge is the
 /// in-app wiki / glossary / playground. The two are orthogonal axes; the
@@ -44,6 +44,7 @@ pub struct AudioParams {
     pub emergence: AtomicU32, // Emergence intensity 0.0-1.0
     pub spawn_mode: AtomicU32,
     pub shepard: AtomicU32, // Shepard intensity 0.0-1.0
+    pub shepard_base_freq: AtomicU32,
     pub shepard_direction: AtomicU32,
     pub timbre: AtomicU32,
 }
@@ -61,6 +62,7 @@ impl AudioParams {
             emergence: AtomicU32::new(0.0_f32.to_bits()),
             spawn_mode: AtomicU32::new(SpawnMode::Canon as u32),
             shepard: AtomicU32::new(0.0_f32.to_bits()),
+            shepard_base_freq: AtomicU32::new((DEFAULT_BASE_FREQ_HZ as f32).to_bits()),
             shepard_direction: AtomicU32::new(Direction::Down as u32),
             timbre: AtomicU32::new(Timbre::Organ as u32),
         }
@@ -141,6 +143,18 @@ impl AudioParams {
     pub fn set_shepard(&self, v: f32) {
         self.shepard
             .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_shepard_base_freq(&self) -> f32 {
+        f32::from_bits(self.shepard_base_freq.load(Ordering::Relaxed))
+    }
+
+    pub fn set_shepard_base_freq(&self, v: f32) {
+        self.shepard_base_freq.store(
+            v.clamp(MIN_BASE_FREQ_HZ as f32, MAX_BASE_FREQ_HZ as f32)
+                .to_bits(),
+            Ordering::Relaxed,
+        );
     }
 
     pub fn get_shepard_direction(&self) -> Direction {
@@ -310,6 +324,7 @@ pub enum ActiveParam {
     Harmonics,
     Emergence,
     Shepard,
+    ShepardBase,
     NoiseLevel,
 }
 
@@ -321,7 +336,8 @@ impl ActiveParam {
             Self::Volume => Self::Harmonics,
             Self::Harmonics => Self::Emergence,
             Self::Emergence => Self::Shepard,
-            Self::Shepard => Self::NoiseLevel,
+            Self::Shepard => Self::ShepardBase,
+            Self::ShepardBase => Self::NoiseLevel,
             Self::NoiseLevel => Self::BaseFreq,
         }
     }
@@ -334,7 +350,8 @@ impl ActiveParam {
             Self::Harmonics => Self::Volume,
             Self::Emergence => Self::Harmonics,
             Self::Shepard => Self::Emergence,
-            Self::NoiseLevel => Self::Shepard,
+            Self::ShepardBase => Self::Shepard,
+            Self::NoiseLevel => Self::ShepardBase,
         }
     }
 
@@ -347,6 +364,7 @@ impl ActiveParam {
             Self::Harmonics => "Warmth",
             Self::Emergence => "Emergence",
             Self::Shepard => "Shepard",
+            Self::ShepardBase => "Drift Base",
         }
     }
 }
@@ -706,6 +724,10 @@ impl App {
                 let v = (self.params.get_shepard() + delta * 0.05).clamp(0.0, 1.0);
                 self.params.set_shepard(v);
             }
+            ActiveParam::ShepardBase => {
+                let v = self.params.get_shepard_base_freq() + delta;
+                self.params.set_shepard_base_freq(v);
+            }
         }
         self.current_preset = None;
     }
@@ -742,6 +764,7 @@ mod tests {
 
         assert_eq!(params.get_volume(), 0.5);
         assert_eq!(params.get_mist_type(), MistType::Brown);
+        assert_eq!(params.get_shepard_base_freq(), DEFAULT_BASE_FREQ_HZ as f32);
     }
 
     #[test]
@@ -796,5 +819,24 @@ mod tests {
 
         assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
         assert_eq!(app.viz_mode, VizMode::Spectrum);
+    }
+
+    #[test]
+    fn shepard_base_frequency_is_adjustable_and_clamped() {
+        let mut app = app_for_tests();
+        app.active_param = ActiveParam::ShepardBase;
+
+        app.adjust_param(10.0);
+
+        assert_eq!(
+            app.params.get_shepard_base_freq(),
+            DEFAULT_BASE_FREQ_HZ as f32 + 10.0
+        );
+
+        app.params.set_shepard_base_freq(1.0);
+        assert_eq!(app.params.get_shepard_base_freq(), MIN_BASE_FREQ_HZ as f32);
+
+        app.params.set_shepard_base_freq(1_000.0);
+        assert_eq!(app.params.get_shepard_base_freq(), MAX_BASE_FREQ_HZ as f32);
     }
 }

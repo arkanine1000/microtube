@@ -6,7 +6,7 @@ use cpal::{SampleFormat, SampleRate, Stream, StreamConfig};
 
 use crate::app::{AudioParams, MistType, Timbre, VizBuffer};
 use crate::emergence::{EmergenceEngine, EmergenceSnapshot, SpawnMode};
-use crate::shepard::{Direction, ShepardEngine};
+use crate::shepard::{DEFAULT_BASE_FREQ_HZ, Direction, ShepardEngine};
 
 struct SynthState {
     phase_l: f64,
@@ -22,6 +22,7 @@ struct SynthState {
     current_harmonics: f64,
     current_emergence: f64,
     current_shepard: f64,
+    current_shepard_base: f64,
     pink_state: [f64; 7],
     pink_counter: u32,
     brown_state: f64,
@@ -52,6 +53,7 @@ impl SynthState {
             current_harmonics: 0.3,
             current_emergence: 0.0,
             current_shepard: 0.0,
+            current_shepard_base: DEFAULT_BASE_FREQ_HZ,
             pink_state: [0.0; 7],
             pink_counter: 0,
             brown_state: 0.0,
@@ -225,6 +227,8 @@ impl AudioEngine {
                     }
                     let target_shepard =
                         f32::from_bits(params.shepard.load(Ordering::Relaxed)) as f64;
+                    let target_shepard_base =
+                        f32::from_bits(params.shepard_base_freq.load(Ordering::Relaxed)) as f64;
                     let shepard_direction =
                         Direction::from_u32(params.shepard_direction.load(Ordering::Relaxed));
                     let target_timbre = params.get_timbre();
@@ -242,6 +246,8 @@ impl AudioEngine {
                             (target_emergence - state.current_emergence) * smooth_alpha;
                         state.current_shepard +=
                             (target_shepard - state.current_shepard) * smooth_alpha;
+                        state.current_shepard_base +=
+                            (target_shepard_base - state.current_shepard_base) * smooth_alpha;
 
                         for (i, &target_weight) in target_weights.iter().enumerate() {
                             state.current_harm_weights[i] +=
@@ -275,10 +281,11 @@ impl AudioEngine {
                         // Shepard-Risset glissando — mono, mixed equally L/R
                         // so it doesn't disturb the binaural phase difference.
                         if state.current_shepard > 0.001 {
-                            let s = state
-                                .shepard
-                                .process(shepard_direction, state.current_shepard)
-                                * state.current_vol;
+                            let s = state.shepard.process(
+                                shepard_direction,
+                                state.current_shepard,
+                                state.current_shepard_base,
+                            ) * state.current_vol;
                             sample_l += s;
                             sample_r += s;
                         }

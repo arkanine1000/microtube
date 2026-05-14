@@ -132,9 +132,9 @@ Press `g` to switch the spawn engine to **Penrose** mode. Each spawn now advance
 
 ### Shepard-Risset Drift
 
-Press `r` to layer a continuous Shepard-Risset glissando over the binaural carrier; press `R` to flip its direction. Seven sine oscillators spaced one octave apart sweep in parallel through a raised-cosine amplitude window centered around 370 Hz; the bell fully silences each oscillator at the spectrum's edge, so the wrap-around is inaudible and the pitch appears to rise (or fall) forever.
+Press `r` to layer a continuous Shepard-Risset glissando over the binaural carrier; press `R` to flip its direction. Seven sine oscillators spaced one octave apart sweep in parallel through a raised-cosine amplitude window centered around 370 Hz by default; the bell fully silences each oscillator at the spectrum's edge, so the wrap-around is inaudible and the pitch appears to rise (or fall) forever.
 
-The default rate is 36 seconds per octave — slow enough to feel ambient, fast enough that the motion remains legible. Descending drift pairs naturally with the meditation/sleep presets ("a feeling of falling", per Mainsbridge & Marques 2016); rising drift adds momentum to focus and flow sessions. The layer is summed mono and mixed equally to both ears so it does not interfere with the binaural difference frequency.
+The default rate is 36 seconds per octave — slow enough to feel ambient, fast enough that the motion remains legible. The Drift Base parameter moves the bottom of the seven-octave stack from C0 to C3, with C1 as the default. Descending drift pairs naturally with the meditation/sleep presets ("a feeling of falling", per Mainsbridge & Marques 2016); rising drift adds momentum to focus and flow sessions. The layer is summed mono and mixed equally to both ears so it does not interfere with the binaural difference frequency.
 
 ## Architecture
 

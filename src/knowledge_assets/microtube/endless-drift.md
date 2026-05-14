@@ -29,6 +29,10 @@ The Drift parameter controls how audible the layer is. At low intensity, it is
 more like a current under the carrier. At high intensity, it becomes a main
 feature.
 
+Drift Base controls the bottom frequency of the seven-octave stack. Lower
+values make the motion heavier and darker; higher values make it brighter and
+more present.
+
 If you want a stable meditation tone, keep drift low. If you want a cinematic
 journey, let it rise.
 
