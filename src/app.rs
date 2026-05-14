@@ -351,7 +351,7 @@ impl ActiveParam {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VizMode {
     Waveform,
     Spectrum,
@@ -646,11 +646,15 @@ impl App {
     pub fn toggle_spawn_mode(&mut self) {
         let next = self.params.get_spawn_mode().toggled();
         self.params.set_spawn_mode(next);
-        if next == SpawnMode::Penrose
-            && self.params.get_emergence() > 0.01
-            && self.viz_mode != VizMode::Penrose
-        {
-            self.viz_mode = VizMode::Penrose;
+    }
+
+    pub fn toggle_emergence(&mut self) {
+        let current = self.params.get_emergence();
+        if current > 0.01 {
+            self.params.set_emergence(0.0);
+            self.clear_emergence_snapshot();
+        } else {
+            self.params.set_emergence(0.5);
         }
     }
 
@@ -769,5 +773,28 @@ mod tests {
         assert_eq!(app.params.get_mist_type(), MistType::Brown);
         assert_eq!(app.params.get_emergence(), 0.0);
         assert_eq!(app.params.get_shepard(), 0.0);
+    }
+
+    #[test]
+    fn toggling_emergence_does_not_change_visualization() {
+        let mut app = app_for_tests();
+        app.viz_mode = VizMode::Spectrum;
+
+        app.toggle_emergence();
+
+        assert_eq!(app.params.get_emergence(), 0.5);
+        assert_eq!(app.viz_mode, VizMode::Spectrum);
+    }
+
+    #[test]
+    fn toggling_spawn_mode_does_not_change_visualization() {
+        let mut app = app_for_tests();
+        app.viz_mode = VizMode::Spectrum;
+        app.params.set_emergence(0.5);
+
+        app.toggle_spawn_mode();
+
+        assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
+        assert_eq!(app.viz_mode, VizMode::Spectrum);
     }
 }

@@ -169,19 +169,7 @@ fn handle_normal(app: &mut App, code: KeyCode) {
         KeyCode::Char('V') => app.viz_mode = app.viz_mode.prev(),
 
         // Emergence toggle
-        KeyCode::Char('e') => {
-            let current = app.params.get_emergence();
-            if current > 0.01 {
-                app.params.set_emergence(0.0);
-                app.clear_emergence_snapshot();
-            } else {
-                app.params.set_emergence(0.5);
-                // Auto-switch to emergence viz if not already
-                if app.viz_mode != app::VizMode::Emergence {
-                    app.viz_mode = app::VizMode::Emergence;
-                }
-            }
-        }
+        KeyCode::Char('e') => app.toggle_emergence(),
 
         // Noise toggle
         KeyCode::Char('n') => {
