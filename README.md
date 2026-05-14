@@ -17,6 +17,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 **Emergence Engine**
 - Generative audio system inspired by Conway's Game of Life and Bach canons
 - Up to 12 simultaneous voices spawning at harmonic/golden-ratio intervals
+- Built-in HRTF-style spatialization gives each voice binaural position cues
 - Two spawn modes: a fugue-style canon, or a Penrose Conway-worm walk
 - Consonance-based lifetime: harmonically pure voices live longer
 - Energy conservation: total amplitude is bounded, voices compete
@@ -114,6 +115,8 @@ Press `e` to bring the system to life. Voices emerge from silence, interact thro
 - **Low (20-30%)** — Subtle shimmer beneath the primary tone
 - **Medium (50%)** — Distinct harmonic voices audible as background texture
 - **High (80-100%)** — Full generative counterpoint; a self-composing canon
+
+Each emergence voice is spatialized with a lightweight built-in HRTF approximation: short interaural timing differences, level differences, and far-ear softening. This gives headphones a stronger sense of position without adding measured HRIR assets or convolution latency.
 
 The system follows a repeating canon pattern through harmonic ratios (perfect fifths, major thirds, golden ratio intervals), transposing every 8 spawns like a fugue shifting key. Voice lifetimes are proportional to their consonance with the harmonic series — the universe rewards simplicity but tolerates novelty.
 

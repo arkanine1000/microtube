@@ -21,6 +21,16 @@ const PHI: f64 = 1.618033988749895;
 /// Maximum simultaneous voices
 const MAX_VOICES: usize = 12;
 
+/// Built-in binaural spatialization constants for emergence voices.
+///
+/// This is an HRTF-style approximation, not measured HRIR convolution: short
+/// interaural delay, constant-power level difference, and far-ear softening.
+const HRTF_DELAY_BUFFER_LEN: usize = 256;
+const HRTF_MAX_ITD_SECONDS: f64 = 0.00065;
+const HRTF_SHADOW_ATTENUATION: f64 = 0.28;
+const HRTF_NEAR_CUTOFF_HZ: f64 = 11_000.0;
+const HRTF_FAR_CUTOFF_HZ: f64 = 2_400.0;
+
 /// Simple ratios used by [`consonance_score`]. Each entry is `(ratio, peak_score)`:
 /// a perfect match scores `peak_score`, partial matches drop linearly within
 /// a 0.1 log-distance neighborhood.
@@ -97,6 +107,7 @@ pub struct Voice {
     pub lifetime: f64,   // Total expected lifetime
     pub generation: u8,  // How many ancestors spawned this voice
     pub pan: f64,        // -1.0 (left) to 1.0 (right)
+    spatial: HrtfState,
     alive: bool,
 }
 
@@ -110,6 +121,7 @@ impl Voice {
             lifetime,
             generation,
             pan,
+            spatial: HrtfState::default(),
             alive: true,
         }
     }
@@ -128,6 +140,96 @@ impl Voice {
     fn is_alive(&self) -> bool {
         self.alive && self.age < self.lifetime
     }
+}
+
+/// Per-voice state for lightweight HRTF-style spatialization.
+#[derive(Clone)]
+struct HrtfState {
+    delay: [f64; HRTF_DELAY_BUFFER_LEN],
+    write_idx: usize,
+    low_l: f64,
+    low_r: f64,
+}
+
+impl Default for HrtfState {
+    fn default() -> Self {
+        Self {
+            delay: [0.0; HRTF_DELAY_BUFFER_LEN],
+            write_idx: 0,
+            low_l: 0.0,
+            low_r: 0.0,
+        }
+    }
+}
+
+impl HrtfState {
+    fn reset(&mut self) {
+        self.delay = [0.0; HRTF_DELAY_BUFFER_LEN];
+        self.write_idx = 0;
+        self.low_l = 0.0;
+        self.low_r = 0.0;
+    }
+
+    fn process(&mut self, sample: f64, pan: f64, sample_rate: f64) -> (f64, f64) {
+        let pan = pan.clamp(-1.0, 1.0);
+        let azimuth = pan * PI * 0.5;
+        let side = azimuth.sin();
+        let shadow = side.abs();
+
+        self.delay[self.write_idx] = sample;
+
+        let max_delay = (HRTF_DELAY_BUFFER_LEN - 2) as f64;
+        let itd_samples = (HRTF_MAX_ITD_SECONDS * sample_rate * side).clamp(-max_delay, max_delay);
+        let delayed_l = self.read_delay(itd_samples.max(0.0));
+        let delayed_r = self.read_delay((-itd_samples).max(0.0));
+        self.write_idx = (self.write_idx + 1) % HRTF_DELAY_BUFFER_LEN;
+
+        let pan_angle = (pan + 1.0) * 0.25 * PI;
+        let mut gain_l = pan_angle.cos();
+        let mut gain_r = pan_angle.sin();
+
+        let shadow_l = side.max(0.0);
+        let shadow_r = (-side).max(0.0);
+        gain_l *= 1.0 - HRTF_SHADOW_ATTENUATION * shadow_l;
+        gain_r *= 1.0 - HRTF_SHADOW_ATTENUATION * shadow_r;
+
+        let shaped_l = shape_far_ear(delayed_l, &mut self.low_l, shadow_l, sample_rate);
+        let shaped_r = shape_far_ear(delayed_r, &mut self.low_r, shadow_r, sample_rate);
+
+        // A gentle front-facing pinna cue: off-center voices lose a little
+        // high-frequency directness even in the near ear.
+        let presence = 1.0 - 0.04 * shadow;
+        (shaped_l * gain_l * presence, shaped_r * gain_r * presence)
+    }
+
+    fn read_delay(&self, delay_samples: f64) -> f64 {
+        let base = delay_samples.floor() as usize;
+        let frac = delay_samples - base as f64;
+        let near = self.delay[wrapped_delay_index(self.write_idx, base)];
+        let far = self.delay[wrapped_delay_index(self.write_idx, base + 1)];
+        near * (1.0 - frac) + far * frac
+    }
+}
+
+fn wrapped_delay_index(write_idx: usize, offset: usize) -> usize {
+    (write_idx + HRTF_DELAY_BUFFER_LEN - (offset % HRTF_DELAY_BUFFER_LEN)) % HRTF_DELAY_BUFFER_LEN
+}
+
+fn shape_far_ear(sample: f64, low_state: &mut f64, shadow: f64, sample_rate: f64) -> f64 {
+    if shadow <= f64::EPSILON {
+        *low_state = sample;
+        return sample;
+    }
+
+    let cutoff = HRTF_NEAR_CUTOFF_HZ + (HRTF_FAR_CUTOFF_HZ - HRTF_NEAR_CUTOFF_HZ) * shadow;
+    let alpha = one_pole_alpha(cutoff, sample_rate);
+    *low_state += (sample - *low_state) * alpha;
+    sample * (1.0 - shadow) + *low_state * shadow
+}
+
+fn one_pole_alpha(cutoff_hz: f64, sample_rate: f64) -> f64 {
+    let omega = 2.0 * PI * cutoff_hz.max(1.0);
+    (omega / (omega + sample_rate.max(1.0))).clamp(0.0, 1.0)
 }
 
 /// How spawn ratios are chosen.
@@ -323,15 +425,14 @@ impl EmergenceEngine {
                 sample /= norm;
             }
 
-            let amp = voice.amplitude * 0.15; // Scale down - these are background voices
+            let voice_sample = sample * voice.amplitude * 0.15; // Background voice scale
+            let (voice_l, voice_r) =
+                voice
+                    .spatial
+                    .process(voice_sample, voice.pan, self.sample_rate);
 
-            // Stereo panning (constant power)
-            let pan_angle = (voice.pan + 1.0) * 0.25 * PI; // 0 to PI/2
-            let gain_l = pan_angle.cos();
-            let gain_r = pan_angle.sin();
-
-            sum_l += sample * amp * gain_l;
-            sum_r += sample * amp * gain_r;
+            sum_l += voice_l;
+            sum_r += voice_r;
             total_energy += voice.amplitude;
         }
 
@@ -491,6 +592,13 @@ mod tests {
         );
     }
 
+    fn assert_near(actual: f64, expected: f64, epsilon: f64) {
+        assert!(
+            (actual - expected).abs() <= epsilon,
+            "actual {actual} expected {expected} epsilon {epsilon}"
+        );
+    }
+
     #[test]
     fn consonance_score_handles_inversions_and_invalid_ratios() {
         assert_close(consonance_score(2.0 / 3.0), consonance_score(3.0 / 2.0));
@@ -517,6 +625,7 @@ mod tests {
             lifetime: 10.0,
             generation: 2,
             pan: 0.0,
+            spatial: HrtfState::default(),
             alive: true,
         });
         engine.canon_pattern = vec![7]; // 3:2 above the parent
@@ -549,5 +658,57 @@ mod tests {
         assert_close(fold_voice_ratio(6.0), 3.0);
         assert_close(fold_voice_ratio(0.125), 0.25);
         assert_close(fold_voice_ratio(0.1875), 0.375);
+    }
+
+    #[test]
+    fn hrtf_center_pan_is_balanced() {
+        let mut hrtf = HrtfState::default();
+        let (left, right) = hrtf.process(1.0, 0.0, 48_000.0);
+        let expected = 0.5_f64.sqrt();
+
+        assert_near(left, expected, 1.0e-12);
+        assert_near(right, expected, 1.0e-12);
+    }
+
+    #[test]
+    fn hrtf_side_pan_delays_the_far_ear() {
+        let mut right_source = HrtfState::default();
+        let (left, right) = right_source.process(1.0, 1.0, 48_000.0);
+        assert_near(left, 0.0, 1.0e-12);
+        assert!(right > 0.9);
+
+        let mut left_source = HrtfState::default();
+        let (left, right) = left_source.process(1.0, -1.0, 48_000.0);
+        assert!(left > 0.9);
+        assert_near(right, 0.0, 1.0e-12);
+    }
+
+    #[test]
+    fn hrtf_output_stays_bounded() {
+        let mut hrtf = HrtfState::default();
+        let mut peak = 0.0_f64;
+
+        for n in 0_usize..4096 {
+            let sample = if n.is_multiple_of(2) { 1.0 } else { -1.0 };
+            let pan = (n % 201) as f64 / 100.0 - 1.0;
+            let (left, right) = hrtf.process(sample, pan, 48_000.0);
+            peak = peak.max(left.abs()).max(right.abs());
+        }
+
+        assert!(peak <= 1.0, "peak {peak}");
+    }
+
+    #[test]
+    fn hrtf_reset_clears_delay_and_filter_history() {
+        let mut hrtf = HrtfState::default();
+        for _ in 0..64 {
+            hrtf.process(1.0, 1.0, 48_000.0);
+        }
+
+        hrtf.reset();
+        let (left, right) = hrtf.process(1.0, 1.0, 48_000.0);
+
+        assert_near(left, 0.0, 1.0e-12);
+        assert!(right > 0.9);
     }
 }
