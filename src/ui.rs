@@ -9,8 +9,9 @@ use crate::app::{ActiveParam, App, AppMode, Tab, VizMode};
 use crate::knowledge;
 use crate::presets::{PRESETS, SEQUENCES, freq_band_name, freq_color};
 use crate::visualization::{
-    HarmonicLattice, render_beat_envelope, render_braille_waveform, render_emergence,
-    render_harmonic_lattice, render_penrose, render_spectrum_bars,
+    HARMONIC_PARTIAL_LABELS, HarmonicLattice, harmonic_partial_levels, render_beat_envelope,
+    render_braille_waveform, render_emergence, render_harmonic_lattice, render_penrose,
+    render_spectrum_bars,
 };
 
 const BG_TOP: Color = Color::Rgb(5, 7, 14);
@@ -58,7 +59,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     draw_backdrop(f.buffer_mut(), size, elapsed, accent);
     let shell = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Double)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(BG_TOP))
         .title(Line::from(Span::styled(
@@ -108,10 +109,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 fn draw_tab_strip(f: &mut Frame, area: Rect, active: Tab, accent: Color) {
     let tabs = [Tab::Studio, Tab::Knowledge];
     let mut spans: Vec<Span<'static>> = Vec::with_capacity(tabs.len() * 3 + 2);
-    spans.push(Span::styled(
-        "  ",
-        Style::default().bg(BG_TOP),
-    ));
+    spans.push(Span::styled("  ", Style::default().bg(BG_TOP)));
     for tab in tabs {
         let is_active = tab == active;
         let style = if is_active {
@@ -123,10 +121,7 @@ fn draw_tab_strip(f: &mut Frame, area: Rect, active: Tab, accent: Color) {
             Style::default().fg(DIM).bg(BG_TOP)
         };
         spans.push(Span::styled(format!("  {}  ", tab.label()), style));
-        spans.push(Span::styled(
-            "  ",
-            Style::default().bg(BG_TOP),
-        ));
+        spans.push(Span::styled("  ", Style::default().bg(BG_TOP)));
     }
     spans.push(Span::styled(
         "Tab to switch    Q to quit",
@@ -251,6 +246,7 @@ fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: Color, b
         VizMode::Harmonics => {
             let beat_freq = app.params.get_beat_freq() as f64;
             let harmonics = app.params.get_harmonics() as f64;
+            let harmonic_weights = app.params.get_timbre().weights();
             render_harmonic_lattice(
                 f.buffer_mut(),
                 inner,
@@ -260,6 +256,7 @@ fn draw_visualization(f: &mut Frame, area: Rect, app: &mut App, accent: Color, b
                     elapsed,
                     beat_freq,
                     harmonics,
+                    harmonic_weights,
                     color: accent,
                 },
             );
@@ -487,44 +484,48 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
 }
 
 fn draw_harmonic_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, border: Color) {
-    let block = panel_block(" RATIOS ", border);
+    let block = panel_block(" PARTIALS ", border);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     let harmonics = app.params.get_harmonics();
-    let beat = app.params.get_beat_freq();
-    let ratios = [
-        ("1:1", "root"),
-        ("5:4", "third"),
-        ("4:3", "fourth"),
-        ("3:2", "fifth"),
-        ("phi", "gold"),
-        ("2:1", "oct"),
-    ];
+    let timbre = app.params.get_timbre();
+    let levels = harmonic_partial_levels(harmonics as f64, timbre.weights());
+    let max_level = levels
+        .iter()
+        .copied()
+        .fold(0.0_f64, f64::max)
+        .max(f64::EPSILON);
+    let bar_width = inner.width.saturating_sub(10).clamp(2, 8) as usize;
+
     let mut rows = Vec::with_capacity(7);
-    for (idx, (ratio, label)) in ratios.iter().enumerate() {
-        let glow = 0.44 + harmonics * 0.42 + idx as f32 * 0.02;
+    for (idx, (id, label)) in HARMONIC_PARTIAL_LABELS.iter().enumerate() {
+        let relative = (levels[idx] / max_level).clamp(0.0, 1.0) as f32;
+        let glow = 0.28 + relative * 0.72;
+        let filled = (relative * bar_width as f32).round() as usize;
+        let bar = format!(
+            "{}{}",
+            "\u{25B0}".repeat(filled),
+            "\u{25B1}".repeat(bar_width.saturating_sub(filled))
+        );
         rows.push(Line::from(vec![
             Span::styled(
-                " \u{2219} ",
-                Style::default().fg(dim_color(accent, glow)).bg(PANEL_BG),
-            ),
-            Span::styled(
-                format!("{ratio:<4}"),
+                format!(" {id:<2} "),
                 Style::default()
-                    .fg(dim_color(accent, glow + 0.12))
+                    .fg(dim_color(accent, glow + 0.14))
                     .bg(PANEL_BG)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!(" {label}"), Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(format!("{label:<5}"), Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(
+                bar,
+                Style::default().fg(dim_color(accent, glow)).bg(PANEL_BG),
+            ),
         ]));
     }
     rows.push(Line::from(vec![
-        Span::styled(" beat ", Style::default().fg(DIM).bg(PANEL_BG)),
-        Span::styled(
-            format!("{beat:.1}Hz"),
-            Style::default().fg(BRIGHT).bg(PANEL_BG),
-        ),
+        Span::styled(" timbre ", Style::default().fg(DIM).bg(PANEL_BG)),
+        Span::styled(timbre.label(), Style::default().fg(accent).bg(PANEL_BG)),
     ]));
     f.render_widget(
         Paragraph::new(rows).style(Style::default().bg(PANEL_BG)),
@@ -725,7 +726,7 @@ fn draw_help(f: &mut Frame, area: Rect, accent: Color) {
             Style::default().fg(SOFT),
         )),
         Line::from(Span::styled(
-            "   Harmonics view maps the stereo phase trace onto a just-intonation / golden-ratio lattice.",
+            "   Harmonics view maps the live stereo phase trace and the active H1-H6 timbre partials.",
             Style::default().fg(SOFT),
         )),
         Line::from(Span::styled(
@@ -835,22 +836,16 @@ fn draw_spectrum_floor(buf: &mut Buffer, area: Rect, accent: Color) {
 
 fn spectral_ribbon(beat_freq: f32) -> Line<'static> {
     let bands = [
-        ("Delta", 2.0, Color::Rgb(180, 120, 255)),
-        ("Theta", 6.0, Color::Rgb(140, 100, 255)),
-        ("Alpha", 10.0, Color::Rgb(80, 230, 230)),
-        ("Beta", 18.0, Color::Rgb(80, 255, 140)),
-        ("Gamma", 40.0, Color::Rgb(255, 220, 80)),
+        ("Delta", Color::Rgb(180, 120, 255)),
+        ("Theta", Color::Rgb(140, 100, 255)),
+        ("Alpha", Color::Rgb(80, 230, 230)),
+        ("Beta", Color::Rgb(80, 255, 140)),
+        ("Gamma", Color::Rgb(255, 220, 80)),
     ];
     let mut spans = Vec::with_capacity(bands.len() * 3);
-    for (idx, (name, center, color)) in bands.into_iter().enumerate() {
-        let active = (beat_freq - center).abs()
-            <= match idx {
-                0 => 2.0,
-                1 => 2.0,
-                2 => 3.0,
-                3 => 12.0,
-                _ => 80.0,
-            };
+    let active_band = spectral_band_index(beat_freq);
+    for (idx, (name, color)) in bands.into_iter().enumerate() {
+        let active = idx == active_band;
         let style = if active {
             Style::default()
                 .fg(BG_TOP)
@@ -864,6 +859,20 @@ fn spectral_ribbon(beat_freq: f32) -> Line<'static> {
         spans.push(Span::styled(" ", Style::default().fg(DIM).bg(BG_TOP)));
     }
     Line::from(spans).centered()
+}
+
+fn spectral_band_index(beat_freq: f32) -> usize {
+    if beat_freq < 4.0 {
+        0
+    } else if beat_freq < 8.0 {
+        1
+    } else if beat_freq < 13.0 {
+        2
+    } else if beat_freq < 30.0 {
+        3
+    } else {
+        4
+    }
 }
 
 fn mode_rail(active: VizMode, accent: Color) -> Line<'static> {
@@ -1142,5 +1151,30 @@ fn rgb_from_color(color: Color) -> (u8, u8, u8) {
     match color {
         Color::Rgb(red, green, blue) => (red, green, blue),
         _ => (128, 128, 128),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::spectral_band_index;
+
+    #[test]
+    fn spectral_band_index_matches_frequency_thresholds() {
+        let cases = [
+            (2.0, 0),
+            (3.99, 0),
+            (4.0, 1),
+            (7.83, 1),
+            (8.0, 2),
+            (12.99, 2),
+            (13.0, 3),
+            (29.99, 3),
+            (30.0, 4),
+            (40.0, 4),
+        ];
+
+        for (frequency, expected) in cases {
+            assert_eq!(spectral_band_index(frequency), expected);
+        }
     }
 }

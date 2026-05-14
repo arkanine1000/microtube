@@ -59,9 +59,9 @@ fn parse(input: &str) -> Glossary {
         }
 
         if let Some(rest) = line.strip_prefix('[') {
-            let header = rest
-                .strip_suffix(']')
-                .unwrap_or_else(|| panic!("glossary line {}: unterminated table header", lineno + 1));
+            let header = rest.strip_suffix(']').unwrap_or_else(|| {
+                panic!("glossary line {}: unterminated table header", lineno + 1)
+            });
             let header = header.trim();
             let slug = header.strip_prefix("entries.").unwrap_or_else(|| {
                 panic!(
@@ -77,9 +77,12 @@ fn parse(input: &str) -> Glossary {
             continue;
         }
 
-        let table_slug = current_table
-            .as_ref()
-            .unwrap_or_else(|| panic!("glossary line {}: key outside any [entries.*] table", lineno + 1));
+        let table_slug = current_table.as_ref().unwrap_or_else(|| {
+            panic!(
+                "glossary line {}: key outside any [entries.*] table",
+                lineno + 1
+            )
+        });
 
         let eq = line
             .find('=')
@@ -117,7 +120,10 @@ fn parse(input: &str) -> Glossary {
         });
     }
 
-    Glossary { entries, categories }
+    Glossary {
+        entries,
+        categories,
+    }
 }
 
 #[derive(Debug)]
@@ -158,7 +164,9 @@ fn parse_value(raw: &str, lineno: usize) -> Value {
         let inside = raw
             .strip_prefix('"')
             .and_then(|s| s.strip_suffix('"'))
-            .unwrap_or_else(|| panic!("glossary line {lineno}: expected quoted string, got '{raw}'"));
+            .unwrap_or_else(|| {
+                panic!("glossary line {lineno}: expected quoted string, got '{raw}'")
+            });
         let mut buf = String::new();
         let bytes = inside.as_bytes();
         let mut i = 0;
@@ -211,9 +219,8 @@ fn consume_char(bytes: &[u8], i: &mut usize, buf: &mut String, lineno: usize) {
                 }
                 let hex = std::str::from_utf8(&bytes[start..end])
                     .unwrap_or_else(|_| panic!("glossary line {lineno}: bad \\u escape"));
-                let code = u32::from_str_radix(hex, 16).unwrap_or_else(|_| {
-                    panic!("glossary line {lineno}: invalid \\u hex '{hex}'")
-                });
+                let code = u32::from_str_radix(hex, 16)
+                    .unwrap_or_else(|_| panic!("glossary line {lineno}: invalid \\u hex '{hex}'"));
                 let ch = char::from_u32(code).unwrap_or_else(|| {
                     panic!("glossary line {lineno}: invalid Unicode codepoint U+{hex}")
                 });
@@ -232,9 +239,7 @@ fn consume_char(bytes: &[u8], i: &mut usize, buf: &mut String, lineno: usize) {
 }
 
 fn utf8_char_len(byte: u8) -> usize {
-    if byte < 0x80 {
-        1
-    } else if byte < 0xC0 {
+    if byte < 0xC0 {
         1
     } else if byte < 0xE0 {
         2
@@ -347,11 +352,9 @@ impl GlossaryState {
                         .iter()
                         .position(|c| c == &eb.category)
                         .unwrap_or(usize::MAX);
-                    cat_a.cmp(&cat_b).then_with(|| {
-                        ea.term
-                            .to_lowercase()
-                            .cmp(&eb.term.to_lowercase())
-                    })
+                    cat_a
+                        .cmp(&cat_b)
+                        .then_with(|| ea.term.to_lowercase().cmp(&eb.term.to_lowercase()))
                 });
             }
             SortMode::Alpha => {
@@ -369,6 +372,23 @@ impl GlossaryState {
     pub fn current_entry_index(&self) -> Option<usize> {
         self.visible_indices().get(self.selected).copied()
     }
+
+    fn select_entry_by_slug(&mut self, slug: &str) -> bool {
+        let g = glossary();
+        let Some(entry_idx) = g.entries.iter().position(|entry| entry.slug == slug) else {
+            return false;
+        };
+
+        self.category_filter = None;
+        let idxs = self.visible_indices();
+        let Some(visible_idx) = idxs.iter().position(|&idx| idx == entry_idx) else {
+            return false;
+        };
+
+        self.selected = visible_idx;
+        self.list_scroll = self.list_scroll.min(self.selected);
+        true
+    }
 }
 
 impl Default for GlossaryState {
@@ -385,7 +405,11 @@ pub fn handle_key(app: &mut App, code: KeyCode) -> bool {
 
     if state.expanded {
         match code {
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Backspace | KeyCode::Char('h') | KeyCode::Left => {
+            KeyCode::Esc
+            | KeyCode::Char('q')
+            | KeyCode::Backspace
+            | KeyCode::Char('h')
+            | KeyCode::Left => {
                 state.expanded = false;
             }
             KeyCode::Char('w') | KeyCode::Enter => {
@@ -393,6 +417,14 @@ pub fn handle_key(app: &mut App, code: KeyCode) -> bool {
                     && let Some(slug) = g.entries[idx].wiki_ref.clone()
                 {
                     app.knowledge.open_wiki_article(&slug);
+                }
+            }
+            KeyCode::Char(ch) if ('1'..='9').contains(&ch) => {
+                let related_idx = ch as usize - '1' as usize;
+                if let Some(idx) = idxs.get(state.selected).copied()
+                    && let Some(slug) = g.entries[idx].related.get(related_idx).cloned()
+                {
+                    state.select_entry_by_slug(&slug);
                 }
             }
             KeyCode::Char('j') | KeyCode::Down => {
@@ -477,7 +509,11 @@ pub fn draw(f: &mut Frame, area: Rect, state: &mut GlossaryState, accent: Color,
     let title = format!(
         " GLOSSARY  [c] {cat_label}  [s] {}  {}/{} ",
         state.sort.label(),
-        if idxs.is_empty() { 0 } else { state.selected + 1 },
+        if idxs.is_empty() {
+            0
+        } else {
+            state.selected + 1
+        },
         idxs.len()
     );
 
@@ -504,13 +540,7 @@ pub fn draw(f: &mut Frame, area: Rect, state: &mut GlossaryState, accent: Color,
     }
 }
 
-fn draw_list(
-    f: &mut Frame,
-    area: Rect,
-    state: &mut GlossaryState,
-    idxs: &[usize],
-    accent: Color,
-) {
+fn draw_list(f: &mut Frame, area: Rect, state: &mut GlossaryState, idxs: &[usize], accent: Color) {
     let panel_bg = Color::Rgb(9, 12, 22);
     let bright = Color::Rgb(236, 240, 248);
     let soft = Color::Rgb(178, 184, 204);
@@ -536,8 +566,7 @@ fn draw_list(
     let term_w = 24;
     let cat_w = 14;
     let gutter = 2;
-    let brief_w = total
-        .saturating_sub(2 + term_w + cat_w + gutter * 2);
+    let brief_w = total.saturating_sub(2 + term_w + cat_w + gutter * 2);
 
     let visible_end = (state.list_scroll + height).min(idxs.len());
     let items: Vec<ListItem> = idxs[state.list_scroll..visible_end]
@@ -554,18 +583,29 @@ fn draw_list(
             ListItem::new(Line::from(vec![
                 Span::styled(
                     format!(" {:<width$}", truncate(&entry.term, term_w), width = term_w),
-                    Style::default().fg(term_fg).bg(bg).add_modifier(if is_selected {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    }),
+                    Style::default()
+                        .fg(term_fg)
+                        .bg(bg)
+                        .add_modifier(if is_selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
                 ),
                 Span::styled(
-                    format!("  {:<width$}", truncate(&entry.category, cat_w), width = cat_w),
+                    format!(
+                        "  {:<width$}",
+                        truncate(&entry.category, cat_w),
+                        width = cat_w
+                    ),
                     Style::default().fg(cat_fg).bg(bg),
                 ),
                 Span::styled(
-                    format!("  {:<width$} ", truncate(&entry.brief, brief_w), width = brief_w),
+                    format!(
+                        "  {:<width$} ",
+                        truncate(&entry.brief, brief_w),
+                        width = brief_w
+                    ),
                     Style::default().fg(brief_fg).bg(bg),
                 ),
             ]))
@@ -639,10 +679,22 @@ fn draw_detail(f: &mut Frame, area: Rect, state: &GlossaryState, accent: Color) 
             "Related:",
             Style::default().fg(dim).bg(panel_bg),
         )]));
-        for r in &entry.related {
+        for (idx, r) in entry.related.iter().enumerate() {
+            let label = g
+                .entries
+                .iter()
+                .find(|candidate| candidate.slug == *r)
+                .map(|candidate| candidate.term.as_str())
+                .unwrap_or(r);
             body.push(Line::from(vec![
-                Span::styled("  - ", Style::default().fg(accent).bg(panel_bg)),
-                Span::styled(r.clone(), Style::default().fg(soft).bg(panel_bg)),
+                Span::styled(
+                    format!("  [{}] ", idx + 1),
+                    Style::default()
+                        .fg(accent)
+                        .bg(panel_bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(label.to_string(), Style::default().fg(soft).bg(panel_bg)),
             ]));
         }
     }
@@ -660,7 +712,16 @@ fn draw_detail(f: &mut Frame, area: Rect, state: &GlossaryState, accent: Color) 
     ));
     if entry.wiki_ref.is_some() {
         hints.push(Span::styled(
-            "[w] read article",
+            "[w] read article   ",
+            Style::default()
+                .fg(accent)
+                .bg(panel_bg)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    if !entry.related.is_empty() {
+        hints.push(Span::styled(
+            "[1-9] related term",
             Style::default()
                 .fg(accent)
                 .bg(panel_bg)
@@ -711,7 +772,25 @@ mod tests {
                     slug,
                 );
             }
+            for related in &entry.related {
+                assert!(
+                    g.entries.iter().any(|candidate| candidate.slug == *related),
+                    "glossary entry '{}' related term '{}' points at no entry",
+                    entry.slug,
+                    related,
+                );
+            }
         }
+    }
+
+    #[test]
+    fn can_select_related_entry_by_slug() {
+        let mut state = GlossaryState::new();
+        assert!(state.select_entry_by_slug("alpha"));
+
+        let idx = state.current_entry_index().expect("selected entry");
+        assert_eq!(glossary().entries[idx].slug, "alpha");
+        assert_eq!(state.category_filter, None);
     }
 
     #[test]

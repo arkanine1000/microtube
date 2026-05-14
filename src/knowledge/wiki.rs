@@ -7,7 +7,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Wrap};
 
-use crate::knowledge::content::ARTICLES;
+use crate::knowledge::content::{ARTICLES, ArticleManifest};
 use crate::knowledge::markdown::{self, MdStyle};
 
 pub struct WikiState {
@@ -41,11 +41,19 @@ impl Default for WikiState {
 }
 
 pub fn handle_key(state: &mut WikiState, code: KeyCode) -> bool {
-    let len = ARTICLES.len();
+    handle_key_for(state, code, ARTICLES.len())
+}
+
+pub fn handle_key_for(state: &mut WikiState, code: KeyCode, article_count: usize) -> bool {
+    let len = article_count;
 
     if state.in_reader {
         match code {
-            KeyCode::Esc | KeyCode::Backspace | KeyCode::Char('q') | KeyCode::Char('h') | KeyCode::Left => {
+            KeyCode::Esc
+            | KeyCode::Backspace
+            | KeyCode::Char('q')
+            | KeyCode::Char('h')
+            | KeyCode::Left => {
                 state.in_reader = false;
                 state.scroll = 0;
             }
@@ -113,14 +121,34 @@ pub fn handle_key(state: &mut WikiState, code: KeyCode) -> bool {
 }
 
 pub fn draw(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, border: Color) {
+    draw_articles(f, area, state, accent, border, ARTICLES, "WIKI");
+}
+
+pub fn draw_articles(
+    f: &mut Frame,
+    area: Rect,
+    state: &mut WikiState,
+    accent: Color,
+    border: Color,
+    articles: &[ArticleManifest],
+    pane_title: &'static str,
+) {
     if state.in_reader {
-        draw_reader(f, area, state, accent, border);
+        draw_reader(f, area, state, accent, border, articles);
     } else {
-        draw_index(f, area, state, accent, border);
+        draw_index(f, area, state, accent, border, articles, pane_title);
     }
 }
 
-fn draw_index(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, border: Color) {
+fn draw_index(
+    f: &mut Frame,
+    area: Rect,
+    state: &mut WikiState,
+    accent: Color,
+    border: Color,
+    articles: &[ArticleManifest],
+    pane_title: &'static str,
+) {
     let panel_bg = Color::Rgb(9, 12, 22);
     let bright = Color::Rgb(236, 240, 248);
     let soft = Color::Rgb(178, 184, 204);
@@ -128,9 +156,13 @@ fn draw_index(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, b
     let select_fg = Color::Rgb(5, 7, 14);
 
     let title = format!(
-        " WIKI  {}/{} ",
-        if ARTICLES.is_empty() { 0 } else { state.selected + 1 },
-        ARTICLES.len()
+        " {pane_title}  {}/{} ",
+        if articles.is_empty() {
+            0
+        } else {
+            state.selected + 1
+        },
+        articles.len()
     );
     let block = Block::default()
         .borders(Borders::ALL)
@@ -154,19 +186,18 @@ fn draw_index(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, b
     } else if state.selected >= state.list_scroll + height && height > 0 {
         state.list_scroll = state.selected + 1 - height;
     }
-    if state.list_scroll + height > ARTICLES.len() {
-        state.list_scroll = ARTICLES.len().saturating_sub(height);
+    if state.list_scroll + height > articles.len() {
+        state.list_scroll = articles.len().saturating_sub(height);
     }
 
     let total = inner.width as usize;
     let num_w = 4;
     let title_w = 28;
     let cat_w = 12;
-    let summary_w = total
-        .saturating_sub(num_w + title_w + cat_w + 6);
+    let summary_w = total.saturating_sub(num_w + title_w + cat_w + 6);
 
-    let visible_end = (state.list_scroll + height).min(ARTICLES.len());
-    let items: Vec<ListItem> = ARTICLES[state.list_scroll..visible_end]
+    let visible_end = (state.list_scroll + height).min(articles.len());
+    let items: Vec<ListItem> = articles[state.list_scroll..visible_end]
         .iter()
         .enumerate()
         .map(|(local, article)| {
@@ -183,19 +214,34 @@ fn draw_index(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, b
                     Style::default().fg(num_fg).bg(bg),
                 ),
                 Span::styled(
-                    format!("{:<width$}", truncate(article.title, title_w), width = title_w),
-                    Style::default().fg(title_fg).bg(bg).add_modifier(if is_selected {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    }),
+                    format!(
+                        "{:<width$}",
+                        truncate(article.title, title_w),
+                        width = title_w
+                    ),
+                    Style::default()
+                        .fg(title_fg)
+                        .bg(bg)
+                        .add_modifier(if is_selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
                 ),
                 Span::styled(
-                    format!("  {:<width$}", truncate(article.category, cat_w), width = cat_w),
+                    format!(
+                        "  {:<width$}",
+                        truncate(article.category, cat_w),
+                        width = cat_w
+                    ),
                     Style::default().fg(cat_fg).bg(bg),
                 ),
                 Span::styled(
-                    format!("  {:<width$} ", truncate(article.summary, summary_w), width = summary_w),
+                    format!(
+                        "  {:<width$} ",
+                        truncate(article.summary, summary_w),
+                        width = summary_w
+                    ),
                     Style::default().fg(blurb_fg).bg(bg),
                 ),
             ]))
@@ -205,14 +251,21 @@ fn draw_index(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, b
     f.render_widget(list, inner);
 }
 
-fn draw_reader(f: &mut Frame, area: Rect, state: &mut WikiState, accent: Color, border: Color) {
+fn draw_reader(
+    f: &mut Frame,
+    area: Rect,
+    state: &mut WikiState,
+    accent: Color,
+    border: Color,
+    articles: &[ArticleManifest],
+) {
     let panel_bg = Color::Rgb(9, 12, 22);
     let bright = Color::Rgb(236, 240, 248);
     let dim = Color::Rgb(138, 146, 168);
     let code = Color::Rgb(255, 200, 80);
     let quote = Color::Rgb(180, 200, 220);
 
-    let article = match ARTICLES.get(state.selected) {
+    let article = match articles.get(state.selected) {
         Some(a) => a,
         None => return,
     };

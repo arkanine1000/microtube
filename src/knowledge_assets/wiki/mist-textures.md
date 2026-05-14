@@ -24,8 +24,8 @@ Spectrum falls at **3 dB/octave**. Equal energy per octave, which means
 each octave has the same perceptual weight. Pink noise sits across the
 full audio band evenly and is famously the noise the universe seems to
 prefer — natural processes from neural firing to ocean tides have
-roughly pink-distributed power spectra. It is the default mist for the
-Deep Sleep and Meditation presets.
+roughly pink-distributed power spectra. It sits between the darker Brown mist
+and the brighter White and Blue textures.
 
 ### White — *air*
 Flat spectrum. Bright, fizzy, the noise most people associate with the

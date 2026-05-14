@@ -2,7 +2,17 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 
-use crate::emergence::EmergenceSnapshot;
+use crate::emergence::{EmergenceSnapshot, SpawnMode};
+use crate::penrose::Tile;
+
+pub const HARMONIC_PARTIAL_LABELS: [(&str, &str); 6] = [
+    ("H1", "root"),
+    ("H2", "oct"),
+    ("H3", "5th"),
+    ("H4", "oct"),
+    ("H5", "3rd"),
+    ("H6", "5th"),
+];
 
 /// Render a waveform using braille characters into a ratatui Buffer.
 pub fn render_braille_waveform(buf: &mut Buffer, area: Rect, samples: &[f32], color: Color) {
@@ -141,11 +151,12 @@ pub struct HarmonicLattice<'a> {
     pub elapsed: f64,
     pub beat_freq: f64,
     pub harmonics: f64,
+    pub harmonic_weights: [f64; 5],
     pub color: Color,
 }
 
-/// Render a harmonic phase portrait: L/R stereo phase, just-intonation nodes,
-/// and golden-angle connections in one terminal-native view.
+/// Render the live stereo phase trace plus the actual H1-H6 partial stack
+/// produced by the current timbre/warmth settings.
 pub fn render_harmonic_lattice(buf: &mut Buffer, area: Rect, lattice: HarmonicLattice<'_>) {
     if area.width < 8 || area.height < 4 {
         return;
@@ -156,90 +167,90 @@ pub fn render_harmonic_lattice(buf: &mut Buffer, area: Rect, lattice: HarmonicLa
     let elapsed = lattice.elapsed;
     let beat_freq = lattice.beat_freq;
     let harmonics = lattice.harmonics;
+    let partial_levels = harmonic_partial_levels(harmonics, lattice.harmonic_weights);
+    let max_level = partial_levels
+        .iter()
+        .copied()
+        .fold(0.0_f64, f64::max)
+        .max(f64::EPSILON);
     let color = lattice.color;
 
+    let floor_height = if area.height >= 12 { 3 } else { 0 };
+    let plot_height = area.height.saturating_sub(floor_height).max(1);
     let w = area.width as f64;
-    let h = area.height as f64;
+    let h = plot_height as f64;
     let cx = w / 2.0;
     let cy = h / 2.0;
-    let rx = w * 0.42;
-    let ry = h * 0.38;
+    let rx = w * 0.38;
+    let ry = h * 0.34;
 
-    let phi = 1.618033988749895_f64;
     let beat_phase = (std::f64::consts::PI * beat_freq * elapsed).cos().abs();
     let pulse = 0.86 + 0.14 * beat_phase;
     let rotation = elapsed * 0.11;
     let (cr, cg, cb) = rgb_from_color(color);
 
+    // 1. Reference rings for the phase portrait.
     for ring in 1..=3 {
         let ring_scale = ring as f64 / 3.6 * pulse;
         let ring_color = Color::Rgb(
-            (cr as f32 * 0.16) as u8,
-            (cg as f32 * 0.16) as u8,
-            (cb as f32 * 0.20) as u8,
+            (cr as f32 * 0.18) as u8,
+            (cg as f32 * 0.18) as u8,
+            (cb as f32 * 0.22) as u8,
         );
-        let steps = (area.width as usize).saturating_mul(2).max(24);
-        for i in (0..steps).step_by(3) {
+        let steps = (area.width as usize).saturating_mul(4).max(48);
+        for i in (0..steps).step_by(2) {
             let theta = i as f64 / steps as f64 * std::f64::consts::TAU + rotation;
             let x = cx + theta.cos() * rx * ring_scale;
             let y = cy + theta.sin() * ry * ring_scale;
-            put_cell(buf, area, x, y, '\u{00B7}', ring_color);
+            put_braille(buf, area, x, y, ring_color);
         }
     }
 
-    let ratios: &[(f64, &str, char)] = &[
-        (1.0, "1", '\u{25CF}'),
-        (5.0 / 4.0, "5:4", '\u{25C6}'),
-        (4.0 / 3.0, "4:3", '\u{25C7}'),
-        (3.0 / 2.0, "3:2", '\u{2B21}'),
-        (phi, "phi", '\u{2726}'),
-        (2.0, "2", '\u{25CB}'),
-        (phi * phi, "phi2", '\u{25CC}'),
-        (3.0, "3", '\u{25B3}'),
-    ];
-
-    let mut positions = Vec::with_capacity(ratios.len());
-    for (i, &(ratio, _, _)) in ratios.iter().enumerate() {
-        let golden_angle = i as f64 * std::f64::consts::TAU / (phi * phi);
-        let octave_turn = ratio.log2() * std::f64::consts::TAU;
-        let angle = rotation + golden_angle + octave_turn * 0.35;
-        let radius = (0.28 + (i as f64 / ratios.len() as f64).sqrt() * 0.7) * pulse;
-        let x = cx + angle.cos() * rx * radius;
-        let y = cy + angle.sin() * ry * radius;
-        positions.push((x, y));
+    let mut positions = [(0.0, 0.0); 6];
+    for partial in 1..=6 {
+        positions[partial - 1] = harmonic_node_position(partial, cx, cy, rx, ry, rotation, pulse);
     }
 
-    for i in 0..ratios.len() {
-        for j in (i + 1)..ratios.len() {
-            let ratio = if ratios[i].0 > ratios[j].0 {
-                ratios[i].0 / ratios[j].0
-            } else {
-                ratios[j].0 / ratios[i].0
-            };
+    // 2. Connections show active integer partial relationships, not fixed ratios.
+    for idx in 1..positions.len() {
+        let relative = (partial_levels[idx] / max_level).sqrt() as f32;
+        if relative <= 0.02 {
+            continue;
+        }
+        let strength = 0.10 + relative * 0.48 + beat_phase as f32 * 0.10;
+        let line_color = Color::Rgb(
+            (cr as f32 * strength) as u8,
+            (cg as f32 * strength) as u8,
+            (cb as f32 * strength) as u8,
+        );
+        draw_line_braille(buf, area, positions[0], positions[idx], line_color);
+    }
 
-            if is_near_simple_ratio(ratio as f32) {
-                let strength = (0.15 + harmonics * 0.35 + beat_phase * 0.15) as f32;
+    for i in 1..positions.len() {
+        for j in (i + 1)..positions.len() {
+            let pair_level = (partial_levels[i] * partial_levels[j]).sqrt() / max_level;
+            if pair_level <= 0.03 {
+                continue;
+            }
+            let ratio = (j + 1) as f32 / (i + 1) as f32;
+            if is_near_simple_ratio(ratio) {
+                let strength = 0.08 + pair_level as f32 * 0.34;
                 let line_color = Color::Rgb(
                     (cr as f32 * strength) as u8,
                     (cg as f32 * strength) as u8,
                     (cb as f32 * strength) as u8,
                 );
-                draw_line(
-                    buf,
-                    area,
-                    positions[i],
-                    positions[j],
-                    '\u{2219}',
-                    line_color,
-                );
+                draw_line_braille(buf, area, positions[i], positions[j], line_color);
             }
         }
     }
 
+    // 3. Live L/R Lissajous trace from the visualization buffer.
     let sample_count = samples_l.len().min(samples_r.len());
     if sample_count > 1 {
-        let max_points = 640usize;
+        let max_points = 800usize;
         let step = (sample_count / max_points).max(1);
+        let point_total = sample_count.div_ceil(step).max(1);
         let theta = rotation * 0.7;
         let cos_t = theta.cos();
         let sin_t = theta.sin();
@@ -252,42 +263,148 @@ pub fn render_harmonic_lattice(buf: &mut Buffer, area: Rect, lattice: HarmonicLa
             let rotated_x = x * cos_t - y * sin_t;
             let rotated_y = x * sin_t + y * cos_t;
 
-            let age = point_idx as f32 / max_points as f32;
+            let age = point_idx as f32 / point_total as f32;
             let harmonic_glow = harmonics as f32;
-            let brightness = (0.25 + age * 0.45 + harmonic_glow * 0.30).min(1.0);
+            let brightness = (0.34 + age * 0.42 + harmonic_glow * 0.28).min(1.0);
             let sample_color = Color::Rgb(
                 (cr as f32 * brightness).max(35.0) as u8,
                 (cg as f32 * (0.65 + brightness * 0.35)).max(35.0) as u8,
                 (cb as f32 * (0.65 + harmonic_glow * 0.35)).max(45.0) as u8,
             );
-            let ch = if harmonics > 0.65 {
-                '\u{2736}'
-            } else if harmonics > 0.30 {
-                '\u{2219}'
-            } else {
-                '\u{00B7}'
-            };
-            put_cell(buf, area, cx + rotated_x, cy + rotated_y, ch, sample_color);
+
+            // Draw as braille instead of coarse characters
+            put_braille(buf, area, cx + rotated_x, cy + rotated_y, sample_color);
         }
     }
 
-    for (i, &(ratio, label, ch)) in ratios.iter().enumerate() {
-        let (x, y) = positions[i];
-        let node_gain = if i == 0 {
-            1.0
+    // 4. Partial nodes. Digits are intentionally compact: H1-H6 are shown
+    // in the floor/panel, while the node strength shows current amplitude.
+    for (idx, &(x, y)) in positions.iter().enumerate() {
+        let relative = (partial_levels[idx] / max_level).sqrt();
+        let node_gain = if idx == 0 {
+            0.72 + relative * 0.34
         } else {
-            (0.55 + harmonics * 0.45) * (1.0 - (ratio.log2() * 0.08).min(0.25))
+            0.18 + relative * 0.82
         };
         let node_color = Color::Rgb(
             (cr as f64 * node_gain).max(45.0) as u8,
             (cg as f64 * node_gain).max(40.0) as u8,
             (cb as f64 * node_gain).max(45.0) as u8,
         );
+        let ch = char::from_digit((idx + 1) as u32, 10).unwrap_or('\u{25CF}');
         put_cell(buf, area, x, y, ch, node_color);
 
-        if area.width > 48 && area.height > 10 {
-            draw_text(buf, area, x + 1.0, y, label, node_color);
+        if area.width > 54 && plot_height > 9 {
+            draw_text(
+                buf,
+                area,
+                x + 1.0,
+                y,
+                HARMONIC_PARTIAL_LABELS[idx].0,
+                node_color,
+            );
         }
+    }
+
+    if floor_height >= 3 {
+        draw_partial_floor(buf, area, plot_height, &partial_levels, max_level, color);
+    }
+}
+
+pub fn harmonic_partial_levels(harmonics: f64, harmonic_weights: [f64; 5]) -> [f64; 6] {
+    let warmth = harmonics.clamp(0.0, 1.0);
+    let harmonic_weights = harmonic_weights.map(|weight| weight.max(0.0));
+    let total_weight = harmonic_weights.iter().sum::<f64>();
+    let norm = 1.0 + warmth * total_weight;
+
+    let mut levels = [0.0; 6];
+    levels[0] = 1.0 / norm;
+    for (idx, weight) in harmonic_weights.into_iter().enumerate() {
+        levels[idx + 1] = weight * warmth / norm;
+    }
+    levels
+}
+
+fn harmonic_node_position(
+    partial: usize,
+    cx: f64,
+    cy: f64,
+    rx: f64,
+    ry: f64,
+    rotation: f64,
+    pulse: f64,
+) -> (f64, f64) {
+    if partial == 1 {
+        return (cx, cy);
+    }
+
+    let log_partial = (partial as f64).log2();
+    let log_span = 6.0_f64.log2();
+    let radius = (0.24 + log_partial / log_span * 0.70) * pulse;
+    let angle = rotation + log_partial * std::f64::consts::TAU * 0.62 - std::f64::consts::FRAC_PI_2;
+
+    (
+        cx + angle.cos() * rx * radius,
+        cy + angle.sin() * ry * radius,
+    )
+}
+
+fn draw_partial_floor(
+    buf: &mut Buffer,
+    area: Rect,
+    start_y: u16,
+    levels: &[f64; 6],
+    max_level: f64,
+    color: Color,
+) {
+    if start_y + 2 >= area.height || area.width == 0 {
+        return;
+    }
+
+    let (cr, cg, cb) = rgb_from_color(color);
+    let divider_color = Color::Rgb(
+        (cr as f32 * 0.18) as u8,
+        (cg as f32 * 0.18) as u8,
+        (cb as f32 * 0.22) as u8,
+    );
+    for x in 0..area.width {
+        let cell = &mut buf[(area.x + x, area.y + start_y)];
+        cell.set_char('\u{2500}');
+        cell.set_fg(divider_color);
+    }
+
+    let bar_y = start_y + 1;
+    let label_y = start_y + 2;
+    for (idx, (id, _)) in HARMONIC_PARTIAL_LABELS.iter().enumerate() {
+        let x0 = idx as u16 * area.width / 6;
+        let x1 = ((idx as u16 + 1) * area.width / 6).saturating_sub(1);
+        let segment_width = x1.saturating_sub(x0).max(1);
+        let bar_width = segment_width.saturating_sub(2).max(1) as usize;
+        let relative = (levels[idx] / max_level).clamp(0.0, 1.0);
+        let filled = (relative * bar_width as f64).round() as usize;
+        let color_gain = 0.24 + relative as f32 * 0.76;
+        let bar_color = Color::Rgb(
+            (cr as f32 * color_gain).max(30.0) as u8,
+            (cg as f32 * color_gain).max(30.0) as u8,
+            (cb as f32 * color_gain).max(35.0) as u8,
+        );
+
+        for offset in 0..bar_width {
+            let x = x0 + 1 + offset as u16;
+            if x >= area.width {
+                break;
+            }
+            let cell = &mut buf[(area.x + x, area.y + bar_y)];
+            cell.set_char(if offset < filled {
+                '\u{2584}'
+            } else {
+                '\u{00B7}'
+            });
+            cell.set_fg(bar_color);
+        }
+
+        let label_x = x0 + segment_width.saturating_sub(id.len() as u16) / 2;
+        draw_text(buf, area, label_x as f64, label_y as f64, id, bar_color);
     }
 }
 
@@ -338,7 +455,7 @@ pub fn render_beat_envelope(
     }
 }
 
-/// Penrose-inspired geometric visualization.
+/// Penrose-inspired geometric visualization using braille sub-cell vectors.
 pub fn render_penrose(buf: &mut Buffer, area: Rect, elapsed: f64, beat_freq: f64, color: Color) {
     if area.width < 4 || area.height < 4 {
         return;
@@ -351,19 +468,39 @@ pub fn render_penrose(buf: &mut Buffer, area: Rect, elapsed: f64, beat_freq: f64
 
     let phi: f64 = 1.618033988749895;
     let beat_phase = (std::f64::consts::PI * beat_freq * elapsed).cos();
-    let pulse = 0.7 + 0.3 * beat_phase.abs();
+    let pulse = 0.75 + 0.25 * beat_phase.abs();
     let rotation = elapsed * 0.3;
 
     let (cr, cg, cb) = rgb_from_color(color);
 
+    // 1. Draw smooth golden spiral
+    let spiral_points = 180;
+    for i in 0..spiral_points {
+        let t = i as f64 / spiral_points as f64;
+        let spiral_angle = t * std::f64::consts::TAU * 3.0 + rotation * phi;
+        let spiral_r = t * cy * 0.85 * pulse;
+
+        let sx = cx + spiral_r * spiral_angle.cos() * 2.0;
+        let sy = cy + spiral_r * spiral_angle.sin();
+
+        let brightness =
+            (0.5 + 0.5 * (t * std::f64::consts::TAU * beat_freq + elapsed).sin()) as f32;
+        let r = (cr as f32 * brightness * 0.9) as u8;
+        let g = (cg as f32 * brightness * 0.9) as u8;
+        let b = (cb as f32 * brightness * 0.9) as u8;
+
+        put_braille(buf, area, sx, sy, Color::Rgb(r, g, b));
+    }
+
+    // 2. Draw vector polygons
     let layers = 5;
     for layer in 0..layers {
         let base_radius = (layer as f64 + 1.0) / layers as f64;
         let radius = base_radius * pulse * (cy.min(cx * 0.5));
         let sides = if layer % 2 == 0 { 5 } else { 10 };
         let layer_rotation = rotation + (layer as f64) * std::f64::consts::PI / (phi * 5.0);
-        let brightness = 1.0 - (layer as f64 / layers as f64) * 0.5;
-        let dim_beat = brightness * (0.6 + 0.4 * beat_phase.abs());
+        let brightness = 1.0 - (layer as f64 / layers as f64) * 0.4;
+        let dim_beat = brightness * (0.65 + 0.35 * beat_phase.abs());
 
         let r = (cr as f64 * dim_beat) as u8;
         let g = (cg as f64 * dim_beat) as u8;
@@ -375,71 +512,28 @@ pub fn render_penrose(buf: &mut Buffer, area: Rect, elapsed: f64, beat_freq: f64
             let x = cx + radius * angle.cos() * 2.0;
             let y = cy + radius * angle.sin();
 
-            let ix = x as u16;
-            let iy = y as u16;
-
-            if ix < area.width && iy < area.height {
-                let cell = &mut buf[(area.x + ix, area.y + iy)];
-                let ch = match layer % 5 {
-                    0 => '\u{25C6}',
-                    1 => '\u{25CB}',
-                    2 => '\u{25B2}',
-                    3 => '\u{2B21}',
-                    _ => '\u{25CF}',
-                };
-                cell.set_char(ch);
-                cell.set_fg(layer_color);
-            }
-
             let next_angle =
                 layer_rotation + ((i + 1) as f64 * std::f64::consts::TAU / sides as f64);
             let nx = cx + radius * next_angle.cos() * 2.0;
             let ny = cy + radius * next_angle.sin();
 
-            let steps = (radius * 1.5) as usize;
-            if steps > 0 {
-                for s in 1..steps {
-                    let t = s as f64 / steps as f64;
-                    let px = (x + (nx - x) * t) as u16;
-                    let py = (y + (ny - y) * t) as u16;
-                    if px < area.width && py < area.height {
-                        let cell = &mut buf[(area.x + px, area.y + py)];
-                        cell.set_char('\u{00B7}');
-                        cell.set_fg(layer_color);
-                    }
-                }
-            }
-        }
-    }
+            // Draw solid braille line for polygon edges
+            draw_line_braille(buf, area, (x, y), (nx, ny), layer_color);
 
-    // Golden spiral
-    let spiral_points = 60;
-    for i in 0..spiral_points {
-        let t = i as f64 / spiral_points as f64;
-        let spiral_angle = t * std::f64::consts::TAU * 3.0 + rotation * phi;
-        let spiral_r = t * cy * 0.8 * pulse;
-
-        let sx = cx + spiral_r * spiral_angle.cos() * 2.0;
-        let sy = cy + spiral_r * spiral_angle.sin();
-
-        let ix = sx as u16;
-        let iy = sy as u16;
-        if ix < area.width && iy < area.height {
-            let cell = &mut buf[(area.x + ix, area.y + iy)];
-            let brightness =
-                (0.5 + 0.5 * (t * std::f64::consts::TAU * beat_freq + elapsed).sin()) as f32;
-            let r = (cr as f32 * brightness * 0.8) as u8;
-            let g = (cg as f32 * brightness * 0.8) as u8;
-            let b = (cb as f32 * brightness * 0.8) as u8;
-            cell.set_char('\u{2219}');
-            cell.set_fg(Color::Rgb(r, g, b));
+            // Draw vertex
+            let ch = match layer % 5 {
+                0 => '\u{25C6}',
+                1 => '\u{25CB}',
+                2 => '\u{25B2}',
+                3 => '\u{2B21}',
+                _ => '\u{25CF}',
+            };
+            put_cell(buf, area, x, y, ch, layer_color);
         }
     }
 }
 
 /// Emergence visualization: a living constellation of harmonic voices.
-/// Each voice is a node; connections show harmonic relationships.
-/// Brightness = amplitude, size = generation, position = frequency ratio.
 pub fn render_emergence(
     buf: &mut Buffer,
     area: Rect,
@@ -451,13 +545,15 @@ pub fn render_emergence(
         return;
     }
 
+    let status_height = if area.height >= 8 { 2 } else { 1 };
+    let field_height = area.height.saturating_sub(status_height).max(1);
     let w = area.width as f64;
-    let h = area.height as f64;
+    let h = field_height as f64;
     let cx = w / 2.0;
     let cy = h / 2.0;
     let (cr, cg, cb) = rgb_from_color(color);
 
-    // Draw connections between harmonically related voices
+    // 1. Draw connections using braille lines
     for (i, v1) in snapshot.voices.iter().enumerate() {
         for v2 in snapshot.voices.iter().skip(i + 1) {
             let ratio = if v1.freq_ratio > v2.freq_ratio {
@@ -466,7 +562,6 @@ pub fn render_emergence(
                 v2.freq_ratio / v1.freq_ratio
             };
 
-            // Connect if ratio is near a simple fraction
             let is_consonant = is_near_simple_ratio(ratio);
             if !is_consonant {
                 continue;
@@ -475,114 +570,118 @@ pub fn render_emergence(
             let (x1, y1) = voice_position(v1.freq_ratio, v1.pan, cx, cy, elapsed);
             let (x2, y2) = voice_position(v2.freq_ratio, v2.pan, cx, cy, elapsed);
 
-            // Draw faint connection line
-            let connection_brightness = (v1.amplitude * v2.amplitude).min(1.0) * 0.5;
-            let r = (cr as f32 * connection_brightness * 0.4) as u8;
-            let g = (cg as f32 * connection_brightness * 0.4) as u8;
-            let b = (cb as f32 * connection_brightness * 0.4) as u8;
+            let connection_brightness = (v1.amplitude * v2.amplitude).min(1.0) * 0.8;
+            let r = (cr as f32 * connection_brightness * 0.5) as u8;
+            let g = (cg as f32 * connection_brightness * 0.5) as u8;
+            let b = (cb as f32 * connection_brightness * 0.5) as u8;
             let line_color = Color::Rgb(r.max(30), g.max(30), b.max(30));
 
-            draw_line(buf, area, (x1, y1), (x2, y2), '\u{2500}', line_color);
+            draw_line_braille(buf, area, (x1, y1), (x2, y2), line_color);
         }
     }
 
-    // Draw each voice as a node
+    // 2. Draw each voice as a node on top of connections
     for voice in &snapshot.voices {
         let (vx, vy) = voice_position(voice.freq_ratio, voice.pan, cx, cy, elapsed);
-        let ix = vx as u16;
-        let iy = vy as u16;
 
-        if ix >= area.width || iy >= area.height {
-            continue;
-        }
-
-        // Brightness based on amplitude
         let amp = voice.amplitude.min(1.0);
         let pulse = 0.8 + 0.2 * ((elapsed * 2.0 + voice.freq_ratio as f64 * 3.0).sin() as f32);
-        let brightness = amp * pulse;
+        let life = (1.0 - (voice.age_normalized * 2.0 - 1.0).abs()).clamp(0.0, 1.0);
+        let brightness = (0.16 + amp * 0.78 + life * 0.06) * pulse;
 
-        let r = (cr as f32 * brightness).max(40.0) as u8;
-        let g = (cg as f32 * brightness).max(30.0) as u8;
-        let b = (cb as f32 * brightness).max(40.0) as u8;
+        let r = (cr as f32 * brightness).max(28.0) as u8;
+        let g = (cg as f32 * brightness).max(24.0) as u8;
+        let b = (cb as f32 * brightness).max(30.0) as u8;
         let voice_color = Color::Rgb(r, g, b);
 
-        // Character based on generation (deeper = larger)
         let ch = match voice.generation {
-            0 => '\u{2726}', // Four-pointed star (root)
-            1 => '\u{25CF}', // Filled circle
-            2 => '\u{25C9}', // Fisheye
+            0 => '\u{2736}', // Six-pointed star (root)
+            1 => '\u{25C9}', // Fisheye
+            2 => '\u{25CF}', // Filled circle
             3 => '\u{25CB}', // Circle
             4 => '\u{25E6}', // Small circle
             5 => '\u{2022}', // Bullet
             _ => '\u{00B7}', // Dot
         };
 
-        let cell = &mut buf[(area.x + ix, area.y + iy)];
-        cell.set_char(ch);
-        cell.set_fg(voice_color);
-
         // Halo for loud voices
-        if amp > 0.5 {
-            let halo_chars = ['\u{2591}', '\u{2592}'];
-            let halo_ch = halo_chars[(voice.generation as usize) % 2];
-            let halo_brightness = (amp - 0.5) * 0.4;
+        if amp > 0.3 {
+            let halo_brightness = (0.1 + (amp - 0.3) * 0.6).min(1.0);
             let hr = (cr as f32 * halo_brightness) as u8;
             let hg = (cg as f32 * halo_brightness) as u8;
             let hb = (cb as f32 * halo_brightness) as u8;
-            let halo_color = Color::Rgb(hr.max(20), hg.max(20), hb.max(20));
+            let halo_color = Color::Rgb(hr.max(35), hg.max(35), hb.max(35));
 
-            for &(dx, dy) in &[(-1i16, 0i16), (1, 0), (0, -1), (0, 1)] {
-                let hx = ix as i16 + dx;
-                let hy = iy as i16 + dy;
-                if hx >= 0 && hy >= 0 && (hx as u16) < area.width && (hy as u16) < area.height {
-                    let hcell = &mut buf[(area.x + hx as u16, area.y + hy as u16)];
-                    if hcell.symbol() == " " {
-                        hcell.set_char(halo_ch);
-                        hcell.set_fg(halo_color);
-                    }
-                }
+            // Circular braille halo
+            let halo_radius = 1.8;
+            for step in 0..12 {
+                let angle = step as f64 * std::f64::consts::TAU / 12.0;
+                let hx = vx + angle.cos() * halo_radius * 2.0;
+                let hy = vy + angle.sin() * halo_radius;
+                put_braille(buf, area, hx, hy, halo_color);
             }
         }
+
+        put_cell(buf, area, vx, vy, ch, voice_color);
     }
 
-    // Draw epoch/generation indicator at bottom
-    if area.height > 2 {
-        let info = format!(
-            " gen:{} voices:{} epoch:{} ",
-            snapshot.generation_count,
-            snapshot.voices.len(),
-            snapshot.epoch
-        );
-        let info_x = (area.width as usize).saturating_sub(info.len()) / 2;
-        let info_y = area.height - 1;
-        for (i, ch) in info.chars().enumerate() {
-            let x = info_x + i;
-            if x < area.width as usize {
-                let cell = &mut buf[(area.x + x as u16, area.y + info_y)];
-                cell.set_char(ch);
-                cell.set_fg(Color::Rgb(140, 140, 160));
-            }
-        }
-    }
+    draw_emergence_status(buf, area, snapshot, field_height, color);
 }
 
 /// Map a voice's frequency ratio to a screen position.
-/// Uses a logarithmic radial layout: ratio determines angle, pan determines radius offset.
 fn voice_position(freq_ratio: f32, pan: f32, cx: f64, cy: f64, elapsed: f64) -> (f64, f64) {
-    // Log-frequency determines angular position (octave = half rotation)
-    let angle = (freq_ratio as f64).ln() * 2.5 + elapsed * 0.1;
-    // Radius: pan + a base offset
-    let radius = (0.3 + pan.abs() as f64 * 0.5) * cy * 0.85;
+    let octave = (freq_ratio.max(0.001) as f64).log2();
+    let radius = (0.22 + (octave.abs() / 2.0).min(1.0) * 0.62).min(0.84);
+    let angle =
+        octave * std::f64::consts::TAU * 0.42 + elapsed * 0.08 - std::f64::consts::FRAC_PI_2;
+    let pan_offset = pan.clamp(-1.0, 1.0) as f64 * cx * 0.34;
 
-    let x = cx + radius * angle.cos() * 2.0; // *2 for terminal aspect ratio
-    let y = cy + radius * angle.sin();
+    let x = cx + pan_offset + angle.cos() * cx * 0.48 * radius;
+    let y = cy + angle.sin() * cy * 0.88 * radius;
     (x, y)
+}
+
+fn draw_emergence_status(
+    buf: &mut Buffer,
+    area: Rect,
+    snapshot: &EmergenceSnapshot,
+    field_height: u16,
+    color: Color,
+) {
+    if area.height == 0 {
+        return;
+    }
+
+    let status_y = area.height - 1;
+    let status = format!(
+        " {} e:{:.2} voices:{} gen:{} epoch:{} ",
+        snapshot.spawn_mode.label(),
+        snapshot.total_energy,
+        snapshot.voices.len(),
+        snapshot.generation_count,
+        snapshot.epoch
+    );
+    draw_centered_text(buf, area, status_y, &status, Color::Rgb(140, 140, 160));
+
+    if snapshot.spawn_mode == SpawnMode::Penrose && field_height + 1 < area.height {
+        let ribbon: String = snapshot
+            .recent_tiles
+            .iter()
+            .map(|tile| match tile {
+                Tile::Long => 'L',
+                Tile::Short => 'S',
+            })
+            .collect();
+        if !ribbon.is_empty() {
+            let text = format!(" worm:{} {ribbon} ", snapshot.walk_position);
+            draw_centered_text(buf, area, field_height, &text, dim_rgb(color, 0.62));
+        }
+    }
 }
 
 /// Check if a ratio is near a simple harmonic fraction.
 fn is_near_simple_ratio(ratio: f32) -> bool {
-    let simple = [1.0, 1.5, 2.0, 1.333, 1.25, 1.618, 0.667, 0.75];
-    simple.iter().any(|&r| (ratio - r).abs() < 0.15)
+    crate::emergence::consonance_score(ratio as f64) > 0.4
 }
 
 fn put_cell(buf: &mut Buffer, area: Rect, x: f64, y: f64, ch: char, color: Color) {
@@ -612,36 +711,103 @@ fn draw_text(buf: &mut Buffer, area: Rect, x: f64, y: f64, text: &str, color: Co
     }
 }
 
-/// Draw a line between two points using a character.
-fn draw_line(
-    buf: &mut Buffer,
-    area: Rect,
-    from: (f64, f64),
-    to: (f64, f64),
-    ch: char,
-    color: Color,
-) {
+fn draw_centered_text(buf: &mut Buffer, area: Rect, y: u16, text: &str, color: Color) {
+    if y >= area.height || area.width == 0 {
+        return;
+    }
+
+    let width = area.width as usize;
+    let text_len = text.chars().count();
+    let skip = text_len.saturating_sub(width);
+    let visible_len = text_len.min(width);
+    let start_x = (width - visible_len) / 2;
+
+    for (offset, ch) in text.chars().skip(skip).take(width).enumerate() {
+        let x = start_x + offset;
+        if x >= width {
+            break;
+        }
+        let cell = &mut buf[(area.x + x as u16, area.y + y)];
+        cell.set_char(ch);
+        cell.set_fg(color);
+    }
+}
+
+fn dim_rgb(color: Color, factor: f32) -> Color {
+    match color {
+        Color::Rgb(red, green, blue) => Color::Rgb(
+            (red as f32 * factor).clamp(0.0, 255.0) as u8,
+            (green as f32 * factor).clamp(0.0, 255.0) as u8,
+            (blue as f32 * factor).clamp(0.0, 255.0) as u8,
+        ),
+        other => other,
+    }
+}
+
+/// Sub-cell braille drawing for smooth, jitter-free lines and curves.
+fn put_braille(buf: &mut Buffer, area: Rect, x: f64, y: f64, color: Color) {
+    let dot_x = (x * 2.0).round() as isize;
+    let dot_y = (y * 4.0).round() as isize;
+    if dot_x < 0 || dot_y < 0 {
+        return;
+    }
+    let cx = (dot_x / 2) as u16;
+    let cy = (dot_y / 4) as u16;
+    if cx >= area.width || cy >= area.height {
+        return;
+    }
+
+    let bx = dot_x % 2;
+    let by = dot_y % 4;
+    let bit = match (bx, by) {
+        (0, 0) => 0x01,
+        (1, 0) => 0x08,
+        (0, 1) => 0x02,
+        (1, 1) => 0x10,
+        (0, 2) => 0x04,
+        (1, 2) => 0x20,
+        (0, 3) => 0x40,
+        (1, 3) => 0x80,
+        _ => 0,
+    };
+
+    let cell = &mut buf[(area.x + cx, area.y + cy)];
+    let current = cell.symbol();
+    let mut code = 0;
+    if current.chars().count() == 1 {
+        let c = current.chars().next().unwrap();
+        if c as u32 >= 0x2800 && c as u32 <= 0x28FF {
+            code = (c as u32) - 0x2800;
+        } else if !is_braille_backdrop(c) {
+            return;
+        }
+    }
+    code |= bit;
+    cell.set_char(char::from_u32(0x2800 + code).unwrap_or(' '));
+    cell.set_fg(color);
+}
+
+fn is_braille_backdrop(ch: char) -> bool {
+    matches!(ch, ' ' | '\u{00B7}' | '\u{2219}')
+}
+
+/// Draw a straight line using braille sub-cell resolution.
+fn draw_line_braille(buf: &mut Buffer, area: Rect, from: (f64, f64), to: (f64, f64), color: Color) {
     let (x1, y1) = from;
     let (x2, y2) = to;
     let dx = x2 - x1;
     let dy = y2 - y1;
-    let steps = (dx.abs().max(dy.abs())) as usize;
+    let steps = ((dx * 2.0).abs().max((dy * 4.0).abs())) as usize;
     if steps == 0 {
         return;
     }
 
-    let steps = steps.min(40); // Cap to avoid excessive iteration
+    let steps = steps.min(400); // safety cap
     for s in 0..=steps {
         let t = s as f64 / steps as f64;
-        let x = (x1 + dx * t) as u16;
-        let y = (y1 + dy * t) as u16;
-        if x < area.width && y < area.height {
-            let cell = &mut buf[(area.x + x, area.y + y)];
-            if cell.symbol() == " " {
-                cell.set_char(ch);
-                cell.set_fg(color);
-            }
-        }
+        let x = x1 + dx * t;
+        let y = y1 + dy * t;
+        put_braille(buf, area, x, y, color);
     }
 }
 
@@ -649,5 +815,39 @@ fn rgb_from_color(color: Color) -> (u8, u8, u8) {
     match color {
         Color::Rgb(r, g, b) => (r, g, b),
         _ => (128, 128, 128),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::harmonic_partial_levels;
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1.0e-12,
+            "actual {actual} expected {expected}"
+        );
+    }
+
+    #[test]
+    fn zero_warmth_leaves_only_the_fundamental() {
+        let levels = harmonic_partial_levels(0.0, [0.5, 0.25, 0.125, 0.0625, 0.03125]);
+
+        assert_close(levels[0], 1.0);
+        for level in &levels[1..] {
+            assert_close(*level, 0.0);
+        }
+    }
+
+    #[test]
+    fn partial_levels_match_audio_mixer_normalization() {
+        let weights = [0.5, 0.25, 0.125, 0.0625, 0.03125];
+        let levels = harmonic_partial_levels(1.0, weights);
+        let norm = 1.0 + weights.iter().sum::<f64>();
+
+        assert_close(levels[0], 1.0 / norm);
+        for (idx, weight) in weights.iter().enumerate() {
+            assert_close(levels[idx + 1], weight / norm);
+        }
     }
 }

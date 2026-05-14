@@ -25,13 +25,14 @@ const MAX_VOICES: usize = 12;
 /// a perfect match scores `peak_score`, partial matches drop linearly within
 /// a 0.1 log-distance neighborhood.
 pub const CONSONANCE_RATIOS: &[(f64, f64)] = &[
-    (1.0, 1.0),         // Unison
-    (2.0, 0.95),        // Octave
-    (3.0 / 2.0, 0.9),   // Fifth
-    (4.0 / 3.0, 0.85),  // Fourth
-    (5.0 / 4.0, 0.8),   // Major third
-    (6.0 / 5.0, 0.75),  // Minor third
-    (PHI, 0.7),         // Golden (special)
+    (1.0, 1.0),        // Unison
+    (2.0, 0.95),       // Octave
+    (3.0 / 2.0, 0.9),  // Fifth
+    (4.0 / 3.0, 0.85), // Fourth
+    (5.0 / 4.0, 0.8),  // Major third
+    (6.0 / 5.0, 0.75), // Minor third
+    (PHI, 0.7),        // Golden (special)
+    (PHI * PHI, 0.65), // Golden squared
 ];
 
 /// Score how consonant a frequency ratio is (0.0 = dissonant, 1.0 = perfect).
@@ -40,10 +41,16 @@ pub const CONSONANCE_RATIOS: &[(f64, f64)] = &[
 /// half-width 0.1 in log-ratio space; the highest contribution wins. Used by
 /// the audio engine to weight voice lifetime, and by the Knowledge-tab
 /// playground to plot the landscape — single source of truth for both.
-pub fn consonance_score(ratio: f64) -> f64 {
+pub fn consonance_score(mut ratio: f64) -> f64 {
+    if !ratio.is_finite() || ratio <= 0.0 {
+        return 0.0;
+    }
+    if ratio < 1.0 {
+        ratio = 1.0 / ratio; // Treat sub-harmonics symmetrically
+    }
     let mut best_score = 0.0;
     for &(r, score) in CONSONANCE_RATIOS {
-        let distance = ((ratio / r).ln()).abs();
+        let distance = consonance_distance(ratio, r);
         if distance < 0.1 {
             let proximity = 1.0 - (distance / 0.1);
             let s = score * proximity;
@@ -53,6 +60,16 @@ pub fn consonance_score(ratio: f64) -> f64 {
         }
     }
     best_score
+}
+
+fn consonance_distance(ratio: f64, target: f64) -> f64 {
+    let diff = (ratio / target).ln();
+    if target == 1.0 {
+        diff.abs()
+    } else {
+        let octave = (diff / std::f64::consts::LN_2).round();
+        (diff - octave * std::f64::consts::LN_2).abs()
+    }
 }
 
 /// Harmonic ratios that voices can spawn at (just intonation + golden)
@@ -221,6 +238,17 @@ impl EmergenceEngine {
         engine
     }
 
+    pub fn reset(&mut self) {
+        self.voices.clear();
+        self.time = 0.0;
+        self.spawn_timer = 0.0;
+        self.epoch = 0;
+        self.canon_position = 0;
+        self.canon_offset = 1.0;
+        self.penrose_walk = PenroseWalk::new();
+        self.voices.push(Voice::new(1.0, 8.0, 0, 0.0));
+    }
+
     pub fn set_spawn_mode(&mut self, mode: SpawnMode) {
         self.spawn_mode = mode;
     }
@@ -237,7 +265,13 @@ impl EmergenceEngine {
     }
 
     /// Advance the engine by one sample period and return (left, right) contribution.
-    pub fn process(&mut self, base_freq: f64, intensity: f64) -> (f64, f64) {
+    pub fn process(
+        &mut self,
+        base_freq: f64,
+        intensity: f64,
+        harm_weights: &[f64; 5],
+        harm_intensity: f64,
+    ) -> (f64, f64) {
         let dt = 1.0 / self.sample_rate;
         self.time += dt;
         self.spawn_timer += dt;
@@ -272,10 +306,22 @@ impl EmergenceEngine {
             voice.phase += freq / self.sample_rate;
             voice.phase -= voice.phase.floor();
 
-            // Slightly warm tone (fundamental + soft 2nd harmonic)
-            let sample = (TAU * voice.phase).sin()
-                + 0.2 * (TAU * voice.phase * 2.0).sin()
-                + 0.05 * (TAU * voice.phase * 3.0).sin();
+            // Dynamic timbre matching the carrier wave
+            let mut sample = (TAU * voice.phase).sin();
+            if harm_intensity > 0.01 {
+                let mut total_weight = 0.0;
+                for i in 0..5 {
+                    let weight = harm_weights[i];
+                    if weight < 0.001 {
+                        continue;
+                    }
+                    let mult = (i + 2) as f64;
+                    sample += (TAU * voice.phase * mult).sin() * weight * harm_intensity;
+                    total_weight += weight;
+                }
+                let norm = 1.0 + harm_intensity * total_weight;
+                sample /= norm;
+            }
 
             let amp = voice.amplitude * 0.15; // Scale down - these are background voices
 
@@ -323,7 +369,15 @@ impl EmergenceEngine {
 
         self.epoch += 1;
 
-        // Choose the base ratio according to the active spawn mode.
+        let (parent_ratio, parent_gen) = self
+            .voices
+            .iter()
+            .filter(|voice| voice.is_alive())
+            .max_by(|a, b| a.amplitude.total_cmp(&b.amplitude))
+            .map(|voice| (voice.freq_ratio, voice.generation))
+            .unwrap_or((1.0, 0));
+
+        // Choose the interval according to the active spawn mode.
         let base_ratio = match self.spawn_mode {
             SpawnMode::Canon => {
                 let idx = self.canon_pattern[self.canon_position % self.canon_pattern.len()];
@@ -346,25 +400,20 @@ impl EmergenceEngine {
             self.canon_offset = SPAWN_RATIOS[(self.epoch as usize / 8) % SPAWN_RATIOS.len()];
         }
 
-        // Apply canon offset and slight random mutation
+        // Apply canon offset and slight random mutation. The resulting interval
+        // is attached to the strongest current voice, so generations are
+        // audible parent-child branches rather than labels only.
         let mutation = 1.0 + (self.xorshift() - 0.5) * 0.02 * intensity;
-        let final_ratio = base_ratio * self.canon_offset * mutation;
+        let interval = base_ratio * self.canon_offset * mutation;
+        let final_ratio = fold_voice_ratio(parent_ratio * interval);
 
-        // Clamp to musically useful range (0.25x to 4x base)
-        let final_ratio = final_ratio.clamp(0.25, 4.0);
-
-        // Lifetime varies: longer for consonant ratios, shorter for dissonant
-        let consonance = self.consonance_score(final_ratio);
+        // Lifetime varies with the interval from parent to child: longer for
+        // consonant relationships, shorter for dissonant ones.
+        let realized_interval = final_ratio / parent_ratio;
+        let consonance = self.consonance_score(realized_interval);
         let base_lifetime = 4.0 + consonance * 8.0; // 4-12 seconds
         let lifetime = base_lifetime * (0.8 + self.xorshift() * 0.4);
 
-        // Generation: child of the strongest current voice
-        let parent_gen = self
-            .voices
-            .iter()
-            .max_by(|a, b| a.amplitude.partial_cmp(&b.amplitude).unwrap())
-            .map(|v| v.generation)
-            .unwrap_or(0);
         let generation = parent_gen.saturating_add(1).min(7);
 
         // Pan: spread voices across the stereo field
@@ -385,11 +434,11 @@ impl EmergenceEngine {
         let voices: Vec<VoiceInfo> = self
             .voices
             .iter()
-            .filter(|v| v.is_alive() && v.amplitude > 0.001)
+            .filter(|v| v.is_alive())
             .map(|v| VoiceInfo {
                 freq_ratio: v.freq_ratio as f32,
                 amplitude: v.amplitude as f32,
-                age_normalized: (v.age / v.lifetime) as f32,
+                age_normalized: (v.age / v.lifetime).clamp(0.0, 1.0) as f32,
                 generation: v.generation,
                 pan: v.pan as f32,
             })
@@ -413,5 +462,92 @@ impl EmergenceEngine {
             recent_tiles,
             walk_position: self.penrose_walk.position(),
         }
+    }
+}
+
+fn fold_voice_ratio(mut ratio: f64) -> f64 {
+    if !ratio.is_finite() || ratio <= 0.0 {
+        return 1.0;
+    }
+
+    while ratio < 0.25 {
+        ratio *= 2.0;
+    }
+    while ratio > 4.0 {
+        ratio *= 0.5;
+    }
+
+    ratio.clamp(0.25, 4.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1.0e-9,
+            "actual {actual} expected {expected}"
+        );
+    }
+
+    #[test]
+    fn consonance_score_handles_inversions_and_invalid_ratios() {
+        assert_close(consonance_score(2.0 / 3.0), consonance_score(3.0 / 2.0));
+        assert_close(consonance_score(0.5), consonance_score(2.0));
+        assert_eq!(consonance_score(0.0), 0.0);
+        assert_eq!(consonance_score(-1.0), 0.0);
+    }
+
+    #[test]
+    fn consonance_score_respects_octave_equivalent_intervals() {
+        assert_close(consonance_score(3.0), consonance_score(3.0 / 2.0));
+        assert_close(consonance_score(4.0), consonance_score(2.0));
+    }
+
+    #[test]
+    fn spawned_voice_uses_strongest_parent_ratio() {
+        let mut engine = EmergenceEngine::new(100.0);
+        engine.voices.clear();
+        engine.voices.push(Voice {
+            freq_ratio: 2.0,
+            amplitude: 1.0,
+            phase: 0.0,
+            age: 1.0,
+            lifetime: 10.0,
+            generation: 2,
+            pan: 0.0,
+            alive: true,
+        });
+        engine.canon_pattern = vec![7]; // 3:2 above the parent
+
+        engine.try_spawn(0.0);
+
+        let spawned = engine.voices.last().expect("voice should spawn");
+        assert_close(spawned.freq_ratio, 3.0);
+        assert_eq!(spawned.generation, 3);
+    }
+
+    #[test]
+    fn reset_returns_engine_to_single_root_voice() {
+        let mut engine = EmergenceEngine::new(100.0);
+        engine.try_spawn(0.0);
+        assert!(engine.voices.len() > 1);
+
+        engine.reset();
+
+        assert_eq!(engine.epoch, 0);
+        assert_eq!(engine.canon_position, 0);
+        assert_eq!(engine.voices.len(), 1);
+        assert_close(engine.voices[0].freq_ratio, 1.0);
+        assert_eq!(engine.snapshot().voices.len(), 1);
+    }
+
+    #[test]
+    fn fold_voice_ratio_wraps_by_octave_instead_of_hard_clamping() {
+        assert_close(fold_voice_ratio(8.0), 4.0);
+        assert_close(fold_voice_ratio(6.0), 3.0);
+        assert_close(fold_voice_ratio(0.125), 0.25);
+        assert_close(fold_voice_ratio(0.1875), 0.375);
     }
 }

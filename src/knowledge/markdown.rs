@@ -4,8 +4,11 @@
 //! - ATX headers `#`, `##`, `###`
 //! - Bold `**x**`, italic `*x*`, inline code `` `x` ``
 //! - Bullet lists with `- ` (single level)
+//! - Numbered lists like `1. item`
 //! - Blockquotes `> `
 //! - Fenced code blocks ` ``` `
+//! - Horizontal rules `---`
+//! - Inline links `[label](target)` rendered as emphasized labels
 //! - Blank-line paragraphs
 //!
 //! Anything fancier than that simply renders as plain text. We control all
@@ -33,8 +36,10 @@ enum Block<'a> {
     H3(&'a str),
     Paragraph(Vec<&'a str>),
     Bullet(&'a str),
+    Numbered(usize, &'a str),
     Quote(&'a str),
     Code(Vec<&'a str>),
+    Rule,
     Blank,
 }
 
@@ -74,7 +79,12 @@ fn block_lines(input: &str) -> Vec<Block<'_>> {
             continue;
         }
 
-        if let Some(rest) = trimmed.strip_prefix("### ") {
+        if trimmed == "---" || trimmed == "***" {
+            if !paragraph.is_empty() {
+                blocks.push(Block::Paragraph(std::mem::take(&mut paragraph)));
+            }
+            blocks.push(Block::Rule);
+        } else if let Some(rest) = trimmed.strip_prefix("### ") {
             if !paragraph.is_empty() {
                 blocks.push(Block::Paragraph(std::mem::take(&mut paragraph)));
             }
@@ -94,6 +104,11 @@ fn block_lines(input: &str) -> Vec<Block<'_>> {
                 blocks.push(Block::Paragraph(std::mem::take(&mut paragraph)));
             }
             blocks.push(Block::Bullet(rest));
+        } else if let Some((number, rest)) = numbered_item(trimmed) {
+            if !paragraph.is_empty() {
+                blocks.push(Block::Paragraph(std::mem::take(&mut paragraph)));
+            }
+            blocks.push(Block::Numbered(number, rest));
         } else if let Some(rest) = trimmed.strip_prefix("> ") {
             if !paragraph.is_empty() {
                 blocks.push(Block::Paragraph(std::mem::take(&mut paragraph)));
@@ -112,6 +127,15 @@ fn block_lines(input: &str) -> Vec<Block<'_>> {
     }
 
     blocks
+}
+
+fn numbered_item(line: &str) -> Option<(usize, &str)> {
+    let dot = line.find(". ")?;
+    if dot == 0 || !line[..dot].bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let number = line[..dot].parse().ok()?;
+    Some((number, &line[dot + 2..]))
 }
 
 /// Parse and render `input` into ratatui Lines. Each Line carries a `bg`
@@ -181,6 +205,18 @@ pub fn render(input: &str, theme: MdStyle) -> Vec<Line<'static>> {
                 ));
                 prev_blank = false;
             }
+            Block::Numbered(number, text) => {
+                lines.push(inline_line(
+                    text,
+                    &theme,
+                    theme.body,
+                    &[Span::styled(
+                        format!("  {number}. "),
+                        Style::default().fg(theme.accent).bg(theme.bg),
+                    )],
+                ));
+                prev_blank = false;
+            }
             Block::Quote(text) => {
                 lines.push(inline_line(
                     text,
@@ -205,6 +241,13 @@ pub fn render(input: &str, theme: MdStyle) -> Vec<Line<'static>> {
                 }
                 prev_blank = false;
             }
+            Block::Rule => {
+                lines.push(Line::from(vec![Span::styled(
+                    "\u{2500}".repeat(60),
+                    Style::default().fg(theme.dim).bg(theme.bg),
+                )]));
+                prev_blank = false;
+            }
             Block::Blank => {
                 lines.push(blank(theme.bg));
                 prev_blank = true;
@@ -219,7 +262,12 @@ fn blank(bg: Color) -> Line<'static> {
     Line::from(vec![Span::styled("", Style::default().bg(bg))])
 }
 
-fn inline_line(text: &str, theme: &MdStyle, body: Color, prefix: &[Span<'static>]) -> Line<'static> {
+fn inline_line(
+    text: &str,
+    theme: &MdStyle,
+    body: Color,
+    prefix: &[Span<'static>],
+) -> Line<'static> {
     let mut spans: Vec<Span<'static>> = prefix.to_vec();
     let body_style = Style::default().fg(body).bg(theme.bg);
     let bold_style = Style::default()
@@ -234,6 +282,10 @@ fn inline_line(text: &str, theme: &MdStyle, body: Color, prefix: &[Span<'static>
         .fg(theme.code)
         .bg(theme.bg)
         .add_modifier(Modifier::BOLD);
+    let link_style = Style::default()
+        .fg(theme.accent)
+        .bg(theme.bg)
+        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
 
     let bytes = text.as_bytes();
     let mut i = 0;
@@ -299,6 +351,18 @@ fn inline_line(text: &str, theme: &MdStyle, body: Color, prefix: &[Span<'static>
                 break;
             }
         }
+        // Inline link: [label](target). The terminal reader does not navigate
+        // article links yet, but labels should still read as references.
+        if bytes[i] == b'[' {
+            if let Some((label, next)) = parse_link(text, i) {
+                if !buf.is_empty() {
+                    spans.push(Span::styled(std::mem::take(&mut buf), body_style));
+                }
+                spans.push(Span::styled(label, link_style));
+                i = next;
+                continue;
+            }
+        }
         // Take a codepoint at a time so we don't slice across a multi-byte char.
         let ch_len = utf8_char_len(bytes[i]);
         if let Ok(s) = std::str::from_utf8(&bytes[i..i + ch_len]) {
@@ -314,11 +378,33 @@ fn inline_line(text: &str, theme: &MdStyle, body: Color, prefix: &[Span<'static>
     Line::from(spans)
 }
 
+fn parse_link(text: &str, start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut close_label = start + 1;
+    while close_label < bytes.len() && bytes[close_label] != b']' {
+        close_label += 1;
+    }
+    if close_label + 1 >= bytes.len() || bytes[close_label + 1] != b'(' {
+        return None;
+    }
+
+    let mut close_target = close_label + 2;
+    while close_target < bytes.len() && bytes[close_target] != b')' {
+        close_target += 1;
+    }
+    if close_target >= bytes.len() {
+        return None;
+    }
+
+    let label = std::str::from_utf8(&bytes[start + 1..close_label])
+        .ok()?
+        .to_string();
+    Some((label, close_target + 1))
+}
+
 fn utf8_char_len(byte: u8) -> usize {
-    if byte < 0x80 {
-        1
-    } else if byte < 0xC0 {
-        1 // continuation byte we shouldn't normally hit here; fail safe
+    if byte < 0xC0 {
+        1 // ASCII or continuation byte (fail safe)
     } else if byte < 0xE0 {
         2
     } else if byte < 0xF0 {
@@ -359,6 +445,19 @@ mod tests {
     }
 
     #[test]
+    fn parses_numbered_list_and_rule() {
+        let blocks = block_lines("1. one\n2. two\n---\n");
+        assert_eq!(
+            blocks,
+            vec![
+                Block::Numbered(1, "one"),
+                Block::Numbered(2, "two"),
+                Block::Rule
+            ]
+        );
+    }
+
+    #[test]
     fn parses_blockquote() {
         let blocks = block_lines("> quote\n");
         assert_eq!(blocks, vec![Block::Quote("quote")]);
@@ -367,10 +466,7 @@ mod tests {
     #[test]
     fn parses_fenced_code() {
         let blocks = block_lines("```\nlet x = 1;\nlet y = 2;\n```\n");
-        assert_eq!(
-            blocks,
-            vec![Block::Code(vec!["let x = 1;", "let y = 2;"])]
-        );
+        assert_eq!(blocks, vec![Block::Code(vec!["let x = 1;", "let y = 2;"])]);
     }
 
     #[test]
@@ -388,7 +484,7 @@ mod tests {
 
     #[test]
     fn renders_inline_bold_italic_code() {
-        let lines = render("hello **bold** *ital* `code` end", theme());
+        let lines = render("hello **bold** *ital* `code` [link](target) end", theme());
         assert_eq!(lines.len(), 1);
         // The line is a sequence of styled spans; just check that each piece survived.
         let joined: String = lines[0]
@@ -401,6 +497,8 @@ mod tests {
         assert!(joined.contains("bold"));
         assert!(joined.contains("ital"));
         assert!(joined.contains("code"));
+        assert!(joined.contains("link"));
+        assert!(!joined.contains("target"));
         assert!(joined.contains("end"));
     }
 
@@ -411,6 +509,14 @@ mod tests {
             assert!(
                 !lines.is_empty(),
                 "article '{}' produced no lines",
+                article.slug
+            );
+        }
+        for article in crate::knowledge::content::MICROTUBE_ARTICLES {
+            let lines = render(article.body, theme());
+            assert!(
+                !lines.is_empty(),
+                "microtube article '{}' produced no lines",
                 article.slug
             );
         }

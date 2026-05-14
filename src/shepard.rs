@@ -189,7 +189,7 @@ mod tests {
             let _ = engine.process(Direction::Down, 1.0);
         }
         for &x in engine.log_offsets.iter() {
-            assert!(x >= 0.0 && x < RANGE_OCTAVES);
+            assert!((0.0..RANGE_OCTAVES).contains(&x));
         }
     }
 
