@@ -14,16 +14,16 @@ use crate::visualization::{
     render_spectrum_bars,
 };
 
-const BG_TOP: Color = Color::Rgb(5, 7, 14);
-const BG_MID: Color = Color::Rgb(12, 14, 28);
-const BG_BOTTOM: Color = Color::Rgb(4, 10, 18);
-const PANEL_BG: Color = Color::Rgb(9, 12, 22);
-const PANEL_ALT: Color = Color::Rgb(13, 17, 29);
+const BG_TOP: Color = Color::Rgb(18, 20, 23);
+const BG_MID: Color = Color::Rgb(24, 27, 32);
+const BG_BOTTOM: Color = Color::Rgb(16, 18, 21);
+const PANEL_BG: Color = Color::Rgb(22, 24, 28);
+const PANEL_ALT: Color = Color::Rgb(28, 31, 36);
 const DIM: Color = Color::Rgb(138, 146, 168);
 const SOFT: Color = Color::Rgb(178, 184, 204);
 const BRIGHT: Color = Color::Rgb(236, 240, 248);
 const BORDER: Color = Color::Rgb(88, 98, 128);
-const SHADOW: Color = Color::Rgb(2, 4, 8);
+const SHADOW: Color = Color::Rgb(10, 11, 13);
 
 struct MeterSpec {
     param: ActiveParam,
