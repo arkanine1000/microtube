@@ -25,6 +25,7 @@ const SOFT: Color = Color::Rgb(178, 184, 204);
 const BRIGHT: Color = Color::Rgb(236, 240, 248);
 const BORDER: Color = Color::Rgb(88, 98, 128);
 const SHADOW: Color = Color::Rgb(10, 11, 13);
+const METER_LINE_FIXED_WIDTH: usize = 20;
 
 struct MeterSpec {
     param: ActiveParam,
@@ -419,7 +420,7 @@ fn draw_parameter_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, bor
         },
     ];
 
-    let meter_width = inner.width.saturating_sub(24).clamp(5, 18) as usize;
+    let meter_width = parameter_meter_width(inner.width);
     let rows: Vec<Line> = specs
         .into_iter()
         .map(|spec| meter_line(spec, app.active_param, meter_width))
@@ -935,6 +936,12 @@ fn meter_line(spec: MeterSpec, active: ActiveParam, width: usize) -> Line<'stati
     Line::from(spans)
 }
 
+fn parameter_meter_width(panel_width: u16) -> usize {
+    (panel_width as usize)
+        .saturating_sub(METER_LINE_FIXED_WIDTH)
+        .max(1)
+}
+
 fn shepard_base_ratio(freq: f32) -> f32 {
     let min = MIN_BASE_FREQ_HZ as f32;
     let max = MAX_BASE_FREQ_HZ as f32;
@@ -1171,7 +1178,7 @@ fn rgb_from_color(color: Color) -> (u8, u8, u8) {
 
 #[cfg(test)]
 mod tests {
-    use super::spectral_band_index;
+    use super::*;
 
     #[test]
     fn spectral_band_index_matches_frequency_thresholds() {
@@ -1191,5 +1198,25 @@ mod tests {
         for (frequency, expected) in cases {
             assert_eq!(spectral_band_index(frequency), expected);
         }
+    }
+
+    #[test]
+    fn parameter_meter_line_fills_available_width() {
+        let width = 42;
+        let meter_width = parameter_meter_width(width);
+        let line = meter_line(
+            MeterSpec {
+                param: ActiveParam::Volume,
+                label: "gain",
+                value: " 50%".to_string(),
+                ratio: 0.5,
+                color: Color::Rgb(84, 240, 150),
+            },
+            ActiveParam::Volume,
+            meter_width,
+        );
+
+        assert_eq!(meter_width, width as usize - METER_LINE_FIXED_WIDTH);
+        assert_eq!(line.width(), width as usize);
     }
 }
