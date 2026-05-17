@@ -895,6 +895,8 @@ dependencies = [
  "cpal",
  "crossterm",
  "ratatui",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

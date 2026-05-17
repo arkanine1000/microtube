@@ -4,6 +4,7 @@ mod app;
 mod audio;
 mod emergence;
 mod knowledge;
+mod local_presets;
 mod penrose;
 mod presets;
 mod shepard;
@@ -24,7 +25,7 @@ use ratatui::backend::CrosstermBackend;
 use app::{App, AppMode, AudioParams, Tab, VizBuffer};
 use audio::AudioEngine;
 use emergence::EmergenceSnapshot;
-use presets::{PRESETS, SEQUENCES};
+use presets::SEQUENCES;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !io::IsTerminal::is_terminal(&io::stdout()) {
@@ -125,8 +126,9 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     match app.tab {
         Tab::Studio => match app.mode {
             AppMode::Normal => handle_normal(app, code),
-            AppMode::PresetSelect => handle_menu(app, code, PRESETS.len(), true),
-            AppMode::SequenceSelect => handle_menu(app, code, SEQUENCES.len(), false),
+            AppMode::PresetSelect => handle_preset_menu(app, code),
+            AppMode::SequenceSelect => handle_sequence_menu(app, code),
+            AppMode::PresetName => handle_preset_name(app, code),
             AppMode::Help => {
                 app.mode = AppMode::Normal;
             }
@@ -157,29 +159,23 @@ fn handle_normal(app: &mut App, code: KeyCode) {
         // Menus
         KeyCode::Char('p') => {
             app.mode = AppMode::PresetSelect;
-            app.menu_index = app.current_preset.unwrap_or(0);
+            app.menu_index = app.preset_menu_index();
         }
         KeyCode::Char('s') => {
             app.mode = AppMode::SequenceSelect;
             app.menu_index = app.current_sequence.unwrap_or(0);
         }
+        KeyCode::Char('S') => app.begin_preset_save(),
 
         // Viz
-        KeyCode::Char('v') => app.viz_mode = app.viz_mode.next(),
-        KeyCode::Char('V') => app.viz_mode = app.viz_mode.prev(),
+        KeyCode::Char('v') => app.next_viz_mode(),
+        KeyCode::Char('V') => app.prev_viz_mode(),
 
         // Emergence toggle
         KeyCode::Char('e') => app.toggle_emergence(),
 
         // Noise toggle
-        KeyCode::Char('n') => {
-            let current = app.params.get_noise_level();
-            if current > 0.01 {
-                app.params.set_noise_level(0.0);
-            } else {
-                app.params.set_noise_level(0.15);
-            }
-        }
+        KeyCode::Char('n') => app.toggle_noise(),
         KeyCode::Char('m') => app.cycle_mist_type(),
         KeyCode::Char('t') => app.cycle_timbre(),
         KeyCode::Char('g') => app.toggle_spawn_mode(),
@@ -199,7 +195,8 @@ fn handle_normal(app: &mut App, code: KeyCode) {
     }
 }
 
-fn handle_menu(app: &mut App, code: KeyCode, len: usize, is_preset: bool) {
+fn handle_preset_menu(app: &mut App, code: KeyCode) {
+    let len = app.total_preset_count();
     match code {
         KeyCode::Esc | KeyCode::Char('q') => app.mode = AppMode::Normal,
 
@@ -217,26 +214,71 @@ fn handle_menu(app: &mut App, code: KeyCode, len: usize, is_preset: bool) {
         KeyCode::Char('G') => app.menu_index = len - 1,
 
         KeyCode::Enter | KeyCode::Char('l') => {
-            if is_preset {
-                app.apply_preset(app.menu_index);
-            } else {
-                app.start_sequence(app.menu_index);
+            app.apply_preset_menu_index(app.menu_index);
+            app.mode = AppMode::Normal;
+        }
+
+        KeyCode::Char('d') => {
+            app.delete_preset_menu_index(app.menu_index);
+        }
+
+        KeyCode::Char(c @ '1'..='9') => {
+            let idx = (c as usize) - ('1' as usize);
+            if idx < len {
+                app.apply_preset_menu_index(idx);
+                app.mode = AppMode::Normal;
             }
+        }
+
+        _ => {}
+    }
+}
+
+fn handle_sequence_menu(app: &mut App, code: KeyCode) {
+    let len = SEQUENCES.len();
+    match code {
+        KeyCode::Esc | KeyCode::Char('q') => app.mode = AppMode::Normal,
+
+        KeyCode::Char('j') | KeyCode::Down => {
+            if app.menu_index < len - 1 {
+                app.menu_index += 1;
+            }
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if app.menu_index > 0 {
+                app.menu_index -= 1;
+            }
+        }
+        KeyCode::Char('g') => app.menu_index = 0,
+        KeyCode::Char('G') => app.menu_index = len - 1,
+
+        KeyCode::Enter | KeyCode::Char('l') => {
+            app.start_sequence(app.menu_index);
             app.mode = AppMode::Normal;
         }
 
         KeyCode::Char(c @ '1'..='9') => {
             let idx = (c as usize) - ('1' as usize);
             if idx < len {
-                if is_preset {
-                    app.apply_preset(idx);
-                } else {
-                    app.start_sequence(idx);
-                }
+                app.start_sequence(idx);
                 app.mode = AppMode::Normal;
             }
         }
 
+        _ => {}
+    }
+}
+
+fn handle_preset_name(app: &mut App, code: KeyCode) {
+    match code {
+        KeyCode::Esc => app.cancel_preset_save(),
+        KeyCode::Enter => app.finish_preset_save(),
+        KeyCode::Backspace => {
+            app.preset_name_input.pop();
+        }
+        KeyCode::Char(c) if !c.is_control() && app.preset_name_input.len() < 48 => {
+            app.preset_name_input.push(c);
+        }
         _ => {}
     }
 }

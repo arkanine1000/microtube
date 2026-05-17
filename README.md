@@ -144,6 +144,7 @@ src/
 ├── app.rs             Application state, lock-free AudioParams
 ├── audio.rs           cpal stream, synthesis, emergence integration
 ├── emergence.rs       Generative voice engine (canon + cellular rules)
+├── local_presets.rs   User preset persistence
 ├── presets.rs         Brainwave presets and timed sequences
 ├── ui.rs              ratatui layout and widget composition
 ├── penrose.rs         Fibonacci-word walk (Penrose P3 Conway worm)

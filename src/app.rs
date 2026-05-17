@@ -1,9 +1,11 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use std::{io, path::PathBuf};
 
 use crate::emergence::{EmergenceSnapshot, SpawnMode};
 use crate::knowledge::KnowledgeState;
+use crate::local_presets::{self, LocalPreset};
 use crate::presets::{PRESETS, SEQUENCES, SequenceStep};
 use crate::shepard::{DEFAULT_BASE_FREQ_HZ, Direction, MAX_BASE_FREQ_HZ, MIN_BASE_FREQ_HZ};
 
@@ -174,7 +176,7 @@ impl AudioParams {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Timbre {
     Organ = 0,
     Flute = 1,
@@ -313,7 +315,14 @@ pub enum AppMode {
     Normal,
     PresetSelect,
     SequenceSelect,
+    PresetName,
     Help,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PresetSelection {
+    BuiltIn(usize),
+    Local(usize),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -423,11 +432,15 @@ pub struct App {
     pub mode: AppMode,
     pub active_param: ActiveParam,
     pub viz_mode: VizMode,
-    pub current_preset: Option<usize>,
+    pub current_preset: Option<PresetSelection>,
+    pub local_presets: Vec<LocalPreset>,
     pub current_sequence: Option<usize>,
     pub sequence_start: Option<Instant>,
     pub should_quit: bool,
     pub menu_index: usize,
+    pub preset_name_input: String,
+    pub preset_storage_path: Option<PathBuf>,
+    pub status_message: Option<String>,
     pub spectrum_bars: Vec<f32>,
     pub start_time: Instant,
     pub frame_count: u64,
@@ -439,6 +452,27 @@ impl App {
         viz_buffer: Arc<Mutex<VizBuffer>>,
         emergence_snapshot: Arc<Mutex<EmergenceSnapshot>>,
     ) -> Self {
+        let preset_storage_path = local_presets::default_path();
+        let loaded_local_presets = preset_storage_path
+            .as_deref()
+            .map(local_presets::load)
+            .unwrap_or_default();
+        Self::with_local_presets(
+            params,
+            viz_buffer,
+            emergence_snapshot,
+            loaded_local_presets,
+            preset_storage_path,
+        )
+    }
+
+    fn with_local_presets(
+        params: Arc<AudioParams>,
+        viz_buffer: Arc<Mutex<VizBuffer>>,
+        emergence_snapshot: Arc<Mutex<EmergenceSnapshot>>,
+        local_presets: Vec<LocalPreset>,
+        preset_storage_path: Option<PathBuf>,
+    ) -> Self {
         Self {
             params,
             viz_buffer,
@@ -448,14 +482,229 @@ impl App {
             mode: AppMode::Normal,
             active_param: ActiveParam::BeatFreq,
             viz_mode: VizMode::Waveform,
-            current_preset: Some(2), // Alpha
+            current_preset: Some(PresetSelection::BuiltIn(2)), // Alpha
+            local_presets,
             current_sequence: None,
             sequence_start: None,
             should_quit: false,
             menu_index: 0,
+            preset_name_input: String::new(),
+            preset_storage_path,
+            status_message: None,
             spectrum_bars: vec![0.0; 32],
             start_time: Instant::now(),
             frame_count: 0,
+        }
+    }
+
+    pub fn total_preset_count(&self) -> usize {
+        PRESETS.len() + self.local_presets.len()
+    }
+
+    pub fn preset_menu_index(&self) -> usize {
+        let selected = match self.current_preset {
+            Some(PresetSelection::BuiltIn(idx)) => idx,
+            Some(PresetSelection::Local(idx)) => PRESETS.len() + idx,
+            None => 0,
+        };
+        selected.min(self.total_preset_count().saturating_sub(1))
+    }
+
+    pub fn current_preset_name(&self) -> Option<&str> {
+        match self.current_preset {
+            Some(PresetSelection::BuiltIn(idx)) => PRESETS.get(idx).map(|preset| preset.name),
+            Some(PresetSelection::Local(idx)) => self
+                .local_presets
+                .get(idx)
+                .map(|preset| preset.name.as_str()),
+            None => None,
+        }
+    }
+
+    pub fn begin_preset_save(&mut self) {
+        self.preset_name_input = self.default_local_preset_name();
+        self.mode = AppMode::PresetName;
+    }
+
+    pub fn finish_preset_save(&mut self) {
+        let name = self.preset_name_input.clone();
+        self.save_local_preset(&name);
+        self.preset_name_input.clear();
+        self.mode = AppMode::Normal;
+    }
+
+    pub fn cancel_preset_save(&mut self) {
+        self.preset_name_input.clear();
+        self.mode = AppMode::Normal;
+    }
+
+    pub fn save_local_preset(&mut self, name: &str) {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            self.status_message = Some("Preset name is empty".to_string());
+            return;
+        }
+
+        let preset = self.capture_local_preset(trimmed.to_string());
+        let previous = self.local_presets.clone();
+        let index = if let Some(idx) = self
+            .local_presets
+            .iter()
+            .position(|existing| existing.name == trimmed)
+        {
+            self.local_presets[idx] = preset;
+            idx
+        } else {
+            self.local_presets.push(preset);
+            self.local_presets.len() - 1
+        };
+
+        match self.persist_local_presets() {
+            Ok(()) => {
+                if self.current_sequence.is_none() {
+                    self.current_preset = Some(PresetSelection::Local(index));
+                }
+                self.status_message = Some(format!("Saved preset {trimmed}"));
+            }
+            Err(err) => {
+                self.local_presets = previous;
+                self.status_message = Some(format!("Preset save failed: {err}"));
+            }
+        }
+    }
+
+    pub fn apply_preset_menu_index(&mut self, idx: usize) {
+        if idx < PRESETS.len() {
+            self.apply_preset(idx);
+        } else {
+            self.apply_local_preset(idx - PRESETS.len());
+        }
+    }
+
+    pub fn apply_local_preset(&mut self, idx: usize) {
+        let Some(preset) = self.local_presets.get(idx).cloned() else {
+            return;
+        };
+
+        self.params
+            .set_base_freq(preset.base_freq.clamp(50.0, 500.0));
+        self.params
+            .set_beat_freq(preset.beat_freq.clamp(0.5, 100.0));
+        self.params.set_volume(preset.volume);
+        self.params.set_noise_level(preset.noise_level);
+        self.params.set_mist_type(preset.mist_type);
+        self.params.set_harmonics(preset.harmonics);
+        self.params.set_emergence(preset.emergence);
+        self.params.set_spawn_mode(preset.spawn_mode);
+        self.params.set_shepard(preset.shepard);
+        self.params.set_shepard_base_freq(preset.shepard_base_freq);
+        self.params.set_shepard_direction(preset.shepard_direction);
+        self.params.set_timbre(preset.timbre);
+        self.viz_mode = preset.viz_mode;
+        if preset.emergence <= 0.01 {
+            self.clear_emergence_snapshot();
+        }
+        self.current_preset = Some(PresetSelection::Local(idx));
+        self.current_sequence = None;
+        self.sequence_start = None;
+    }
+
+    pub fn delete_preset_menu_index(&mut self, idx: usize) -> bool {
+        let Some(local_idx) = self.local_index_for_menu(idx) else {
+            return false;
+        };
+
+        let removed_name = self.local_presets[local_idx].name.clone();
+        let previous = self.local_presets.clone();
+        self.local_presets.remove(local_idx);
+
+        match self.persist_local_presets() {
+            Ok(()) => {
+                self.current_preset = match self.current_preset {
+                    Some(PresetSelection::Local(current)) if current == local_idx => None,
+                    Some(PresetSelection::Local(current)) if current > local_idx => {
+                        Some(PresetSelection::Local(current - 1))
+                    }
+                    other => other,
+                };
+                self.menu_index = self
+                    .menu_index
+                    .min(self.total_preset_count().saturating_sub(1));
+                self.status_message = Some(format!("Deleted preset {removed_name}"));
+                true
+            }
+            Err(err) => {
+                self.local_presets = previous;
+                self.status_message = Some(format!("Preset delete failed: {err}"));
+                false
+            }
+        }
+    }
+
+    fn local_index_for_menu(&self, idx: usize) -> Option<usize> {
+        idx.checked_sub(PRESETS.len())
+            .filter(|local_idx| *local_idx < self.local_presets.len())
+    }
+
+    fn persist_local_presets(&self) -> io::Result<()> {
+        let path = self.preset_storage_path.as_deref().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "preset storage path unavailable")
+        })?;
+        local_presets::save(path, &self.local_presets)
+    }
+
+    fn capture_local_preset(&self, name: String) -> LocalPreset {
+        LocalPreset {
+            name,
+            base_freq: self.params.get_base_freq(),
+            beat_freq: self.params.get_beat_freq(),
+            volume: self.params.get_volume(),
+            noise_level: self.params.get_noise_level(),
+            mist_type: self.params.get_mist_type(),
+            harmonics: self.params.get_harmonics(),
+            emergence: self.params.get_emergence(),
+            spawn_mode: self.params.get_spawn_mode(),
+            shepard: self.params.get_shepard(),
+            shepard_base_freq: self.params.get_shepard_base_freq(),
+            shepard_direction: self.params.get_shepard_direction(),
+            timbre: self.params.get_timbre(),
+            viz_mode: self.viz_mode,
+        }
+    }
+
+    fn default_local_preset_name(&self) -> String {
+        if let Some(PresetSelection::Local(idx)) = self.current_preset
+            && let Some(preset) = self.local_presets.get(idx)
+        {
+            return preset.name.clone();
+        }
+
+        let base = match self.current_preset {
+            Some(PresetSelection::BuiltIn(idx)) => PRESETS
+                .get(idx)
+                .map(|preset| format!("{} Custom", preset.name))
+                .unwrap_or_else(|| "Custom".to_string()),
+            _ => "Custom".to_string(),
+        };
+        self.unique_local_preset_name(&base)
+    }
+
+    fn unique_local_preset_name(&self, base: &str) -> String {
+        if !self.local_presets.iter().any(|preset| preset.name == base) {
+            return base.to_string();
+        }
+
+        let mut suffix = 2;
+        loop {
+            let candidate = format!("{base} {suffix}");
+            if !self
+                .local_presets
+                .iter()
+                .any(|preset| preset.name == candidate)
+            {
+                return candidate;
+            }
+            suffix += 1;
         }
     }
 
@@ -473,7 +722,7 @@ impl App {
         self.params.set_emergence(0.0);
         self.params.set_shepard(0.0);
         self.clear_emergence_snapshot();
-        self.current_preset = Some(idx);
+        self.current_preset = Some(PresetSelection::BuiltIn(idx));
         self.current_sequence = None;
         self.sequence_start = None;
     }
@@ -664,6 +913,7 @@ impl App {
     pub fn toggle_spawn_mode(&mut self) {
         let next = self.params.get_spawn_mode().toggled();
         self.params.set_spawn_mode(next);
+        self.current_preset = None;
     }
 
     pub fn toggle_emergence(&mut self) {
@@ -674,6 +924,27 @@ impl App {
         } else {
             self.params.set_emergence(0.5);
         }
+        self.current_preset = None;
+    }
+
+    pub fn toggle_noise(&mut self) {
+        let current = self.params.get_noise_level();
+        if current > 0.01 {
+            self.params.set_noise_level(0.0);
+        } else {
+            self.params.set_noise_level(0.15);
+        }
+        self.current_preset = None;
+    }
+
+    pub fn next_viz_mode(&mut self) {
+        self.viz_mode = self.viz_mode.next();
+        self.current_preset = None;
+    }
+
+    pub fn prev_viz_mode(&mut self) {
+        self.viz_mode = self.viz_mode.prev();
+        self.current_preset = None;
     }
 
     pub fn cycle_mist_type(&mut self) {
@@ -732,30 +1003,74 @@ impl App {
         self.current_preset = None;
     }
 
-    pub fn toggle_shepard(&self) {
+    pub fn toggle_shepard(&mut self) {
         let current = self.params.get_shepard();
         if current > 0.01 {
             self.params.set_shepard(0.0);
         } else {
             self.params.set_shepard(0.35);
         }
+        self.current_preset = None;
     }
 
-    pub fn reverse_shepard(&self) {
+    pub fn reverse_shepard(&mut self) {
         let next = self.params.get_shepard_direction().flipped();
         self.params.set_shepard_direction(next);
+        self.current_preset = None;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn app_for_tests() -> App {
+        app_for_tests_with_storage(None)
+    }
+
+    fn app_for_tests_with_storage(preset_storage_path: Option<PathBuf>) -> App {
         let params = Arc::new(AudioParams::new());
         let viz_buffer = Arc::new(Mutex::new(VizBuffer::new(64)));
         let emergence_snapshot = Arc::new(Mutex::new(EmergenceSnapshot::empty()));
-        App::new(params, viz_buffer, emergence_snapshot)
+        App::with_local_presets(
+            params,
+            viz_buffer,
+            emergence_snapshot,
+            Vec::new(),
+            preset_storage_path,
+        )
+    }
+
+    fn sample_local_preset(name: &str) -> LocalPreset {
+        LocalPreset {
+            name: name.to_string(),
+            base_freq: 245.0,
+            beat_freq: 18.0,
+            volume: 0.65,
+            noise_level: 0.25,
+            mist_type: MistType::Velvet,
+            harmonics: 0.7,
+            emergence: 0.45,
+            spawn_mode: SpawnMode::Penrose,
+            shepard: 0.35,
+            shepard_base_freq: DEFAULT_BASE_FREQ_HZ as f32 * 2.0,
+            shepard_direction: Direction::Up,
+            timbre: Timbre::Bell,
+            viz_mode: VizMode::Emergence,
+        }
+    }
+
+    fn temp_preset_path(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        env::temp_dir()
+            .join(format!("microtube-app-{name}-{nanos}"))
+            .join("presets.json")
     }
 
     #[test]
@@ -838,5 +1153,81 @@ mod tests {
 
         app.params.set_shepard_base_freq(1_000.0);
         assert_eq!(app.params.get_shepard_base_freq(), MAX_BASE_FREQ_HZ as f32);
+    }
+
+    #[test]
+    fn saving_local_preset_captures_live_fields() {
+        let path = temp_preset_path("save");
+        let mut app = app_for_tests_with_storage(Some(path.clone()));
+        app.params.set_base_freq(245.0);
+        app.params.set_beat_freq(18.0);
+        app.params.set_volume(0.65);
+        app.params.set_noise_level(0.25);
+        app.params.set_mist_type(MistType::Velvet);
+        app.params.set_harmonics(0.7);
+        app.params.set_emergence(0.45);
+        app.params.set_spawn_mode(SpawnMode::Penrose);
+        app.params.set_shepard(0.35);
+        app.params
+            .set_shepard_base_freq(DEFAULT_BASE_FREQ_HZ as f32 * 2.0);
+        app.params.set_shepard_direction(Direction::Up);
+        app.params.set_timbre(Timbre::Bell);
+        app.viz_mode = VizMode::Emergence;
+
+        app.save_local_preset("  Glass Focus  ");
+
+        assert_eq!(app.local_presets, vec![sample_local_preset("Glass Focus")]);
+        assert_eq!(
+            local_presets::try_load(&path).expect("saved preset file"),
+            vec![sample_local_preset("Glass Focus")]
+        );
+        let _ = path.parent().map(fs::remove_dir_all);
+    }
+
+    #[test]
+    fn local_preset_recall_restores_snapshot_and_clears_sequence() {
+        let mut app = app_for_tests();
+        app.local_presets.push(sample_local_preset("Glass Focus"));
+        app.start_sequence(0);
+
+        app.apply_local_preset(0);
+
+        assert_eq!(app.current_sequence, None);
+        assert_eq!(app.sequence_start, None);
+        assert_eq!(app.current_preset, Some(PresetSelection::Local(0)));
+        assert_eq!(app.params.get_base_freq(), 245.0);
+        assert_eq!(app.params.get_beat_freq(), 18.0);
+        assert_eq!(app.params.get_volume(), 0.65);
+        assert_eq!(app.params.get_noise_level(), 0.25);
+        assert_eq!(app.params.get_mist_type(), MistType::Velvet);
+        assert_eq!(app.params.get_harmonics(), 0.7);
+        assert_eq!(app.params.get_emergence(), 0.45);
+        assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
+        assert_eq!(app.params.get_shepard(), 0.35);
+        assert_eq!(
+            app.params.get_shepard_base_freq(),
+            DEFAULT_BASE_FREQ_HZ as f32 * 2.0
+        );
+        assert_eq!(app.params.get_shepard_direction(), Direction::Up);
+        assert_eq!(app.params.get_timbre(), Timbre::Bell);
+        assert_eq!(app.viz_mode, VizMode::Emergence);
+    }
+
+    #[test]
+    fn deleting_presets_only_removes_local_entries() {
+        let path = temp_preset_path("delete");
+        let mut app = app_for_tests_with_storage(Some(path.clone()));
+        app.local_presets.push(sample_local_preset("One"));
+        app.local_presets.push(sample_local_preset("Two"));
+        app.current_preset = Some(PresetSelection::Local(1));
+
+        assert!(!app.delete_preset_menu_index(0));
+        assert_eq!(app.local_presets.len(), 2);
+
+        assert!(app.delete_preset_menu_index(PRESETS.len()));
+        assert_eq!(app.local_presets.len(), 1);
+        assert_eq!(app.local_presets[0].name, "Two");
+        assert_eq!(app.current_preset, Some(PresetSelection::Local(0)));
+        let _ = path.parent().map(fs::remove_dir_all);
     }
 }

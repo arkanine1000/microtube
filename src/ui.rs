@@ -98,6 +98,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             match app.mode {
                 AppMode::PresetSelect => draw_preset_menu(f, size, app, accent),
                 AppMode::SequenceSelect => draw_sequence_menu(f, size, app, accent),
+                AppMode::PresetName => draw_save_preset_prompt(f, size, app, accent),
                 AppMode::Help => draw_help(f, size, accent),
                 AppMode::Normal => {}
             }
@@ -149,10 +150,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     let right_freq = base_freq + beat_freq;
     let secs = app.session_elapsed() as u32;
     let timer = format!("{:02}:{:02}", secs / 60, secs % 60);
-    let preset = app
-        .current_preset
-        .map(|idx| PRESETS[idx].name)
-        .unwrap_or("Custom");
+    let preset = app.current_preset_name().unwrap_or("Custom");
 
     let lines = vec![
         Line::from(vec![
@@ -440,10 +438,7 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
     let epoch_or_preset = if let Some(name) = app.current_step_name() {
         data_line("epoch", name, accent)
     } else {
-        let preset = app
-            .current_preset
-            .map(|idx| PRESETS[idx].name)
-            .unwrap_or("Custom");
+        let preset = app.current_preset_name().unwrap_or("Custom");
         data_line("preset", preset, accent)
     };
     let band = freq_band_name(beat);
@@ -473,7 +468,7 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
         app.params.get_mist_type().label(),
         app.params.get_mist_type().texture()
     );
-    let rows = vec![
+    let mut rows = vec![
         epoch_or_preset,
         data_line("band", band, accent),
         data_line("visual", app.viz_mode.label(), BRIGHT),
@@ -487,6 +482,9 @@ fn draw_session_panel(f: &mut Frame, area: Rect, app: &App, accent: Color, borde
             Span::styled(breath, Style::default().fg(accent).bg(PANEL_BG)),
         ]),
     ];
+    if let Some(message) = &app.status_message {
+        rows.push(data_line("note", message, Color::Rgb(250, 210, 92)));
+    }
     f.render_widget(
         Paragraph::new(rows).style(Style::default().bg(PANEL_BG)),
         inner,
@@ -558,6 +556,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             key_chip("j/k", Color::Rgb(84, 240, 150)),
             key_chip("H/L", Color::Rgb(250, 210, 92)),
             key_chip("p", Color::Rgb(120, 170, 255)),
+            key_chip("S", Color::Rgb(84, 240, 150)),
             key_chip("s", Color::Rgb(210, 145, 255)),
             key_chip("v/V", accent),
             key_chip("e", Color::Rgb(210, 145, 255)),
@@ -574,6 +573,7 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
             command_chip("j/k", "select", Color::Rgb(84, 240, 150)),
             command_chip("H/L", "coarse", Color::Rgb(250, 210, 92)),
             command_chip("p", "preset", Color::Rgb(120, 170, 255)),
+            command_chip("S", "save", Color::Rgb(84, 240, 150)),
             command_chip("s", "sequence", Color::Rgb(210, 145, 255)),
             command_chip("v/V", "visual", accent),
             command_chip("e", "life", Color::Rgb(210, 145, 255)),
@@ -597,25 +597,32 @@ fn draw_controls(f: &mut Frame, area: Rect, accent: Color, border: Color) {
 fn draw_preset_menu(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     f.render_widget(Clear, area);
     draw_backdrop(f.buffer_mut(), area, app.session_elapsed() as f64, accent);
-    let menu_area = centered_rect(68, 56, area);
+    let menu_area = centered_rect(74, 62, area);
     draw_modal_shadow(f.buffer_mut(), menu_area);
 
-    let items: Vec<ListItem> = PRESETS
-        .iter()
-        .enumerate()
-        .map(|(idx, preset)| {
+    let total = app.total_preset_count();
+    let visible_rows = menu_area.height.saturating_sub(2).max(1) as usize;
+    let start = app
+        .menu_index
+        .saturating_add(1)
+        .saturating_sub(visible_rows)
+        .min(total.saturating_sub(visible_rows));
+    let end = (start + visible_rows).min(total);
+    let mut items: Vec<ListItem> = Vec::with_capacity(end.saturating_sub(start));
+    for idx in start..end {
+        if let Some(preset) = PRESETS.get(idx) {
             let selected = idx == app.menu_index;
             let fg = if selected { BG_TOP } else { preset.color };
             let bg = if selected { preset.color } else { PANEL_BG };
-            ListItem::new(Line::from(vec![
+            items.push(ListItem::new(Line::from(vec![
                 Span::styled(
-                    format!(" {} ", idx + 1),
+                    format!(" {:>2} ", idx + 1),
                     Style::default()
                         .fg(if selected { BG_TOP } else { DIM })
                         .bg(bg),
                 ),
                 Span::styled(
-                    format!("{:<14}", preset.name),
+                    format!("{:<16}", preset.name),
                     Style::default().fg(fg).bg(bg).add_modifier(if selected {
                         Modifier::BOLD
                     } else {
@@ -628,12 +635,88 @@ fn draw_preset_menu(f: &mut Frame, area: Rect, app: &App, accent: Color) {
                         .fg(if selected { BG_TOP } else { SOFT })
                         .bg(bg),
                 ),
-            ]))
-        })
-        .collect();
+            ])));
+        } else {
+            let local_idx = idx - PRESETS.len();
+            let Some(preset) = app.local_presets.get(local_idx) else {
+                continue;
+            };
+            let selected = idx == app.menu_index;
+            let color = freq_color(preset.beat_freq);
+            let description = preset.short_description();
+            let fg = if selected { BG_TOP } else { color };
+            let bg = if selected { color } else { PANEL_BG };
+            items.push(ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!(" {:>2} ", idx + 1),
+                    Style::default()
+                        .fg(if selected { BG_TOP } else { DIM })
+                        .bg(bg),
+                ),
+                Span::styled(
+                    format!("{:<16}", preset.name),
+                    Style::default().fg(fg).bg(bg).add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ),
+                Span::styled(
+                    format!("  user  {description}"),
+                    Style::default()
+                        .fg(if selected { BG_TOP } else { SOFT })
+                        .bg(bg),
+                ),
+            ])));
+        }
+    }
 
-    let list = List::new(items).block(modal_block(" PRESETS  j/k Enter Esc ", accent));
+    let list = List::new(items).block(modal_block(" PRESETS  j/k Enter d Esc ", accent));
     f.render_widget(list, menu_area);
+}
+
+fn draw_save_preset_prompt(f: &mut Frame, area: Rect, app: &App, accent: Color) {
+    f.render_widget(Clear, area);
+    draw_backdrop(f.buffer_mut(), area, app.session_elapsed() as f64, accent);
+    let prompt_area = centered_rect(68, 24, area);
+    draw_modal_shadow(f.buffer_mut(), prompt_area);
+
+    let input = if app.preset_name_input.is_empty() {
+        " ".to_string()
+    } else {
+        app.preset_name_input.clone()
+    };
+    let rows = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(" name  ", Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(
+                input,
+                Style::default()
+                    .fg(BRIGHT)
+                    .bg(PANEL_ALT)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(" file  ", Style::default().fg(DIM).bg(PANEL_BG)),
+            Span::styled(
+                app.preset_storage_path
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|| "unavailable".to_string()),
+                Style::default().fg(SOFT).bg(PANEL_BG),
+            ),
+        ]),
+    ];
+
+    f.render_widget(
+        Paragraph::new(rows)
+            .block(modal_block(" SAVE PRESET  Enter Esc ", accent))
+            .style(Style::default().bg(PANEL_BG)),
+        prompt_area,
+    );
 }
 
 fn draw_sequence_menu(f: &mut Frame, area: Rect, app: &App, accent: Color) {
@@ -715,8 +798,15 @@ fn draw_help(f: &mut Frame, area: Rect, accent: Color) {
                 Style::default().fg(BG_TOP).bg(Color::Rgb(250, 210, 92)),
             ),
             Span::styled(
-                "  1-5 quick presets    p presets    s sequences",
+                "  1-5 quick presets    p presets    S save    s sequences",
                 Style::default().fg(BRIGHT),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("                ", Style::default().fg(BG_TOP).bg(PANEL_BG)),
+            Span::styled(
+                "  d deletes a selected local preset from the preset menu",
+                Style::default().fg(SOFT),
             ),
         ]),
         Line::from(""),

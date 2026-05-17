@@ -47,7 +47,11 @@ Noise controls the mist layer.
 ## Presets and sequences
 
 Press `p` for quick presets. These are immediate starting points: Deep Sleep,
-Meditation, Relaxation, Focus, Flow State.
+Meditation, Relaxation, Focus, Flow State. Local presets saved with `S` appear
+after the built-ins in the same menu.
+
+Press `d` in the preset menu to delete a selected local preset. Built-in
+presets stay fixed.
 
 Press `s` for sequences. These are timed programs that move settings over
 minutes instead of asking you to steer constantly.
