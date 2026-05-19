@@ -36,10 +36,14 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 - 5 brainwave presets with quick-select
 - 6 timed sequences with smooth interpolation, including the 25½-minute *Journey Through the Cosmos*
 - Sequence steps automate every audible & visible parameter (frequencies, timbre, mist, Shepard direction, spawn mode, visualisation) — not just the binaural carrier
-- Aurora-style terminal stage with animated backdrop and spectral control deck
+- Audio-reactive deep-space backdrop: aurora curtains, sparse twinkling stars, and an RMS-driven haze whose drift speed tracks the beat frequency
+- Borderless visualization stage with a floating viz-mode sigil and a soft inner-glow that brightens with the audio
+- Band-keyed accent that tints the whole UI to match the active brainwave band; meters glow with a 600 ms afterglow on every adjustment
+- Single information column stacking parameters, session readouts, and the H1–H6 partial bars with hairline dividers
+- Sequence film-strip below the stage with a luminous "head" tracking the active step
+- Contextual key-hint footer that adapts to the current mode and collapses gracefully on narrow terminals
+- Two-column help overlay with grouped commands and lore
 - Session timer, breathing pacer, and live `epoch` indicator during journey-class sequences
-- Context-sensitive help overlay
-- Color palette tuned for dark terminal backgrounds
 
 ## Requirements
 
@@ -141,15 +145,17 @@ The default rate is 36 seconds per octave — slow enough to feel ambient, fast 
 ```
 src/
 ├── main.rs            Entry, terminal setup, event loop
-├── app.rs             Application state, lock-free AudioParams
+├── app.rs             Application state, lock-free AudioParams, frame-coherent Signals
 ├── audio.rs           cpal stream, synthesis, emergence integration
 ├── emergence.rs       Generative voice engine (canon + cellular rules)
 ├── local_presets.rs   User preset persistence
 ├── presets.rs         Brainwave presets and timed sequences
-├── ui.rs              ratatui layout and widget composition
+├── theme.rs           Palette, accent ramps, semantic colors, color math
+├── ui.rs              ratatui layout, panels, modals, living backdrop
 ├── penrose.rs         Fibonacci-word walk (Penrose P3 Conway worm)
 ├── shepard.rs         Shepard-Risset glissando engine
-└── visualization.rs   Braille waveforms, spectrum, Penrose, emergence viz
+├── visualization.rs   Braille waveforms, spectrum, Penrose, emergence viz
+└── knowledge/         In-app wiki, glossary, and MicroTube guide
 ```
 
 **Thread model:** Three threads communicate lock-free.

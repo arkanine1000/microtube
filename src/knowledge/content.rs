@@ -134,6 +134,13 @@ pub static MICROTUBE_ARTICLES: &[ArticleManifest] = &[
         body: include_str!("../knowledge_assets/microtube/penrose-mode.md"),
     },
     ArticleManifest {
+        slug: "microtube-partials",
+        title: "Partials And The Harmonics View",
+        category: "Engine",
+        summary: "What H1-H6 mean and how the Partials panel and Harmonics view fit together.",
+        body: include_str!("../knowledge_assets/microtube/partials-and-harmonics.md"),
+    },
+    ArticleManifest {
         slug: "microtube-visuals",
         title: "Reading The Visuals",
         category: "Manual",

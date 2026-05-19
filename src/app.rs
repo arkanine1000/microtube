@@ -376,6 +376,20 @@ impl ActiveParam {
             Self::ShepardBase => "Drift Base",
         }
     }
+
+    /// Dense index for array storage (e.g. `Signals.last_param_adjust`).
+    pub fn index(self) -> usize {
+        match self {
+            Self::BaseFreq => 0,
+            Self::BeatFreq => 1,
+            Self::Volume => 2,
+            Self::Harmonics => 3,
+            Self::Emergence => 4,
+            Self::Shepard => 5,
+            Self::ShepardBase => 6,
+            Self::NoiseLevel => 7,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -423,6 +437,42 @@ impl VizMode {
     }
 }
 
+/// Frame-coherent signal samples used to drive the UI's reactive elements
+/// (backdrop haze intensity, parameter afterglow, viz glow).
+///
+/// Recomputed once per frame from the audio thread's viz buffer so the UI
+/// renderer can sample these without re-locking. Cheap to clone.
+#[derive(Clone, Copy)]
+pub struct Signals {
+    /// Recent RMS over the live viz buffer, per channel. 0..~1.
+    pub rms_l: f32,
+    pub rms_r: f32,
+    /// Instant of the most recent adjustment for each parameter — used to
+    /// drive a brief afterglow on `h/l`. `None` = never adjusted this session.
+    pub last_param_adjust: [Option<Instant>; 8],
+    /// Instant of the most recent tab switch — drives the tab strip ease.
+    pub last_tab_switch: Option<Instant>,
+}
+
+impl Signals {
+    pub fn new() -> Self {
+        Self {
+            rms_l: 0.0,
+            rms_r: 0.0,
+            last_param_adjust: [None; 8],
+            last_tab_switch: None,
+        }
+    }
+
+    pub fn record_adjust(&mut self, param: ActiveParam) {
+        self.last_param_adjust[param.index()] = Some(Instant::now());
+    }
+
+    pub fn since_adjust(&self, param: ActiveParam) -> Option<f32> {
+        self.last_param_adjust[param.index()].map(|t| t.elapsed().as_secs_f32())
+    }
+}
+
 pub struct App {
     pub params: Arc<AudioParams>,
     pub viz_buffer: Arc<Mutex<VizBuffer>>,
@@ -444,6 +494,7 @@ pub struct App {
     pub spectrum_bars: Vec<f32>,
     pub start_time: Instant,
     pub frame_count: u64,
+    pub signals: Signals,
 }
 
 impl App {
@@ -494,6 +545,33 @@ impl App {
             spectrum_bars: vec![0.0; 32],
             start_time: Instant::now(),
             frame_count: 0,
+            signals: Signals::new(),
+        }
+    }
+
+    /// Refresh frame-coherent signals — call once per UI tick before drawing.
+    /// Computes RMS over the most-recent ~256 samples of each channel without
+    /// blocking the audio thread (uses `try_lock`).
+    pub fn update_signals(&mut self) {
+        const WINDOW: usize = 256;
+        if let Ok(buf) = self.viz_buffer.try_lock() {
+            let len = buf.samples_l.len();
+            if len == 0 {
+                return;
+            }
+            let window = WINDOW.min(len);
+            let start = (buf.write_pos + len - window) % len;
+            let mut sum_l = 0.0_f32;
+            let mut sum_r = 0.0_f32;
+            for i in 0..window {
+                let idx = (start + i) % len;
+                let l = buf.samples_l[idx];
+                let r = buf.samples_r[idx];
+                sum_l += l * l;
+                sum_r += r * r;
+            }
+            self.signals.rms_l = (sum_l / window as f32).sqrt();
+            self.signals.rms_r = (sum_r / window as f32).sqrt();
         }
     }
 
@@ -963,6 +1041,7 @@ impl App {
     }
 
     pub fn adjust_param(&mut self, delta: f32) {
+        self.signals.record_adjust(self.active_param);
         match self.active_param {
             ActiveParam::BaseFreq => {
                 let v = (self.params.get_base_freq() + delta * 5.0).clamp(50.0, 500.0);

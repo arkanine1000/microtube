@@ -114,40 +114,62 @@ fn draw_pane_strip(f: &mut Frame, area: Rect, active: KnowledgePane, accent: Col
     use ratatui::text::{Line, Span};
     use ratatui::widgets::Paragraph;
 
+    use crate::theme::{INK_0, INK_3, INK_4};
+
     let panes = [
         ('1', KnowledgePane::MicroTube),
         ('2', KnowledgePane::Wiki),
         ('3', KnowledgePane::Glossary),
     ];
-    let dim = Color::Rgb(138, 146, 168);
-    let bg_top = Color::Rgb(5, 7, 14);
-    let panel_bg = Color::Rgb(9, 12, 22);
 
-    let mut spans: Vec<Span<'static>> = Vec::with_capacity(panes.len() * 3);
-    spans.push(Span::styled(" ", Style::default().bg(bg_top)));
+    // --- Row 1: tab labels (browser-style — no chip background) ----------
+    let mut spans: Vec<Span<'static>> = Vec::with_capacity(panes.len() * 3 + 1);
+    spans.push(Span::raw("  "));
+    let mut tab_positions: Vec<(u16, u16, bool)> = Vec::with_capacity(panes.len());
+    let mut x_cursor: u16 = 2;
     for (key, pane) in panes {
         let is_active = pane == active;
-        let label_style = if is_active {
-            Style::default()
-                .fg(bg_top)
-                .bg(accent)
-                .add_modifier(Modifier::BOLD)
+        let label = format!("{key} {}", pane.label());
+        let label_str = format!("  {label}  ");
+        let len = label_str.chars().count() as u16;
+        let style = if is_active {
+            Style::default().fg(INK_0).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(dim).bg(panel_bg)
+            Style::default().fg(INK_3)
         };
-        spans.push(Span::styled(format!(" [{key}] "), label_style));
-        spans.push(Span::styled(format!(" {} ", pane.label()), label_style));
-        spans.push(Span::styled("  ", Style::default().bg(bg_top)));
+        spans.push(Span::styled(label_str, style));
+        tab_positions.push((x_cursor, len, is_active));
+        x_cursor = x_cursor.saturating_add(len);
     }
-    spans.push(Span::styled(
-        " Tab: Studio  ",
-        Style::default().fg(dim).bg(bg_top),
-    ));
+    let line1 = Line::from(spans);
+    f.render_widget(Paragraph::new(line1), area);
 
-    f.render_widget(
-        Paragraph::new(Line::from(spans)).style(Style::default().bg(bg_top)),
-        area,
-    );
+    // --- Row 2: hairline rule + active underline -------------------------
+    if area.height >= 2 {
+        let buf = f.buffer_mut();
+        let y1 = area.y + 1;
+        for x in 0..area.width {
+            let cell = &mut buf[(area.x + x, y1)];
+            cell.set_char('\u{2500}');
+            cell.set_fg(INK_4);
+        }
+        for (tx, len, is_active) in tab_positions {
+            for i in 0..len {
+                let xx = area.x + tx + i;
+                if xx >= area.x + area.width {
+                    break;
+                }
+                let cell = &mut buf[(xx, y1)];
+                if is_active {
+                    cell.set_char('\u{2501}');
+                    cell.set_fg(accent);
+                } else {
+                    cell.set_char('\u{2500}');
+                    cell.set_fg(INK_4);
+                }
+            }
+        }
+    }
 }
 
 /// Returns true if the key was handled by the Knowledge tab.

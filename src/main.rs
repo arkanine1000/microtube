@@ -8,6 +8,7 @@ mod local_presets;
 mod penrose;
 mod presets;
 mod shepard;
+mod theme;
 mod ui;
 mod visualization;
 
@@ -71,6 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_tick = Instant::now();
 
     loop {
+        app.update_signals();
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
@@ -116,6 +118,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     }
     if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
         app.tab = app.tab.flipped();
+        app.signals.last_tab_switch = Some(Instant::now());
         if app.tab == Tab::Knowledge {
             // Close any Studio modal so it doesn't reappear on tab return.
             app.mode = AppMode::Normal;
