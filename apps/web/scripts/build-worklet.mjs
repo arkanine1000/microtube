@@ -5,14 +5,15 @@
 // registers). So we prepend the wasm-bindgen glue to the processor source
 // and emit a single import-free file. Run after every `wasm-pack build`.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(here, '..');
 
-const gluePath = resolve(webRoot, 'public/microtube-worklet/wasm/microtube_core.js');
+const wasmDir = resolve(webRoot, 'public/microtube-worklet/wasm');
+const gluePath = resolve(wasmDir, 'microtube_core.js');
 const srcPath = resolve(webRoot, 'worklet/processor.src.js');
 const outPath = resolve(webRoot, 'public/microtube-worklet/processor.js');
 
@@ -66,3 +67,20 @@ if (typeof globalThis.TextEncoder === 'undefined') {
 
 writeFileSync(outPath, banner + polyfill + glue + '\n\n' + processor);
 console.log(`[build-worklet] wrote ${outPath}`);
+
+// The glue is now inlined into processor.js; at runtime only the raw
+// `.wasm` binary is fetched. Prune the rest of the wasm-pack output so it
+// is not needlessly published as static assets.
+for (const stale of [
+  'microtube_core.js',
+  'microtube_core.d.ts',
+  'microtube_core_bg.wasm.d.ts',
+  'package.json',
+  '.gitignore',
+  'README.md',
+  'LICENSE',
+]) {
+  const p = resolve(wasmDir, stale);
+  if (existsSync(p)) rmSync(p);
+}
+console.log('[build-worklet] pruned wasm/ to microtube_core_bg.wasm');

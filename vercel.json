@@ -1,5 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && npm run build",
-  "outputDirectory": "apps/web/dist"
+  "framework": null,
+  "buildCommand": "bash scripts/vercel-build.sh",
+  "outputDirectory": "apps/web/dist",
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
 }
