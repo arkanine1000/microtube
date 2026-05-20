@@ -2,15 +2,17 @@
 
 mod app;
 mod audio;
-mod emergence;
 mod knowledge;
 mod local_presets;
-mod penrose;
 mod presets;
-mod shepard;
 mod theme;
 mod ui;
 mod visualization;
+
+// The DSP engine now lives in the shared `microtube-core` crate. Re-export
+// its modules at the crate root so existing `crate::emergence` /
+// `crate::shepard` / `crate::penrose` paths keep resolving unchanged.
+pub use microtube_core::{emergence, penrose, shepard};
 
 use std::io;
 use std::sync::atomic::Ordering;

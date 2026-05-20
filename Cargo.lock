@@ -894,9 +894,18 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "crossterm",
+ "microtube-core",
  "ratatui",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "microtube-core"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]

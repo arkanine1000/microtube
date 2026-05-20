@@ -1,0 +1,18 @@
+[package]
+name = "microtube"
+version = "0.1.0"
+edition = "2024"
+description = "MicroTube — a binaural-beat synthesis studio for the terminal."
+license = "MIT"
+
+[[bin]]
+name = "microtube"
+path = "src/main.rs"
+
+[dependencies]
+microtube-core = { path = "../core" }
+ratatui = "0.30"
+crossterm = "0.29"
+cpal = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

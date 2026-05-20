@@ -1,0 +1,19 @@
+[package]
+name = "microtube-core"
+version = "0.1.0"
+edition = "2024"
+description = "Pure DSP engine for MicroTube — shared by the CLI and Web apps."
+license = "MIT"
+
+[lib]
+# rlib so the native CLI can link it; cdylib so wasm-pack can emit a .wasm.
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = []
+# Enables the wasm-bindgen bridge. wasm-pack builds with this on.
+wasm = ["dep:wasm-bindgen", "dep:js-sys"]
+
+[dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
