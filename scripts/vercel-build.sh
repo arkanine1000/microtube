@@ -8,6 +8,11 @@
 # to run locally too — each install step is skipped when already present.
 set -euo pipefail
 
+# Always operate from the repository root, regardless of the directory the
+# build was invoked from — the Cargo workspace and npm scripts assume it.
+cd "$(dirname "$0")/.."
+echo "--- building from: $(pwd) ---"
+
 CARGO_BIN="${CARGO_HOME:-$HOME/.cargo}/bin"
 
 # --- Rust toolchain --------------------------------------------------------

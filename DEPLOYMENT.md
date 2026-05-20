@@ -7,14 +7,31 @@ Rust to WebAssembly, and Vercel's build image has no Rust toolchain.
 ## One-time Vercel project setup
 
 1. **Import** the Git repository into Vercel.
-2. **Root Directory:** leave as the repository root (`.`). Do *not* set it
-   to `apps/web` — the build must run from the workspace root so it can
-   reach `crates/core`.
+2. **Root Directory — this is the one that matters.** It MUST be the
+   repository root (leave the field blank / `.`).
+
+   > Vercel's monorepo auto-detection often sees the Vite app and silently
+   > sets the Root Directory to `apps/web`. That breaks the build: the
+   > Cargo workspace, `crates/core`, and `scripts/` all live above
+   > `apps/web` and become unreachable. If it was set to `apps/web`, open
+   > **Project → Settings → Build & Deployment → Root Directory**, clear it
+   > back to the repository root, and redeploy.
 3. **Framework Preset:** `Other`. All build settings come from `vercel.json`,
    so the dashboard fields can be left on their defaults.
 4. No environment variables are required.
 
-That is it — `vercel.json` does the rest.
+With the Root Directory at the repo root, `vercel.json` does the rest.
+
+## Troubleshooting
+
+**`Command "bash scripts/vercel-build.sh" exited with 127` /
+`bash: scripts/vercel-build.sh: No such file or directory`**
+
+The build ran somewhere other than the repository root — almost always the
+Root Directory is set to `apps/web`. Fix it per step 2 above (set Root
+Directory to the repository root) and redeploy. `scripts/vercel-build.sh`
+exists only at the repo root, by design — the build needs the whole
+workspace.
 
 ## What `vercel.json` declares
 
