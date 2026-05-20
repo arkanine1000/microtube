@@ -1,8 +1,8 @@
 # MicroTube
 
-A terminal-native binaural beats engine with generative audio, built in Rust.
+A binaural beats engine with generative audio, built in Rust. It ships as two front-ends over one shared DSP core: a terminal-native app and a browser app.
 
-MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeWire, and renders animated visualizations using Unicode braille characters — all within your terminal emulator.
+MicroTube synthesizes binaural beats in real-time. The terminal app (`crates/cli`) streams stereo audio via cpal and renders animated visualizations using Unicode braille characters; the web app (`apps/web`) runs the same engine compiled to WebAssembly inside an `AudioWorklet`. Both ride the pure DSP core in `crates/core`.
 
 ## Features
 
@@ -51,6 +51,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 - A modern terminal emulator (alacritty, kitty, wezterm, foot)
 - Rust toolchain (1.85+; edition 2024)
 - Headphones (binaural beats require stereo separation)
+- For the web app: Node 18+ (see [apps/web/README.md](apps/web/README.md))
 
 ## Installation
 
@@ -142,25 +143,48 @@ Press `r` to layer a continuous Shepard-Risset glissando over the binaural carri
 
 The default rate is 36 seconds per octave — slow enough to feel ambient, fast enough that the motion remains legible. The Drift Base parameter moves the bottom of the seven-octave stack from C0 to C3, with C1 as the default. Descending drift pairs naturally with the meditation/sleep presets ("a feeling of falling", per Mainsbridge & Marques 2016); rising drift adds momentum to focus and flow sessions. The layer is summed mono and mixed equally to both ears so it does not interfere with the binaural difference frequency.
 
+## Web app
+
+`apps/web` is a React + TypeScript front-end that runs the same synthesis engine in the browser: `crates/core` is compiled to WebAssembly with `wasm-pack` and executed inside an `AudioWorklet`. It exposes the parameter controls, quick presets, and the *Journey Through the Cosmos* sequence; visualizations are terminal-only for now.
+
+```bash
+npm install        # from the repo root, once
+npm run dev        # builds the Wasm core, then serves at localhost:5173
+```
+
+See [apps/web/README.md](apps/web/README.md) for the dev loop and [DEPLOYMENT.md](DEPLOYMENT.md) for deploying to Vercel.
+
 ## Architecture
 
+A Cargo + npm workspace. The pure DSP engine lives in `crates/core` and is shared, unchanged, by the native CLI (linked as an `rlib`) and the web app (compiled to WebAssembly).
+
 ```
-src/
-├── main.rs            Entry, terminal setup, event loop
-├── app.rs             Application state, lock-free AudioParams, frame-coherent Signals
-├── audio.rs           cpal stream, synthesis, emergence integration
-├── emergence.rs       Generative voice engine (canon + cellular rules)
-├── local_presets.rs   User preset persistence
-├── presets.rs         Brainwave presets and timed sequences
-├── theme.rs           Palette, accent ramps, semantic colors, color math
-├── ui.rs              ratatui layout, panels, modals, living backdrop
-├── penrose.rs         Fibonacci-word walk (Penrose P3 Conway worm)
-├── shepard.rs         Shepard-Risset glissando engine
-├── visualization.rs   Braille waveforms, spectrum, Penrose, emergence viz
-└── knowledge/         In-app wiki, glossary, and MicroTube guide
+crates/
+├── core/   microtube-core — pure DSP, builds as rlib + cdylib
+│   └── src/
+│       ├── engine.rs        Sample-accurate synthesis engine + parameter smoothing
+│       ├── synth.rs         Timbre/mist enums, noise-colour generators, soft limiter
+│       ├── emergence.rs     Generative voice engine (canon + cellular rules)
+│       ├── shepard.rs       Shepard-Risset glissando engine
+│       ├── penrose.rs       Fibonacci-word walk (Penrose P3 Conway worm)
+│       └── wasm.rs          wasm-bindgen bridge (WasmEngine), behind the `wasm` feature
+└── cli/    microtube — the terminal app
+    └── src/
+        ├── main.rs            Entry, terminal setup, event loop
+        ├── app.rs             App state, lock-free AudioParams, frame-coherent Signals
+        ├── audio.rs           cpal stream driving core::Engine
+        ├── presets.rs         Brainwave presets and timed sequences
+        ├── local_presets.rs   User preset persistence
+        ├── theme.rs           Palette, accent ramps, semantic colors, color math
+        ├── ui.rs              ratatui layout, panels, modals, living backdrop
+        ├── visualization.rs   Braille waveforms, spectrum, Penrose, emergence viz
+        └── knowledge/         In-app wiki, glossary, and MicroTube guide
+
+apps/
+└── web/    React + WebAssembly browser app (Vite + TypeScript)
 ```
 
-**Thread model:** Three threads communicate lock-free.
+**Thread model (terminal app):** Three threads communicate lock-free.
 
 ```
 ┌──────────────────┐  Arc<AtomicU32>  ┌─────────────────────┐
@@ -221,6 +245,8 @@ Unlicense
 
 - [ratatui](https://ratatui.rs) — Terminal UI framework
 - [cpal](https://github.com/RustAudio/cpal) — Cross-platform audio
+- [wasm-bindgen](https://github.com/rustwasm/wasm-bindgen) & [wasm-pack](https://rustwasm.github.io/wasm-pack/) — The Rust → WebAssembly bridge
+- [React](https://react.dev) & [Vite](https://vite.dev) — The web front-end
 - Roger Penrose — For the geometry, the impossible triangles, and the audacious claim that consciousness arises from quantum gravity
 - Stuart Hameroff — For taking that claim into the operating theatre, and for the 2014 *Physics of Life Reviews* paper that re-frames EEG bands as beat frequencies of microtubule vibrations
 - N. S. Babcock, P. Kurian, and collaborators — For the 2024 *J. Phys. Chem. B* result on collective superradiance in tryptophan mega-networks, which puts the warm-wet-brain decoherence objection into a different, kinder light

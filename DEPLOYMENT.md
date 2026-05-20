@@ -7,11 +7,13 @@ Rust to WebAssembly, and Vercel's build image has no Rust toolchain.
 ## One-time Vercel project setup
 
 1. **Import** the Git repository into Vercel.
-2. **Root Directory:** leave as the repository root (`.`). Do *not* set it
-   to `apps/web` — the build must run from the workspace root so it can
-   reach `crates/core`.
-3. **Framework Preset:** `Other`. All build settings come from `vercel.json`,
-   so the dashboard fields can be left on their defaults.
+2. **Root Directory:** it must be the repository root (leave the field
+   blank / `.`). Vercel's monorepo detection tends to auto-set this to
+   `apps/web`; if so, clear it — the build must run from the workspace
+   root to reach `crates/core` and `scripts/`.
+3. **Framework Preset:** `Other`. Every build setting comes from
+   `vercel.json`, so leave the dashboard's *Build & Development Settings*
+   overrides **off** — a stale override there will fight `vercel.json`.
 4. No environment variables are required.
 
 That is it — `vercel.json` does the rest.
@@ -47,8 +49,19 @@ warm cache are faster. The script is idempotent and safe to run locally.
 ```bash
 npm run build          # if the Rust/Wasm toolchain is already installed
 bash scripts/vercel-build.sh   # installs the toolchain first, like Vercel
-npx vite preview --outDir apps/web/dist   # serve the built bundle
+npm run preview --workspace @microtube/web   # serve the built bundle
 ```
+
+## Troubleshooting
+
+Both common failures come from the Vercel **dashboard**, not the repo:
+
+- **`bash: scripts/vercel-build.sh: No such file or directory` (exit 127)** —
+  the build is not running from the repo root. The Root Directory is set to
+  `apps/web`; clear it (step 2).
+- **`npm error Tracker "idealTree" already exists`** — a stale Install
+  Command override is set in the dashboard. Turn the Install/Build/Output
+  overrides off under *Settings → Build & Deployment* (step 3).
 
 ## Notes
 

@@ -5,8 +5,9 @@ the more *consonant* ones live longer. The notion of consonance used here
 is operational — a small numerical function that takes a ratio and returns
 a score from 0 (dissonant) to roughly 1 (perfect).
 
-The function lives in `src/emergence.rs` and is reused, byte-for-byte, by
-any other code in the project that needs it. There is one source of truth.
+The function lives in `crates/core/src/emergence.rs` and is reused,
+byte-for-byte, by any other code in the project that needs it. There is one
+source of truth.
 
 ## The formula
 
