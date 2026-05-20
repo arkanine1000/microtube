@@ -33,8 +33,13 @@ layer. Drift Base controls the bottom frequency of that moving stack.
 
 Noise controls the mist layer.
 
+Timer controls the auto-stop window. It is on by default at 60 minutes, can be
+set up to 120 minutes in 5-minute small steps or 10-minute large steps, and
+pauses while playback is paused.
+
 ## Quick toggles
 
+- `a` toggles the timer.
 - `t` cycles timbre: Organ, Flute, Bell, Saw.
 - `n` toggles mist on or off.
 - `m` cycles the mist texture.

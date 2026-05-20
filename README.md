@@ -43,7 +43,7 @@ MicroTube synthesizes binaural beats in real-time, streams stereo audio to PipeW
 - Sequence film-strip below the stage with a luminous "head" tracking the active step
 - Contextual key-hint footer that adapts to the current mode and collapses gracefully on narrow terminals
 - Two-column help overlay with grouped commands and lore
-- Session timer, breathing pacer, and live `epoch` indicator during journey-class sequences
+- Adjustable timer with auto-stop, breathing pacer, and live `epoch` indicator during journey-class sequences
 
 ## Requirements
 
@@ -78,6 +78,7 @@ cargo run --release
 | `h` / `l` | Adjust value |
 | `H` / `L` | Big adjustment (5x) |
 | `Space` | Play / Pause |
+| `a` | Toggle timer |
 | `1`-`5` | Quick preset |
 | `p` | Preset menu |
 | `s` | Sequence menu |
@@ -88,6 +89,7 @@ cargo run --release
 | `R` | Reverse drift direction (rising ↔ falling) |
 | `n` | Toggle mist layer |
 | `m` | Cycle mist type |
+| `t` | Cycle timbre |
 | `?` | Help |
 | `q` / `Esc` | Quit |
 

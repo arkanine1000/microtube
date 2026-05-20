@@ -100,6 +100,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             knowledge::draw(f, chunks[1], app, accent, border_color);
         }
     }
+
+    let paused = !app.params.playing.load(std::sync::atomic::Ordering::Relaxed);
+    if paused {
+        draw_paused_overlay(f, size, accent);
+    }
 }
 
 /// Studio tab — the main instrument layout.
@@ -140,7 +145,7 @@ fn draw_studio(f: &mut Frame, area: Rect, app: &mut App, accent: Color, border: 
 
 /// Thin two-row header that runs across the top of the shell.
 ///
-/// Row 1: `◈ microtube` wordmark · tab strip · band readout · timer · play dot.
+/// Row 1: `◈ microtube` wordmark · tab strip · band readout · auto-stop · play dot.
 /// Row 2: a hairline rule that visually separates the chrome from the stage.
 fn draw_header_bar(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     if area.width == 0 || area.height == 0 {
@@ -150,8 +155,10 @@ fn draw_header_bar(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     let beat_freq = app.params.get_beat_freq();
     let base_freq = app.params.get_base_freq();
     let band = freq_band_name(beat_freq);
-    let secs = app.session_elapsed() as u32;
-    let timer = format!("{:02}:{:02}", secs / 60, secs % 60);
+    let timer = match app.timer_remaining_secs() {
+        Some(secs) => format!("a {}", clock_label(secs)),
+        None => clock_label(app.session_elapsed() as u64),
+    };
     let elapsed = app.start_time.elapsed().as_secs_f64();
     let sigil = viz_sigil(app.viz_mode);
 
@@ -192,7 +199,7 @@ fn draw_header_bar(f: &mut Frame, area: Rect, app: &App, accent: Color) {
         tab_x = tab_x.saturating_add(len);
     }
 
-    // Right cluster: 5-dot band indicator · band · beat · timer · play dot.
+    // Right cluster: 5-dot band indicator · band · beat · auto-stop · play dot.
     // Built progressively from most-essential to most-optional, dropping
     // segments from the head of the optional list when the cluster would
     // collide with the tab strip.
@@ -628,7 +635,7 @@ fn render_waveform_stage(
     );
 }
 
-/// Left rail — the parameter meters. A panel card holding the 8
+/// Left rail — the parameter meters. A panel card holding the
 /// adjustable params; the active one carries an accent-colored arrow.
 /// Info column — parameters / session / partials stacked vertically in one
 /// panel card, separated by hairline rules. The visualization gets all
@@ -640,8 +647,8 @@ fn draw_info_column(f: &mut Frame, area: Rect, app: &App, accent: Color, border:
     f.render_widget(block, area);
 
     // Section heights (excluding the two hairline rules between them).
-    let param_h: u16 = 8;
-    let session_h: u16 = 5 + app.status_message.as_ref().map(|_| 1).unwrap_or(0);
+    let param_h: u16 = 9;
+    let session_h: u16 = 6 + app.status_message.as_ref().map(|_| 1).unwrap_or(0);
     let partials_h: u16 = HARMONIC_PARTIAL_LABELS.len() as u16 + 1;
 
     let parts = Layout::default()
@@ -687,6 +694,21 @@ fn draw_param_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
             value: format!("{:>3.0}%", app.params.get_volume() * 100.0),
             ratio: app.params.get_volume(),
             color: SEMANTIC.gain,
+        },
+        MeterSpec {
+            param: ActiveParam::Timer,
+            label: "timer",
+            value: if app.timer_enabled {
+                format!("{:>3} min", app.timer_minutes)
+            } else {
+                "off".to_string()
+            },
+            ratio: if app.timer_enabled {
+                app.timer_progress_ratio()
+            } else {
+                0.0
+            },
+            color: SEMANTIC.timer,
         },
         MeterSpec {
             param: ActiveParam::Harmonics,
@@ -753,6 +775,10 @@ fn draw_session_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     };
     let band = freq_band_name(beat);
     let breath = breath_meter(app.session_elapsed() as f64);
+    let timer_status = app
+        .timer_remaining_secs()
+        .map(|secs| format!("{} left", clock_label(secs)))
+        .unwrap_or_else(|| "off".to_string());
     let emergence = app.params.get_emergence();
     let mode_label = app.params.get_spawn_mode().label();
     let em_status = if emergence > 0.01 {
@@ -777,6 +803,7 @@ fn draw_session_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     let mut rows = vec![
         epoch_or_preset,
         data_line("band", band, accent),
+        data_line("timer", &timer_status, SEMANTIC.timer),
         data_line("mist", &mist, SEMANTIC.mist),
         Line::from(vec![
             Span::styled(" life   ", Style::default().fg(DIM).bg(PANEL_BG)),
@@ -956,6 +983,7 @@ fn draw_footer_hints(f: &mut Frame, area: Rect, app: &App, accent: Color) {
             ("h/l", "tune"),
             ("j/k", "select"),
             ("space", "play"),
+            ("a", "timer"),
             ("p", "preset"),
             ("s", "seq"),
             ("v", "viz"),
@@ -1027,6 +1055,25 @@ fn footer_hint_line(
         }
     }
     Line::from(spans)
+}
+
+fn draw_paused_overlay(f: &mut Frame, area: Rect, accent: Color) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+
+    draw_modal_dim(f.buffer_mut(), area);
+    let text_area = Rect {
+        x: area.x,
+        y: area.y + area.height / 2,
+        width: area.width,
+        height: 1,
+    };
+    let line = Line::from(Span::styled(
+        "microtube is paused.",
+        Style::default().fg(accent).add_modifier(Modifier::BOLD),
+    ));
+    f.render_widget(Paragraph::new(line).alignment(Alignment::Center), text_area);
 }
 
 /// Wash the entire shell area with a low-opacity black, then carve out
@@ -1528,8 +1575,9 @@ fn draw_help_commands(f: &mut Frame, area: Rect, accent: Color) {
         ),
         (
             "session",
-            SEMANTIC.gain,
+            SEMANTIC.timer,
             &[
+                ("a", "toggle timer"),
                 ("tab", "swap to Knowledge"),
                 ("?", "help"),
                 ("q / esc", "quit"),
@@ -1943,6 +1991,10 @@ fn data_line(label: &'static str, value: &str, color: Color) -> Line<'static> {
         ),
         Span::styled(value.to_string(), Style::default().fg(color).bg(PANEL_BG)),
     ])
+}
+
+fn clock_label(secs: u64) -> String {
+    format!("{:02}:{:02}", secs / 60, secs % 60)
 }
 
 fn breath_meter(elapsed: f64) -> String {

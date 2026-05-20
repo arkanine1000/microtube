@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{io, path::PathBuf};
 
 use crate::emergence::{EmergenceSnapshot, SpawnMode};
@@ -8,6 +8,12 @@ use crate::knowledge::KnowledgeState;
 use crate::local_presets::{self, LocalPreset};
 use crate::presets::{PRESETS, SEQUENCES, SequenceStep};
 use crate::shepard::{DEFAULT_BASE_FREQ_HZ, Direction, MAX_BASE_FREQ_HZ, MIN_BASE_FREQ_HZ};
+
+pub const TIMER_DEFAULT_MINUTES: u32 = 60;
+pub const TIMER_MAX_MINUTES: u32 = 120;
+pub const TIMER_MIN_MINUTES: u32 = 5;
+const TIMER_SMALL_STEP_MINUTES: u32 = 5;
+const TIMER_LARGE_STEP_MINUTES: u32 = 10;
 
 /// Top-level UI tab. The Studio tab is the live synth; Knowledge is the
 /// in-app wiki / glossary / playground. The two are orthogonal axes; the
@@ -330,6 +336,7 @@ pub enum ActiveParam {
     BaseFreq,
     BeatFreq,
     Volume,
+    Timer,
     Harmonics,
     Emergence,
     Shepard,
@@ -337,12 +344,15 @@ pub enum ActiveParam {
     NoiseLevel,
 }
 
+pub const ACTIVE_PARAM_COUNT: usize = 9;
+
 impl ActiveParam {
     pub fn next(self) -> Self {
         match self {
             Self::BaseFreq => Self::BeatFreq,
             Self::BeatFreq => Self::Volume,
-            Self::Volume => Self::Harmonics,
+            Self::Volume => Self::Timer,
+            Self::Timer => Self::Harmonics,
             Self::Harmonics => Self::Emergence,
             Self::Emergence => Self::Shepard,
             Self::Shepard => Self::ShepardBase,
@@ -356,7 +366,8 @@ impl ActiveParam {
             Self::BaseFreq => Self::NoiseLevel,
             Self::BeatFreq => Self::BaseFreq,
             Self::Volume => Self::BeatFreq,
-            Self::Harmonics => Self::Volume,
+            Self::Timer => Self::Volume,
+            Self::Harmonics => Self::Timer,
             Self::Emergence => Self::Harmonics,
             Self::Shepard => Self::Emergence,
             Self::ShepardBase => Self::Shepard,
@@ -369,6 +380,7 @@ impl ActiveParam {
             Self::BaseFreq => "Base Freq",
             Self::BeatFreq => "Beat Freq",
             Self::Volume => "Volume",
+            Self::Timer => "Timer",
             Self::NoiseLevel => "Noise",
             Self::Harmonics => "Warmth",
             Self::Emergence => "Emergence",
@@ -383,11 +395,12 @@ impl ActiveParam {
             Self::BaseFreq => 0,
             Self::BeatFreq => 1,
             Self::Volume => 2,
-            Self::Harmonics => 3,
-            Self::Emergence => 4,
-            Self::Shepard => 5,
-            Self::ShepardBase => 6,
-            Self::NoiseLevel => 7,
+            Self::Timer => 3,
+            Self::Harmonics => 4,
+            Self::Emergence => 5,
+            Self::Shepard => 6,
+            Self::ShepardBase => 7,
+            Self::NoiseLevel => 8,
         }
     }
 }
@@ -449,7 +462,7 @@ pub struct Signals {
     pub rms_r: f32,
     /// Instant of the most recent adjustment for each parameter — used to
     /// drive a brief afterglow on `h/l`. `None` = never adjusted this session.
-    pub last_param_adjust: [Option<Instant>; 8],
+    pub last_param_adjust: [Option<Instant>; ACTIVE_PARAM_COUNT],
     /// Instant of the most recent tab switch — drives the tab strip ease.
     pub last_tab_switch: Option<Instant>,
 }
@@ -459,7 +472,7 @@ impl Signals {
         Self {
             rms_l: 0.0,
             rms_r: 0.0,
-            last_param_adjust: [None; 8],
+            last_param_adjust: [None; ACTIVE_PARAM_COUNT],
             last_tab_switch: None,
         }
     }
@@ -493,6 +506,11 @@ pub struct App {
     pub status_message: Option<String>,
     pub spectrum_bars: Vec<f32>,
     pub start_time: Instant,
+    pub timer_enabled: bool,
+    pub timer_minutes: u32,
+    timer_started_at: Option<Instant>,
+    timer_elapsed_before_pause: Duration,
+    timer_fired: bool,
     pub frame_count: u64,
     pub signals: Signals,
 }
@@ -524,6 +542,8 @@ impl App {
         local_presets: Vec<LocalPreset>,
         preset_storage_path: Option<PathBuf>,
     ) -> Self {
+        let now = Instant::now();
+        let timer_started_at = params.playing.load(Ordering::Relaxed).then_some(now);
         Self {
             params,
             viz_buffer,
@@ -543,7 +563,12 @@ impl App {
             preset_storage_path,
             status_message: None,
             spectrum_bars: vec![0.0; 32],
-            start_time: Instant::now(),
+            start_time: now,
+            timer_enabled: true,
+            timer_minutes: TIMER_DEFAULT_MINUTES,
+            timer_started_at,
+            timer_elapsed_before_pause: Duration::ZERO,
+            timer_fired: false,
             frame_count: 0,
             signals: Signals::new(),
         }
@@ -572,6 +597,33 @@ impl App {
             }
             self.signals.rms_l = (sum_l / window as f32).sqrt();
             self.signals.rms_r = (sum_r / window as f32).sqrt();
+        }
+    }
+
+    pub fn update_timer(&mut self) {
+        if !self.timer_enabled {
+            return;
+        }
+
+        let playing = self.params.playing.load(Ordering::Relaxed);
+        if playing {
+            if self.timer_fired {
+                self.timer_elapsed_before_pause = Duration::ZERO;
+                self.timer_fired = false;
+            }
+            if self.timer_started_at.is_none() {
+                self.timer_started_at = Some(Instant::now());
+            }
+
+            if self.timer_elapsed() >= self.timer_duration() {
+                self.params.playing.store(false, Ordering::Relaxed);
+                self.timer_started_at = None;
+                self.timer_elapsed_before_pause = self.timer_duration();
+                self.timer_fired = true;
+                self.status_message = Some(format!("Auto-stop reached {} min", self.timer_minutes));
+            }
+        } else if let Some(started_at) = self.timer_started_at.take() {
+            self.timer_elapsed_before_pause += started_at.elapsed();
         }
     }
 
@@ -982,6 +1034,38 @@ impl App {
         self.start_time.elapsed().as_secs_f32()
     }
 
+    pub fn timer_duration(&self) -> Duration {
+        Duration::from_secs(self.timer_minutes as u64 * 60)
+    }
+
+    pub fn timer_elapsed(&self) -> Duration {
+        if self.timer_fired {
+            return self.timer_duration();
+        }
+
+        let mut elapsed = self.timer_elapsed_before_pause;
+        if self.timer_enabled
+            && self.params.playing.load(Ordering::Relaxed)
+            && let Some(started_at) = self.timer_started_at
+        {
+            elapsed += started_at.elapsed();
+        }
+        elapsed
+    }
+
+    pub fn timer_remaining_secs(&self) -> Option<u64> {
+        if !self.timer_enabled {
+            return None;
+        }
+
+        let remaining = self.timer_duration().saturating_sub(self.timer_elapsed());
+        Some(remaining.as_secs() + u64::from(remaining.subsec_nanos() > 0))
+    }
+
+    pub fn timer_progress_ratio(&self) -> f32 {
+        (self.timer_minutes as f32 / TIMER_MAX_MINUTES as f32).clamp(0.0, 1.0)
+    }
+
     pub fn clear_emergence_snapshot(&self) {
         if let Ok(mut snapshot) = self.emergence_snapshot.try_lock() {
             *snapshot = EmergenceSnapshot::empty();
@@ -1040,28 +1124,80 @@ impl App {
         self.current_preset = None;
     }
 
+    pub fn toggle_playing(&mut self) {
+        let current = self.params.playing.load(Ordering::Relaxed);
+        if current {
+            self.params.playing.store(false, Ordering::Relaxed);
+            if let Some(started_at) = self.timer_started_at.take() {
+                self.timer_elapsed_before_pause += started_at.elapsed();
+            }
+        } else {
+            self.params.playing.store(true, Ordering::Relaxed);
+            if self.timer_enabled {
+                if self.timer_fired {
+                    self.timer_elapsed_before_pause = Duration::ZERO;
+                    self.timer_fired = false;
+                }
+                self.timer_started_at = Some(Instant::now());
+            }
+        }
+    }
+
+    pub fn toggle_timer(&mut self) {
+        self.timer_enabled = !self.timer_enabled;
+        self.timer_elapsed_before_pause = Duration::ZERO;
+        self.timer_started_at = if self.timer_enabled && self.params.playing.load(Ordering::Relaxed)
+        {
+            Some(Instant::now())
+        } else {
+            None
+        };
+        self.timer_fired = false;
+    }
+
     pub fn adjust_param(&mut self, delta: f32) {
         self.signals.record_adjust(self.active_param);
-        match self.active_param {
+        let sound_changed = match self.active_param {
             ActiveParam::BaseFreq => {
                 let v = (self.params.get_base_freq() + delta * 5.0).clamp(50.0, 500.0);
                 self.params.set_base_freq(v);
+                true
             }
             ActiveParam::BeatFreq => {
                 let v = (self.params.get_beat_freq() + delta * 0.5).clamp(0.5, 100.0);
                 self.params.set_beat_freq(v);
+                true
             }
             ActiveParam::Volume => {
                 let v = (self.params.get_volume() + delta * 0.05).clamp(0.0, 1.0);
                 self.params.set_volume(v);
+                true
+            }
+            ActiveParam::Timer => {
+                let step = if delta.abs() > 1.0 {
+                    TIMER_LARGE_STEP_MINUTES
+                } else {
+                    TIMER_SMALL_STEP_MINUTES
+                };
+                let signed_step = if delta.is_sign_negative() {
+                    -(step as i32)
+                } else {
+                    step as i32
+                };
+                self.timer_minutes = (self.timer_minutes as i32 + signed_step)
+                    .clamp(TIMER_MIN_MINUTES as i32, TIMER_MAX_MINUTES as i32)
+                    as u32;
+                false
             }
             ActiveParam::NoiseLevel => {
                 let v = (self.params.get_noise_level() + delta * 0.05).clamp(0.0, 1.0);
                 self.params.set_noise_level(v);
+                true
             }
             ActiveParam::Harmonics => {
                 let v = (self.params.get_harmonics() + delta * 0.05).clamp(0.0, 1.0);
                 self.params.set_harmonics(v);
+                true
             }
             ActiveParam::Emergence => {
                 let v = (self.params.get_emergence() + delta * 0.05).clamp(0.0, 1.0);
@@ -1069,17 +1205,22 @@ impl App {
                 if v <= 0.01 {
                     self.clear_emergence_snapshot();
                 }
+                true
             }
             ActiveParam::Shepard => {
                 let v = (self.params.get_shepard() + delta * 0.05).clamp(0.0, 1.0);
                 self.params.set_shepard(v);
+                true
             }
             ActiveParam::ShepardBase => {
                 let v = self.params.get_shepard_base_freq() + delta;
                 self.params.set_shepard_base_freq(v);
+                true
             }
+        };
+        if sound_changed {
+            self.current_preset = None;
         }
-        self.current_preset = None;
     }
 
     pub fn toggle_shepard(&mut self) {
@@ -1213,6 +1354,65 @@ mod tests {
 
         assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
         assert_eq!(app.viz_mode, VizMode::Spectrum);
+    }
+
+    #[test]
+    fn timer_defaults_to_enabled_sixty_minutes() {
+        let app = app_for_tests();
+
+        assert!(app.timer_enabled);
+        assert_eq!(app.timer_minutes, TIMER_DEFAULT_MINUTES);
+        assert_eq!(app.timer_remaining_secs(), Some(60 * 60));
+    }
+
+    #[test]
+    fn timer_adjustment_uses_small_and_large_steps() {
+        let mut app = app_for_tests();
+        app.active_param = ActiveParam::Timer;
+
+        app.adjust_param(1.0);
+        assert_eq!(app.timer_minutes, 65);
+
+        app.adjust_param(-1.0);
+        assert_eq!(app.timer_minutes, 60);
+
+        app.adjust_param(5.0);
+        assert_eq!(app.timer_minutes, 70);
+
+        app.adjust_param(-5.0);
+        assert_eq!(app.timer_minutes, 60);
+
+        app.timer_minutes = 118;
+        app.adjust_param(5.0);
+        assert_eq!(app.timer_minutes, TIMER_MAX_MINUTES);
+
+        app.timer_minutes = 7;
+        app.adjust_param(-5.0);
+        assert_eq!(app.timer_minutes, TIMER_MIN_MINUTES);
+    }
+
+    #[test]
+    fn auto_stop_pauses_playback_and_resets_on_resume() {
+        let mut app = app_for_tests();
+        app.timer_elapsed_before_pause = app.timer_duration();
+
+        app.update_timer();
+
+        assert!(
+            !app.params
+                .playing
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert_eq!(app.timer_remaining_secs(), Some(0));
+
+        app.toggle_playing();
+
+        assert!(
+            app.params
+                .playing
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert_eq!(app.timer_remaining_secs(), Some(60 * 60));
     }
 
     #[test]

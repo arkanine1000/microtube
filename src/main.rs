@@ -68,24 +68,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::clone(&emergence_snapshot),
     );
 
-    let tick_rate = Duration::from_millis(33);
+    let active_rate = Duration::from_millis(33);
     let mut last_tick = Instant::now();
+    let mut needs_draw = true;
 
     loop {
-        app.update_signals();
-        terminal.draw(|f| ui::draw(f, &mut app))?;
+        let playing = app.params.playing.load(Ordering::Relaxed);
 
-        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-        if event::poll(timeout)?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            handle_key(&mut app, key.code, key.modifiers);
-        }
+        if playing {
+            if last_tick.elapsed() >= active_rate {
+                last_tick = Instant::now();
+                app.update_timer();
+                app.update_sequence();
+                needs_draw = true;
+            }
 
-        if last_tick.elapsed() >= tick_rate {
-            last_tick = Instant::now();
-            app.update_sequence();
+            if needs_draw {
+                app.update_signals();
+                terminal.draw(|f| ui::draw(f, &mut app))?;
+                needs_draw = false;
+            }
+
+            let timeout = active_rate.saturating_sub(last_tick.elapsed());
+            if event::poll(timeout)? {
+                needs_draw |= handle_event(&mut app, event::read()?);
+            }
+        } else {
+            if needs_draw {
+                terminal.draw(|f| ui::draw(f, &mut app))?;
+                needs_draw = false;
+            }
+            needs_draw |= handle_event(&mut app, event::read()?);
         }
 
         if app.should_quit {
@@ -101,6 +114,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     Ok(())
+}
+
+fn handle_event(app: &mut App, event: Event) -> bool {
+    match event {
+        Event::Key(key) if key.kind == KeyEventKind::Press => {
+            handle_key(app, key.code, key.modifiers);
+            true
+        }
+        Event::Resize(_, _) => true,
+        _ => false,
+    }
 }
 
 fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
@@ -147,8 +171,7 @@ fn handle_normal(app: &mut App, code: KeyCode) {
         KeyCode::Char('q') | KeyCode::Esc => app.should_quit = true,
 
         KeyCode::Char(' ') => {
-            let current = app.params.playing.load(Ordering::Relaxed);
-            app.params.playing.store(!current, Ordering::Relaxed);
+            app.toggle_playing();
         }
 
         // Vim navigation
@@ -181,6 +204,7 @@ fn handle_normal(app: &mut App, code: KeyCode) {
         KeyCode::Char('n') => app.toggle_noise(),
         KeyCode::Char('m') => app.cycle_mist_type(),
         KeyCode::Char('t') => app.cycle_timbre(),
+        KeyCode::Char('a') => app.toggle_timer(),
         KeyCode::Char('g') => app.toggle_spawn_mode(),
         KeyCode::Char('r') => app.toggle_shepard(),
         KeyCode::Char('R') => app.reverse_shepard(),

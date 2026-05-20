@@ -38,6 +38,7 @@ pub struct SemanticPalette {
     pub base: Color,    // base carrier frequency
     pub gain: Color,    // volume
     pub warm: Color,    // harmonics / warmth
+    pub timer: Color,   // auto-stop timer
     pub life: Color,    // emergence
     pub drift: Color,   // shepard intensity
     pub d_base: Color,  // shepard base frequency
@@ -51,6 +52,7 @@ pub const SEMANTIC: SemanticPalette = SemanticPalette {
     base: Color::Rgb(80, 220, 245),
     gain: Color::Rgb(84, 240, 150),
     warm: Color::Rgb(250, 210, 92),
+    timer: Color::Rgb(255, 130, 145),
     life: Color::Rgb(210, 145, 255),
     drift: Color::Rgb(255, 170, 110),
     d_base: Color::Rgb(255, 205, 135),

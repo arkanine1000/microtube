@@ -201,9 +201,7 @@ impl AudioEngine {
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let playing = params.playing.load(Ordering::Relaxed);
                     if !playing {
-                        for sample in data.iter_mut() {
-                            *sample = 0.0;
-                        }
+                        data.fill(0.0);
                         return;
                     }
 
