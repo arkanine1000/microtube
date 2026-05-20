@@ -1,2 +1,10 @@
 /target
 .claude/
+
+# Node
+node_modules/
+apps/web/dist/
+
+# wasm-pack output + the generated worklet (regenerated from crates/core)
+apps/web/public/microtube-worklet/wasm/
+apps/web/public/microtube-worklet/processor.js
