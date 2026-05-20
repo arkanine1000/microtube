@@ -1,0 +1,22 @@
+{
+  "name": "microtube-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MicroTube — terminal + web binaural synthesis studio over a shared Rust/Wasm DSP core.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "wasm:build": "wasm-pack build crates/core --target web --out-dir ../../apps/web/public/microtube-worklet/wasm --dev -- --features wasm && node apps/web/scripts/build-worklet.mjs",
+    "wasm:build:release": "wasm-pack build crates/core --target web --out-dir ../../apps/web/public/microtube-worklet/wasm -- --features wasm && node apps/web/scripts/build-worklet.mjs",
+    "wasm:watch": "cargo watch -w crates/core/src -w crates/core/Cargo.toml -s \"npm run wasm:build\"",
+    "dev": "npm run wasm:build && concurrently -n wasm,vite -c yellow,cyan \"npm run wasm:watch\" \"npm run dev --workspace @microtube/web\"",
+    "build": "npm run wasm:build:release && npm run build --workspace @microtube/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

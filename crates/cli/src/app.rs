@@ -182,102 +182,10 @@ impl AudioParams {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Timbre {
-    Organ = 0,
-    Flute = 1,
-    Bell = 2,
-    Saw = 3,
-}
-
-impl Timbre {
-    pub fn from_u32(value: u32) -> Self {
-        match value {
-            1 => Self::Flute,
-            2 => Self::Bell,
-            3 => Self::Saw,
-            _ => Self::Organ,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        match self {
-            Self::Organ => Self::Flute,
-            Self::Flute => Self::Bell,
-            Self::Bell => Self::Saw,
-            Self::Saw => Self::Organ,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Organ => "Organ",
-            Self::Flute => "Flute",
-            Self::Bell => "Bell",
-            Self::Saw => "Saw",
-        }
-    }
-
-    pub fn weights(self) -> [f64; 5] {
-        match self {
-            Self::Organ => [0.5, 0.25, 0.125, 0.0625, 0.03125],
-            Self::Flute => [0.0, 0.5, 0.0, 0.125, 0.0],
-            Self::Bell => [1.0, 0.0, 0.5, 0.0, 0.25],
-            Self::Saw => [0.5, 0.333, 0.25, 0.2, 0.166],
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum MistType {
-    Pink = 0,
-    White = 1,
-    Brown = 2,
-    Blue = 3,
-    Velvet = 4,
-}
-
-impl MistType {
-    pub fn from_u32(value: u32) -> Self {
-        match value {
-            1 => Self::White,
-            2 => Self::Brown,
-            3 => Self::Blue,
-            4 => Self::Velvet,
-            _ => Self::Pink,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        match self {
-            Self::Pink => Self::White,
-            Self::White => Self::Brown,
-            Self::Brown => Self::Blue,
-            Self::Blue => Self::Velvet,
-            Self::Velvet => Self::Pink,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Pink => "Pink",
-            Self::White => "White",
-            Self::Brown => "Brown",
-            Self::Blue => "Blue",
-            Self::Velvet => "Velvet",
-        }
-    }
-
-    pub fn texture(self) -> &'static str {
-        match self {
-            Self::Pink => "warm",
-            Self::White => "air",
-            Self::Brown => "surf",
-            Self::Blue => "glass",
-            Self::Velvet => "sparks",
-        }
-    }
-}
+/// `Timbre` and `MistType` now live in the shared DSP core so the web
+/// build uses the exact same harmonic and noise tables. Re-exported
+/// here so existing `crate::app::Timbre` paths keep working.
+pub use microtube_core::synth::{MistType, Timbre};
 
 /// Ring buffer for passing audio samples to the visualization.
 pub struct VizBuffer {
