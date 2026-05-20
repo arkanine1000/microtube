@@ -16,8 +16,11 @@ Rust to WebAssembly, and Vercel's build image has no Rust toolchain.
    > `apps/web` and become unreachable. If it was set to `apps/web`, open
    > **Project → Settings → Build & Deployment → Root Directory**, clear it
    > back to the repository root, and redeploy.
-3. **Framework Preset:** `Other`. All build settings come from `vercel.json`,
-   so the dashboard fields can be left on their defaults.
+3. **Framework Preset:** `Other`. The Build, Install and Output Directory
+   settings all come from `vercel.json` — leave the dashboard's
+   *Build & Development Settings* overrides **off**. A stale override there
+   (e.g. an Install Command of `npm install --prefix=../..`) will break the
+   build even after the Root Directory is corrected.
 4. No environment variables are required.
 
 With the Root Directory at the repo root, `vercel.json` does the rest.
@@ -33,17 +36,27 @@ Directory to the repository root) and redeploy. `scripts/vercel-build.sh`
 exists only at the repo root, by design — the build needs the whole
 workspace.
 
+**`npm error Tracker "idealTree" already exists` /
+`Command "npm install --prefix=../.." exited with 1`**
+
+A stale Install Command override is set in the dashboard (left over from a
+previous Root Directory). Open **Project → Settings → Build & Deployment**,
+turn the *Install Command* override off (and likewise Build Command /
+Output Directory) so `vercel.json` is the single source of truth, then
+redeploy.
+
 ## What `vercel.json` declares
 
 | Field             | Value                          | Why                                                        |
 | ----------------- | ------------------------------ | ---------------------------------------------------------- |
+| `installCommand`  | `npm install`                  | Run at the repo root; the npm workspace pulls in `apps/web`. |
 | `buildCommand`    | `bash scripts/vercel-build.sh` | Installs the Rust/Wasm toolchain, then builds.             |
 | `outputDirectory` | `apps/web/dist`                | The static bundle Vite emits.                              |
 | `framework`       | `null`                         | Custom monorepo — no framework auto-detection.             |
 | `headers`         | immutable cache for `/assets/*`| Vite content-hashes those files, so they never go stale.   |
 
-The install step (`npm install`) is left as Vercel's default; the npm
-workspace pulls in `apps/web`'s dependencies.
+Declaring `installCommand` in `vercel.json` keeps it authoritative — it
+overrides whatever the dashboard has, so a stale override cannot creep in.
 
 ## What the build does (`scripts/vercel-build.sh`)
 
