@@ -250,7 +250,7 @@ export const COPY: Record<Locale, Copy> = {
       motion: { label: 'Motion', caption: 'generative movement' },
     },
     bands: {
-      delta: { name: 'Delta', blurb: 'deep sleep' },
+      delta: { name: 'Delta', blurb: 'sleep' },
       theta: { name: 'Theta', blurb: 'meditation' },
       alpha: { name: 'Alpha', blurb: 'calm focus' },
       beta: { name: 'Beta', blurb: 'alertness' },
@@ -258,7 +258,7 @@ export const COPY: Record<Locale, Copy> = {
     },
     presets: [
       {
-        name: 'Deep Sleep',
+        name: 'Sleep',
         description: 'Delta 2 Hz - deep dreamless sleep',
       },
       {
@@ -419,7 +419,7 @@ export const COPY: Record<Locale, Copy> = {
       motion: { label: 'Kretanje', caption: 'generativni pomak' },
     },
     bands: {
-      delta: { name: 'Delta', blurb: 'duboki san' },
+      delta: { name: 'Delta', blurb: 'san' },
       theta: { name: 'Theta', blurb: 'meditacija' },
       alpha: { name: 'Alpha', blurb: 'smiren fokus' },
       beta: { name: 'Beta', blurb: 'budnost' },
@@ -427,7 +427,7 @@ export const COPY: Record<Locale, Copy> = {
     },
     presets: [
       {
-        name: 'Duboki san',
+        name: 'San',
         description: 'Delta 2 Hz - duboki san bez snova',
       },
       {
