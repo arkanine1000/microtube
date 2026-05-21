@@ -145,7 +145,7 @@ The default rate is 36 seconds per octave — slow enough to feel ambient, fast 
 
 ## Web app
 
-`apps/web` is a React + TypeScript front-end that runs the same synthesis engine in the browser: `crates/core` is compiled to WebAssembly with `wasm-pack` and executed inside an `AudioWorklet`. It exposes the parameter controls, quick presets, and the *Journey Through the Cosmos* sequence; visualizations are terminal-only for now.
+`apps/web` is a React + TypeScript front-end that runs the same synthesis engine in the browser: `crates/core` is compiled to WebAssembly with `wasm-pack` and executed inside an `AudioWorklet`. It is a mobile-first studio — a sticky transport bar carrying the play/pause control, a persistent strip of brainwave presets keyed to the five EEG bands, and two tabs: **Play** (transport, modes, and the *Journey Through the Cosmos* sequence) and **Shape** (tone parameters in collapsible, icon-led groups). Panels collapse by default to keep first contact calm, the accent colour retints the whole UI to the active band, and an auto-stop timer counts the session down in the transport bar. Visualizations are terminal-only for now.
 
 ```bash
 npm install        # from the repo root, once
