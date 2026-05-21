@@ -292,6 +292,58 @@ body {
   flex: 1;
 }
 
+.timer-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.timer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.timer-toggle input {
+  accent-color: var(--accent);
+}
+
+.timer-readout {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.timer-readout.fired {
+  color: var(--danger);
+}
+
+.timer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.timer-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.timer-minutes {
+  min-width: 52px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 /* --- journey --- */
 .journey-grid {
   display: grid;

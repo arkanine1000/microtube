@@ -10,11 +10,27 @@ import {
   type SpawnMode,
   type Timbre,
 } from './audio/params';
-import { useMicroTube } from './audio/useMicroTube';
+import {
+  TIMER_MAX_MINUTES,
+  TIMER_MIN_MINUTES,
+  TIMER_STEP_MINUTES,
+  useMicroTube,
+} from './audio/useMicroTube';
 import { JourneyPanel } from './components/JourneyPanel';
 import { ParameterSlider } from './components/ParameterSlider';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
+
+function formatClock(secs: number | null): string {
+  if (secs === null) return 'off';
+  const total = Math.max(0, Math.ceil(secs));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
 
 export default function App() {
   const mt = useMicroTube();
@@ -47,6 +63,9 @@ export default function App() {
   }
 
   const { state } = mt;
+  const timerLabel = mt.timer.fired
+    ? 'stopped'
+    : formatClock(mt.timer.remainingSecs);
 
   return (
     <div className="app">
@@ -69,6 +88,46 @@ export default function App() {
               onChange={(v) => mt.setParam('volume', v)}
             />
           </div>
+        </div>
+        <div className="timer-controls">
+          <label className="timer-toggle">
+            <input
+              type="checkbox"
+              checked={mt.timer.enabled}
+              onChange={(e) => mt.setTimerEnabled(e.currentTarget.checked)}
+            />
+            <span>Auto-stop</span>
+          </label>
+          <span className={`timer-readout${mt.timer.fired ? ' fired' : ''}`}>
+            {timerLabel}
+          </span>
+        </div>
+        <div className="timer-row">
+          <button
+            className="nudge"
+            onClick={() => mt.setTimerMinutes(mt.timer.minutes - TIMER_STEP_MINUTES)}
+            aria-label="decrease auto-stop timer"
+          >
+            ◂
+          </button>
+          <input
+            className="timer-range"
+            type="range"
+            min={TIMER_MIN_MINUTES}
+            max={TIMER_MAX_MINUTES}
+            step={TIMER_STEP_MINUTES}
+            value={mt.timer.minutes}
+            onChange={(e) => mt.setTimerMinutes(Number(e.currentTarget.value))}
+            aria-label="auto-stop minutes"
+          />
+          <button
+            className="nudge"
+            onClick={() => mt.setTimerMinutes(mt.timer.minutes + TIMER_STEP_MINUTES)}
+            aria-label="increase auto-stop timer"
+          >
+            ▸
+          </button>
+          <span className="timer-minutes">{mt.timer.minutes} min</span>
         </div>
       </section>
 

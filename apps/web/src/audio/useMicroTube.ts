@@ -5,13 +5,27 @@
 // only ever read `state` and call the returned actions.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DEFAULT_STATE, type MicroTubeState } from './params';
+import { clamp, DEFAULT_STATE, type MicroTubeState } from './params';
 import { JOURNEY_TOTAL_SECS, sampleJourney } from './sequences';
 
 export type EngineStatus = 'idle' | 'loading' | 'running' | 'error';
 
 const WORKLET_URL = '/microtube-worklet/processor.js';
 const WASM_URL = '/microtube-worklet/wasm/microtube_core_bg.wasm';
+
+export const TIMER_DEFAULT_MINUTES = 60;
+export const TIMER_MIN_MINUTES = 5;
+export const TIMER_MAX_MINUTES = 120;
+export const TIMER_STEP_MINUTES = 5;
+
+const MS_PER_MINUTE = 60_000;
+
+const snapTimerMinutes = (minutes: number) =>
+  clamp(
+    Math.round(minutes / TIMER_STEP_MINUTES) * TIMER_STEP_MINUTES,
+    TIMER_MIN_MINUTES,
+    TIMER_MAX_MINUTES,
+  );
 
 export interface JourneyStatus {
   active: boolean;
@@ -21,15 +35,26 @@ export interface JourneyStatus {
   total: number;
 }
 
+export interface TimerStatus {
+  enabled: boolean;
+  minutes: number;
+  remainingSecs: number | null;
+  fired: boolean;
+}
+
 export interface MicroTube {
   status: EngineStatus;
   error: string | null;
   state: MicroTubeState;
   uptimeSecs: number;
   journey: JourneyStatus;
+  timer: TimerStatus;
   start: () => Promise<void>;
   setParam: <K extends keyof MicroTubeState>(key: K, value: MicroTubeState[K]) => void;
+  setPlaying: (playing: boolean) => void;
   togglePlaying: () => void;
+  setTimerEnabled: (enabled: boolean) => void;
+  setTimerMinutes: (minutes: number) => void;
   startJourney: () => void;
   stopJourney: () => void;
 }
@@ -39,6 +64,12 @@ export function useMicroTube(): MicroTube {
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<MicroTubeState>(DEFAULT_STATE);
   const [uptimeSecs, setUptimeSecs] = useState(0);
+  const [timer, setTimer] = useState<TimerStatus>({
+    enabled: true,
+    minutes: TIMER_DEFAULT_MINUTES,
+    remainingSecs: TIMER_DEFAULT_MINUTES * 60,
+    fired: false,
+  });
   const [journey, setJourney] = useState<JourneyStatus>({
     active: false,
     stepIndex: 0,
@@ -51,8 +82,73 @@ export function useMicroTube(): MicroTube {
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const stateRef = useRef<MicroTubeState>(DEFAULT_STATE);
   const sessionStartRef = useRef<number>(0);
-  const journeyStartRef = useRef<number>(0);
+  const journeyElapsedRef = useRef<number>(0);
+  const journeyLastTickRef = useRef<number | null>(null);
   const journeyActiveRef = useRef<boolean>(false);
+  const timerEnabledRef = useRef<boolean>(true);
+  const timerMinutesRef = useRef<number>(TIMER_DEFAULT_MINUTES);
+  const timerStartedAtRef = useRef<number | null>(null);
+  const timerElapsedBeforePauseRef = useRef<number>(0);
+  const timerFiredRef = useRef<boolean>(false);
+
+  const pauseJourneyClock = useCallback((now: number) => {
+    if (!journeyActiveRef.current || journeyLastTickRef.current === null) return;
+    journeyElapsedRef.current += (now - journeyLastTickRef.current) / 1000;
+    journeyLastTickRef.current = null;
+  }, []);
+
+  const resumeJourneyClock = useCallback((now: number) => {
+    if (journeyActiveRef.current) {
+      journeyLastTickRef.current = now;
+    }
+  }, []);
+
+  const timerDurationMs = useCallback(
+    () => timerMinutesRef.current * MS_PER_MINUTE,
+    [],
+  );
+
+  const timerElapsedMs = useCallback(
+    (now: number) => {
+      if (timerFiredRef.current) {
+        return timerDurationMs();
+      }
+
+      let elapsed = timerElapsedBeforePauseRef.current;
+      if (
+        timerEnabledRef.current &&
+        stateRef.current.playing &&
+        timerStartedAtRef.current !== null
+      ) {
+        elapsed += now - timerStartedAtRef.current;
+      }
+      return elapsed;
+    },
+    [timerDurationMs],
+  );
+
+  const syncTimerState = useCallback(
+    (now = performance.now()) => {
+      if (!timerEnabledRef.current) {
+        setTimer({
+          enabled: false,
+          minutes: timerMinutesRef.current,
+          remainingSecs: null,
+          fired: timerFiredRef.current,
+        });
+        return;
+      }
+
+      const remainingMs = Math.max(0, timerDurationMs() - timerElapsedMs(now));
+      setTimer({
+        enabled: true,
+        minutes: timerMinutesRef.current,
+        remainingSecs: Math.ceil(remainingMs / 1000),
+        fired: timerFiredRef.current,
+      });
+    },
+    [timerDurationMs, timerElapsedMs],
+  );
 
   // --- worklet messaging ---------------------------------------------------
 
@@ -68,7 +164,7 @@ export function useMicroTube(): MicroTube {
   );
 
   /** Update one parameter: local mirror, React state, and the worklet. */
-  const setParam = useCallback(
+  const commitParam = useCallback(
     <K extends keyof MicroTubeState>(key: K, value: MicroTubeState[K]) => {
       stateRef.current = { ...stateRef.current, [key]: value };
       setState(stateRef.current);
@@ -77,9 +173,73 @@ export function useMicroTube(): MicroTube {
     [pushParam],
   );
 
+  const setPlaying = useCallback(
+    (playing: boolean) => {
+      const now = performance.now();
+      const wasPlaying = stateRef.current.playing;
+      if (wasPlaying === playing) {
+        syncTimerState(now);
+        return;
+      }
+
+      if (playing) {
+        if (timerEnabledRef.current) {
+          if (timerFiredRef.current) {
+            timerElapsedBeforePauseRef.current = 0;
+            timerFiredRef.current = false;
+          }
+          timerStartedAtRef.current = now;
+        }
+        resumeJourneyClock(now);
+      } else {
+        if (timerStartedAtRef.current !== null) {
+          timerElapsedBeforePauseRef.current += now - timerStartedAtRef.current;
+          timerStartedAtRef.current = null;
+        }
+        pauseJourneyClock(now);
+      }
+
+      commitParam('playing', playing);
+      syncTimerState(now);
+    },
+    [commitParam, pauseJourneyClock, resumeJourneyClock, syncTimerState],
+  );
+
+  const setParam = useCallback(
+    <K extends keyof MicroTubeState>(key: K, value: MicroTubeState[K]) => {
+      if (key === 'playing') {
+        setPlaying(Boolean(value));
+        return;
+      }
+      commitParam(key, value);
+    },
+    [commitParam, setPlaying],
+  );
+
   const togglePlaying = useCallback(() => {
-    setParam('playing', !stateRef.current.playing);
-  }, [setParam]);
+    setPlaying(!stateRef.current.playing);
+  }, [setPlaying]);
+
+  const setTimerEnabled = useCallback(
+    (enabled: boolean) => {
+      const now = performance.now();
+      timerEnabledRef.current = enabled;
+      timerElapsedBeforePauseRef.current = 0;
+      timerFiredRef.current = false;
+      timerStartedAtRef.current =
+        enabled && status === 'running' && stateRef.current.playing ? now : null;
+      syncTimerState(now);
+    },
+    [status, syncTimerState],
+  );
+
+  const setTimerMinutes = useCallback(
+    (minutes: number) => {
+      timerMinutesRef.current = snapTimerMinutes(minutes);
+      syncTimerState(performance.now());
+    },
+    [syncTimerState],
+  );
 
   // --- boot pipeline -------------------------------------------------------
 
@@ -158,7 +318,11 @@ export function useMicroTube(): MicroTube {
             node.disconnect(analyser);
           }, 1500);
 
-          sessionStartRef.current = performance.now();
+          const now = performance.now();
+          sessionStartRef.current = now;
+          timerStartedAtRef.current =
+            timerEnabledRef.current && stateRef.current.playing ? now : null;
+          syncTimerState(now);
           setUptimeSecs(0);
           setStatus('running');
         } else if (msg?.type === 'diag') {
@@ -195,7 +359,7 @@ export function useMicroTube(): MicroTube {
       setError(err instanceof Error ? err.message : String(err));
       setStatus('error');
     }
-  }, [status]);
+  }, [status, syncTimerState]);
 
   // --- session uptime ------------------------------------------------------
 
@@ -207,17 +371,63 @@ export function useMicroTube(): MicroTube {
     return () => window.clearInterval(id);
   }, [status]);
 
+  // --- auto-stop timer ------------------------------------------------------
+
+  useEffect(() => {
+    if (status !== 'running') return;
+    const id = window.setInterval(() => {
+      const now = performance.now();
+      if (
+        timerEnabledRef.current &&
+        stateRef.current.playing &&
+        timerElapsedMs(now) >= timerDurationMs()
+      ) {
+        timerElapsedBeforePauseRef.current = timerDurationMs();
+        timerStartedAtRef.current = null;
+        timerFiredRef.current = true;
+        pauseJourneyClock(now);
+        stateRef.current = { ...stateRef.current, playing: false };
+        setState(stateRef.current);
+        pushParam('playing', false);
+      }
+      syncTimerState(now);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [
+    pauseJourneyClock,
+    pushParam,
+    status,
+    syncTimerState,
+    timerDurationMs,
+    timerElapsedMs,
+  ]);
+
   // --- Journey sequence executor ------------------------------------------
 
   const startJourney = useCallback(() => {
     if (status !== 'running') return;
-    journeyStartRef.current = performance.now();
+    const now = performance.now();
+    const sample = sampleJourney(0);
+    journeyElapsedRef.current = 0;
+    journeyLastTickRef.current = stateRef.current.playing ? now : null;
     journeyActiveRef.current = true;
-    setJourney((j) => ({ ...j, active: true, elapsed: 0, stepIndex: 0 }));
-  }, [status]);
+    if (stateRef.current.playing) {
+      stateRef.current = { ...stateRef.current, ...sample.state };
+      setState(stateRef.current);
+      post({ type: 'params', value: sample.state });
+    }
+    setJourney((j) => ({
+      ...j,
+      active: true,
+      elapsed: 0,
+      stepIndex: sample.stepIndex,
+      stepName: sample.stepName,
+    }));
+  }, [post, status]);
 
   const stopJourney = useCallback(() => {
     journeyActiveRef.current = false;
+    journeyLastTickRef.current = null;
     setJourney((j) => ({ ...j, active: false }));
   }, []);
 
@@ -227,7 +437,17 @@ export function useMicroTube(): MicroTube {
     // lerped parameters move continuously without audible stair-stepping.
     const id = window.setInterval(() => {
       if (!journeyActiveRef.current) return;
-      const elapsed = (performance.now() - journeyStartRef.current) / 1000;
+      const now = performance.now();
+      if (!stateRef.current.playing) {
+        journeyLastTickRef.current = null;
+        return;
+      }
+      if (journeyLastTickRef.current === null) {
+        journeyLastTickRef.current = now;
+      }
+      journeyElapsedRef.current += (now - journeyLastTickRef.current) / 1000;
+      journeyLastTickRef.current = now;
+      const elapsed = journeyElapsedRef.current;
       const sample = sampleJourney(elapsed);
 
       stateRef.current = { ...stateRef.current, ...sample.state };
@@ -264,9 +484,13 @@ export function useMicroTube(): MicroTube {
     state,
     uptimeSecs,
     journey,
+    timer,
     start,
     setParam,
+    setPlaying,
     togglePlaying,
+    setTimerEnabled,
+    setTimerMinutes,
     startJourney,
     stopJourney,
   };

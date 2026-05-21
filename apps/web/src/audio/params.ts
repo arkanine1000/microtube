@@ -60,6 +60,7 @@ export type SliderKey =
   | 'emergence'
   | 'noiseLevel'
   | 'shepard'
+  | 'shepardBase'
   | 'volume';
 
 /** A continuous slider-backed parameter. */
@@ -144,6 +145,17 @@ export const SLIDERS: SliderSpec[] = [
     coarse: 0.1,
     unit: '',
     format: pct,
+  },
+  {
+    key: 'shepardBase',
+    label: 'Drift base',
+    hint: 'Lowest oscillator in the Shepard stack',
+    min: SHEPARD_BASE_MIN,
+    max: SHEPARD_BASE_MAX,
+    step: 0.1,
+    coarse: 1,
+    unit: 'Hz',
+    format: (v) => `${v.toFixed(1)} Hz`,
   },
 ];
 
