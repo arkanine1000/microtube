@@ -5,7 +5,13 @@
 // only ever read `state` and call the returned actions.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { clamp, DEFAULT_STATE, type MicroTubeState } from './params';
+import {
+  clamp,
+  DEFAULT_STATE,
+  EEG_BANDS,
+  eegBandIndex,
+  type MicroTubeState,
+} from './params';
 import { JOURNEY_TOTAL_SECS, sampleJourney } from './sequences';
 
 export type EngineStatus = 'idle' | 'loading' | 'running' | 'error';
@@ -80,6 +86,8 @@ export function useMicroTube(): MicroTube {
 
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
+  // A media element anchors the OS media-session widget to the engine.
+  const mediaElRef = useRef<HTMLAudioElement | null>(null);
   const stateRef = useRef<MicroTubeState>(DEFAULT_STATE);
   const sessionStartRef = useRef<number>(0);
   const journeyElapsedRef = useRef<number>(0);
@@ -299,8 +307,39 @@ export function useMicroTube(): MicroTube {
           constructed = true;
         } else if (msg?.type === 'ready') {
           settled = true;
-          // Connect only once the processor is fully initialised.
-          node.connect(ctx.destination);
+
+          // Connect only once the processor is fully initialised. Route the
+          // engine through a media element (a MediaStream sink feeding an
+          // <audio> tag) so the OS media-session widget — lock screen,
+          // notification shade, hardware keys — has something to attach to;
+          // a bare AudioWorkletNode is invisible to it. The element carries
+          // the real stereo output, and ctx.destination is the fallback.
+          let anchored = false;
+          try {
+            const sink = ctx.createMediaStreamDestination();
+            node.connect(sink);
+            const el = new Audio();
+            el.srcObject = sink.stream;
+            mediaElRef.current = el;
+            el.play().catch((err) => {
+              console.warn(
+                '[microtube] media element play() rejected — falling back ' +
+                  'to ctx.destination',
+                err,
+              );
+              try {
+                node.connect(ctx.destination);
+              } catch {
+                /* context already torn down */
+              }
+            });
+            anchored = true;
+          } catch (err) {
+            console.warn('[microtube] media-session anchor unavailable', err);
+          }
+          if (!anchored) {
+            node.connect(ctx.destination);
+          }
 
           // Graph probe: tap the node through an analyser to confirm signal
           // actually reaches the render graph (and hence the destination).
@@ -485,11 +524,81 @@ export function useMicroTube(): MicroTube {
     return () => window.clearInterval(id);
   }, [journey.active, post]);
 
+  // --- OS media-session integration ---------------------------------------
+
+  // The lock-screen / notification play-pause buttons and hardware media
+  // keys route straight into the engine transport.
+  useEffect(() => {
+    if (status !== 'running' || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    const play = () => setPlaying(true);
+    const pause = () => setPlaying(false);
+    ms.setActionHandler('play', play);
+    ms.setActionHandler('pause', pause);
+    ms.setActionHandler('stop', pause);
+    return () => {
+      ms.setActionHandler('play', null);
+      ms.setActionHandler('pause', null);
+      ms.setActionHandler('stop', null);
+    };
+  }, [status, setPlaying]);
+
+  // Retitle the widget as the band / beat frequency changes.
+  useEffect(() => {
+    if (status !== 'running' || !('mediaSession' in navigator)) return;
+    if (typeof MediaMetadata === 'undefined') return;
+    const band = EEG_BANDS[eegBandIndex(state.beatFreq)];
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `${band.name} · ${state.beatFreq.toFixed(1)} Hz binaural`,
+      artist: 'MicroTube',
+      album: 'Binaural synthesis studio',
+      artwork: [
+        { src: '/microtube-icon.png', sizes: '512x512', type: 'image/png' },
+      ],
+    });
+  }, [status, state.beatFreq]);
+
+  // Keep the widget's glyph in step with the transport.
+  useEffect(() => {
+    if (status !== 'running' || !('mediaSession' in navigator)) return;
+    navigator.mediaSession.playbackState = state.playing
+      ? 'playing'
+      : 'paused';
+  }, [status, state.playing]);
+
+  // Surface the auto-stop countdown as the widget's position scrubber.
+  useEffect(() => {
+    if (status !== 'running' || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    if (typeof ms.setPositionState !== 'function') return;
+    if (timer.enabled && timer.remainingSecs != null) {
+      const duration = timer.minutes * 60;
+      ms.setPositionState({
+        duration,
+        position: clamp(duration - timer.remainingSecs, 0, duration),
+        playbackRate: 1,
+      });
+    } else {
+      ms.setPositionState();
+    }
+  }, [status, timer]);
+
   // --- teardown ------------------------------------------------------------
 
   useEffect(() => {
     return () => {
       nodeRef.current?.disconnect();
+      const el = mediaElRef.current;
+      if (el) {
+        el.pause();
+        el.srcObject = null;
+      }
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+        if (typeof navigator.mediaSession.setPositionState === 'function') {
+          navigator.mediaSession.setPositionState();
+        }
+      }
       ctxRef.current?.close();
     };
   }, []);
