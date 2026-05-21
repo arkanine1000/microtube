@@ -1,5 +1,14 @@
-import { Gauge, Headphones, Minus, Orbit, Plus, Shapes } from 'lucide-react';
+import {
+  Bookmark,
+  Gauge,
+  Headphones,
+  Minus,
+  Orbit,
+  Plus,
+  Shapes,
+} from 'lucide-react';
 import { useState } from 'react';
+import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
   EEG_BANDS,
   SLIDER_GROUPS,
@@ -20,6 +29,7 @@ import {
 } from './audio/useMicroTube';
 import { JourneyPanel } from './components/JourneyPanel';
 import { LanguageSelector } from './components/LanguageSelector';
+import { LocalPresetsPanel } from './components/LocalPresetsPanel';
 import { Panel } from './components/Panel';
 import { ParameterSlider } from './components/ParameterSlider';
 import { Segmented } from './components/Segmented';
@@ -64,6 +74,7 @@ export default function App() {
   const mt = useMicroTube();
   const { copy } = useLocale();
   const [activeTab, setActiveTab] = useState<StudioTab>('play');
+  const [localPresets, setLocalPresets] = useState(loadLocalPresets);
 
   if (mt.status !== 'running') {
     return (
@@ -127,9 +138,12 @@ export default function App() {
   };
 
   const applyPreset = (preset: Preset) => {
-    mt.setParam('beatFreq', preset.beatFreq);
-    mt.setParam('baseFreq', preset.baseFreq);
-    mt.setParam('noiseLevel', preset.noiseLevel);
+    mt.applySnapshot({
+      ...snapshotFromState(mt.state),
+      beatFreq: preset.beatFreq,
+      baseFreq: preset.baseFreq,
+      noiseLevel: preset.noiseLevel,
+    });
   };
 
   return (
@@ -243,7 +257,25 @@ export default function App() {
                 </div>
               </Panel>
 
-              <Panel id="modes" icon={Shapes} title={copy.panels.modes}>
+              <Panel
+                id="local-presets"
+                icon={Bookmark}
+                title={copy.panels.presets}
+                className="presets-panel"
+              >
+                <LocalPresetsPanel
+                  mt={mt}
+                  presets={localPresets}
+                  onPresetsChange={setLocalPresets}
+                />
+              </Panel>
+
+              <Panel
+                id="modes"
+                icon={Shapes}
+                title={copy.panels.modes}
+                className="modes-panel"
+              >
                 <Segmented
                   caption={copy.modes.captions.timbre}
                   options={copy.modes.timbres}

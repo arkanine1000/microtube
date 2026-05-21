@@ -94,8 +94,31 @@ export interface Copy {
   };
   panels: {
     transport: string;
+    presets: string;
     modes: string;
     journey: string;
+  };
+  localPresets: {
+    saveCurrent: string;
+    empty: string;
+    saveTitle: string;
+    nameLabel: string;
+    saveAction: string;
+    cancel: string;
+    close: string;
+    nameRequired: string;
+    storageError: string;
+    loadPreset: string;
+    deletePreset: string;
+    deleteTitle: string;
+    deleteAction: string;
+    deletePromptPrefix: string;
+    deletePromptSuffix: string;
+    defaultName: string;
+    beatLabel: string;
+    baseLabel: string;
+    mistLabel: string;
+    driftLabel: string;
   };
   modes: {
     captions: {
@@ -175,8 +198,31 @@ export const COPY: Record<Locale, Copy> = {
     },
     panels: {
       transport: 'Transport',
+      presets: 'Presets',
       modes: 'Modes',
       journey: 'Journey Through the Cosmos',
+    },
+    localPresets: {
+      saveCurrent: 'Save current sound',
+      empty: 'No saved presets yet.',
+      saveTitle: 'Save preset',
+      nameLabel: 'Preset name',
+      saveAction: 'Save preset',
+      cancel: 'Cancel',
+      close: 'Close modal',
+      nameRequired: 'Enter a preset name.',
+      storageError: 'Preset storage is unavailable in this browser.',
+      loadPreset: 'Load preset',
+      deletePreset: 'Delete preset',
+      deleteTitle: 'Delete preset',
+      deleteAction: 'Delete',
+      deletePromptPrefix: 'Delete ',
+      deletePromptSuffix: '? This cannot be undone.',
+      defaultName: 'Custom Preset',
+      beatLabel: 'beat',
+      baseLabel: 'base',
+      mistLabel: 'mist',
+      driftLabel: 'drift',
     },
     modes: {
       captions: {
@@ -344,8 +390,31 @@ export const COPY: Record<Locale, Copy> = {
     },
     panels: {
       transport: 'Kontrole',
+      presets: 'Preseti',
       modes: 'Načini',
       journey: 'Putovanje kroz svemir',
+    },
+    localPresets: {
+      saveCurrent: 'Spremi trenutni zvuk',
+      empty: 'Još nema spremljenih preseta.',
+      saveTitle: 'Spremi preset',
+      nameLabel: 'Naziv preseta',
+      saveAction: 'Spremi preset',
+      cancel: 'Odustani',
+      close: 'Zatvori modal',
+      nameRequired: 'Unesi naziv preseta.',
+      storageError: 'Pohrana preseta nije dostupna u ovom pregledniku.',
+      loadPreset: 'Učitaj preset',
+      deletePreset: 'Izbriši preset',
+      deleteTitle: 'Izbriši preset',
+      deleteAction: 'Izbriši',
+      deletePromptPrefix: 'Izbrisati ',
+      deletePromptSuffix: '? To se ne može poništiti.',
+      defaultName: 'Moj preset',
+      beatLabel: 'beat',
+      baseLabel: 'baza',
+      mistLabel: 'maglica',
+      driftLabel: 'klizanje',
     },
     modes: {
       captions: {

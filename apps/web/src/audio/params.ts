@@ -41,6 +41,8 @@ export interface MicroTubeState {
   timbre: Timbre;
 }
 
+export type PresetSnapshot = Omit<MicroTubeState, 'playing'>;
+
 /** Matches `microtube_core::engine::Params::default()` + the CLI's startup. */
 export const DEFAULT_STATE: MicroTubeState = {
   playing: true,

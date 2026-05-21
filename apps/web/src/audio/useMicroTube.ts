@@ -5,7 +5,12 @@
 // only ever read `state` and call the returned actions.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { clamp, DEFAULT_STATE, type MicroTubeState } from './params';
+import {
+  clamp,
+  DEFAULT_STATE,
+  type MicroTubeState,
+  type PresetSnapshot,
+} from './params';
 import { JOURNEY_TOTAL_SECS, sampleJourney } from './sequences';
 
 export type EngineStatus = 'idle' | 'loading' | 'running' | 'error';
@@ -54,6 +59,7 @@ export interface MicroTube {
   togglePlaying: () => void;
   setTimerEnabled: (enabled: boolean) => void;
   setTimerMinutes: (minutes: number) => void;
+  applySnapshot: (snapshot: PresetSnapshot) => void;
   startJourney: () => void;
   stopJourney: () => void;
   returnToStart: () => Promise<void>;
@@ -241,6 +247,28 @@ export function useMicroTube(): MicroTube {
     [syncTimerState],
   );
 
+  const cancelJourney = useCallback(() => {
+    journeyActiveRef.current = false;
+    journeyLastTickRef.current = null;
+    journeyElapsedRef.current = 0;
+    setJourney({
+      active: false,
+      stepIndex: 0,
+      elapsed: 0,
+      total: JOURNEY_TOTAL_SECS,
+    });
+  }, []);
+
+  const applySnapshot = useCallback(
+    (snapshot: PresetSnapshot) => {
+      cancelJourney();
+      stateRef.current = { ...stateRef.current, ...snapshot };
+      setState(stateRef.current);
+      post({ type: 'params', value: snapshot });
+    },
+    [cancelJourney, post],
+  );
+
   // --- boot pipeline -------------------------------------------------------
 
   const start = useCallback(async () => {
@@ -425,9 +453,7 @@ export function useMicroTube(): MicroTube {
   }, [post, status]);
 
   const stopJourney = useCallback(() => {
-    journeyActiveRef.current = false;
-    journeyLastTickRef.current = null;
-    journeyElapsedRef.current = 0;
+    cancelJourney();
 
     // The journey sweeps every parameter — leaving it mid-sweep would strand
     // the user in an arbitrary state, so revert the engine to its defaults.
@@ -437,13 +463,7 @@ export function useMicroTube(): MicroTube {
     setState(stateRef.current);
     post({ type: 'params', value: defaults });
 
-    setJourney({
-      active: false,
-      stepIndex: 0,
-      elapsed: 0,
-      total: JOURNEY_TOTAL_SECS,
-    });
-  }, [post]);
+  }, [cancelJourney, post]);
 
   const returnToStart = useCallback(async () => {
     if (status !== 'running' || shuttingDownRef.current) return;
@@ -556,6 +576,7 @@ export function useMicroTube(): MicroTube {
     togglePlaying,
     setTimerEnabled,
     setTimerMinutes,
+    applySnapshot,
     startJourney,
     stopJourney,
     returnToStart,
