@@ -2,9 +2,10 @@ import { EEG_BANDS, eegBandIndex } from '../audio/params';
 import { PRESETS, type Preset } from '../audio/sequences';
 
 /**
- * The persistent strip — preset launchpad plus the EEG band ladder. Rendered
- * once in the shell, above the tab nav, so it stays available on every tab.
- * Tapping a preset chip is the lowest-friction way to explore the engine.
+ * The persistent strip — the EEG band ladder, where each band cell *is* its
+ * preset button (the five presets map one-to-one onto the five bands).
+ * Rendered once in the shell, above the tab nav, so it stays available on
+ * every tab: tapping a band is the lowest-friction way to explore the engine.
  */
 export function StripDashboard({
   beatFreq,
@@ -17,43 +18,33 @@ export function StripDashboard({
 
   return (
     <section className="strip">
-      <div className="strip-section">
-        <span className="strip-label">Presets</span>
-        <div className="preset-chips">
-          {PRESETS.map((preset) => {
-            const on = Math.abs(preset.beatFreq - beatFreq) < 0.05;
-            return (
-              <button
-                key={preset.name}
-                className={`preset-chip${on ? ' on' : ''}`}
-                type="button"
-                onClick={() => onApplyPreset(preset)}
-                title={preset.description}
-                aria-pressed={on}
-              >
-                <b>{preset.name}</b>
-                <small>{preset.beatFreq} Hz</small>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="strip-section">
-        <span className="strip-label">EEG band</span>
-        <div className="bands">
-          {EEG_BANDS.map((band, i) => (
-            <div
+      <span className="strip-label">Presets · EEG bands</span>
+      <div className="preset-bands">
+        {EEG_BANDS.map((band, i) => {
+          const preset = PRESETS[i];
+          const inBand = i === active;
+          const exact = Math.abs(preset.beatFreq - beatFreq) < 0.05;
+          return (
+            <button
               key={band.name}
-              className={`band${i === active ? ' active' : ''}`}
+              className={`preset-band${inBand ? ' in-band' : ''}${
+                exact ? ' on' : ''
+              }`}
               style={{ color: band.color }}
+              type="button"
+              onClick={() => onApplyPreset(preset)}
+              onContextMenu={(e) => e.preventDefault()}
+              title={preset.description}
+              aria-pressed={exact}
             >
-              <div className="band-greek">{band.greek}</div>
-              <div className="band-name">{band.name}</div>
-              <div className="band-blurb">{band.blurb}</div>
-            </div>
-          ))}
-        </div>
+              <span className="pb-greek">{band.greek}</span>
+              <span className="pb-name">{preset.name}</span>
+              <span className="pb-meta">
+                {band.name} · {preset.beatFreq} Hz
+              </span>
+            </button>
+          );
+        })}
       </div>
     </section>
   );

@@ -1,15 +1,16 @@
-import { Headphones, Minus, Plus } from 'lucide-react';
+import { Gauge, Headphones, Minus, Plus, Shapes } from 'lucide-react';
 import { useState } from 'react';
 import {
   DIRECTIONS,
   EEG_BANDS,
   MISTS,
-  SLIDERS,
+  SLIDER_GROUPS,
   SPAWN_MODES,
   TIMBRES,
   VOLUME,
   eegBandIndex,
   type Direction,
+  type MicroTubeState,
   type MistType,
   type SpawnMode,
   type Timbre,
@@ -34,6 +35,25 @@ const TABS: Array<{ id: StudioTab; label: string; caption: string }> = [
   { id: 'shape', label: 'Shape', caption: 'tone parameters' },
 ];
 
+/**
+ * Mode-style controls coupled to a gain parameter — touching one of these
+ * while its function is silent should engage the function automatically, so
+ * the user never has to hunt for an on/off switch on another tab.
+ */
+const GAIN_FOR = {
+  mistType: 'noiseLevel',
+  spawnMode: 'emergence',
+  shepardDirection: 'shepard',
+  shepardBase: 'shepard',
+} as const;
+
+/** The level a coupled function jumps to when auto-engaged from silence. */
+const AUTO_ON_VALUE = {
+  noiseLevel: 0.35,
+  emergence: 0.45,
+  shepard: 0.4,
+} as const;
+
 function formatClock(secs: number | null): string {
   if (secs === null) return 'off';
   const total = Math.max(0, Math.ceil(secs));
@@ -54,6 +74,12 @@ export default function App() {
       <div className="app">
         <div className="start" aria-live="polite">
           <div className="start-aurora" aria-hidden="true" />
+          <div className="start-stars" aria-hidden="true" />
+          <div className="start-orbits" aria-hidden="true">
+            <span className="start-orbit start-orbit-1" />
+            <span className="start-orbit start-orbit-2" />
+            <span className="start-orbit start-orbit-3" />
+          </div>
           <div className="start-mark">
             micro<span>tube</span>
           </div>
@@ -89,6 +115,23 @@ export default function App() {
     : formatClock(mt.timer.remainingSecs);
   const accent = EEG_BANDS[eegBandIndex(state.beatFreq)].color;
 
+  /**
+   * Set a parameter, then engage its coupled function if it was silent —
+   * e.g. picking a mist colour turns the mist layer on by itself.
+   */
+  const setParam = <K extends keyof MicroTubeState>(
+    key: K,
+    value: MicroTubeState[K],
+  ) => {
+    mt.setParam(key, value);
+    const gainKey = GAIN_FOR[key as keyof typeof GAIN_FOR] as
+      | keyof typeof AUTO_ON_VALUE
+      | undefined;
+    if (gainKey && state[gainKey] === 0) {
+      mt.setParam(gainKey, AUTO_ON_VALUE[gainKey]);
+    }
+  };
+
   const applyPreset = (preset: Preset) => {
     mt.setParam('beatFreq', preset.beatFreq);
     mt.setParam('baseFreq', preset.baseFreq);
@@ -97,10 +140,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div
-        className="studio-shell"
-        style={{ ['--accent' as string]: accent }}
-      >
+      <div className="studio-shell" style={{ ['--accent' as string]: accent }}>
         <TopBar
           playing={state.playing}
           onToggle={mt.togglePlaying}
@@ -117,6 +157,7 @@ export default function App() {
               className={`studio-tab${activeTab === tab.id ? ' active' : ''}`}
               type="button"
               onClick={() => setActiveTab(tab.id)}
+              onContextMenu={(e) => e.preventDefault()}
               aria-current={activeTab === tab.id ? 'page' : undefined}
             >
               <span>{tab.label}</span>
@@ -129,12 +170,15 @@ export default function App() {
           {activeTab === 'play' && (
             <div className="tab-panel play-tab">
               <section className="panel transport-panel">
-                <h2 className="panel-title">Transport</h2>
+                <h2 className="panel-title">
+                  <Gauge size={13} strokeWidth={2.3} />
+                  <span>Transport</span>
+                </h2>
                 <div className="transport-vol">
                   <ParameterSlider
                     spec={VOLUME}
                     value={state.volume}
-                    onChange={(v) => mt.setParam('volume', v)}
+                    onChange={(v) => setParam('volume', v)}
                   />
                 </div>
                 <div className="timer-controls">
@@ -149,9 +193,7 @@ export default function App() {
                     <span>Auto-stop</span>
                   </label>
                   <span
-                    className={`timer-readout${
-                      mt.timer.fired ? ' fired' : ''
-                    }`}
+                    className={`timer-readout${mt.timer.fired ? ' fired' : ''}`}
                   >
                     {timerLabel}
                   </span>
@@ -163,6 +205,7 @@ export default function App() {
                     onClick={() =>
                       mt.setTimerMinutes(mt.timer.minutes - TIMER_STEP_MINUTES)
                     }
+                    onContextMenu={(e) => e.preventDefault()}
                     aria-label="decrease auto-stop timer"
                   >
                     <Minus size={16} strokeWidth={2.6} />
@@ -185,6 +228,7 @@ export default function App() {
                     onClick={() =>
                       mt.setTimerMinutes(mt.timer.minutes + TIMER_STEP_MINUTES)
                     }
+                    onContextMenu={(e) => e.preventDefault()}
                     aria-label="increase auto-stop timer"
                   >
                     <Plus size={16} strokeWidth={2.6} />
@@ -194,32 +238,38 @@ export default function App() {
               </section>
 
               <section className="panel mode-panel">
-                <h2 className="panel-title">Modes</h2>
+                <h2 className="panel-title">
+                  <Shapes size={13} strokeWidth={2.3} />
+                  <span>Modes</span>
+                </h2>
                 <Segmented
                   caption="Timbre"
                   options={TIMBRES}
                   value={state.timbre}
-                  onChange={(v) => mt.setParam('timbre', v as Timbre)}
+                  onChange={(v) => setParam('timbre', v as Timbre)}
                 />
                 <Segmented
                   caption="Mist colour"
                   options={MISTS}
                   value={state.mistType}
-                  onChange={(v) => mt.setParam('mistType', v as MistType)}
+                  enabled={state.noiseLevel > 0}
+                  onChange={(v) => setParam('mistType', v as MistType)}
                 />
                 <Segmented
                   caption="Drift direction"
                   options={DIRECTIONS}
                   value={state.shepardDirection}
+                  enabled={state.shepard > 0}
                   onChange={(v) =>
-                    mt.setParam('shepardDirection', v as Direction)
+                    setParam('shepardDirection', v as Direction)
                   }
                 />
                 <Segmented
                   caption="Emergence spawn"
                   options={SPAWN_MODES}
                   value={state.spawnMode}
-                  onChange={(v) => mt.setParam('spawnMode', v as SpawnMode)}
+                  enabled={state.emergence > 0}
+                  onChange={(v) => setParam('spawnMode', v as SpawnMode)}
                 />
               </section>
 
@@ -228,17 +278,30 @@ export default function App() {
           )}
 
           {activeTab === 'shape' && (
-            <section className="tab-panel panel sliders">
-              <h2 className="panel-title">Parameters</h2>
-              {SLIDERS.map((spec) => (
-                <ParameterSlider
-                  key={spec.key}
-                  spec={spec}
-                  value={state[spec.key]}
-                  onChange={(v) => mt.setParam(spec.key, v)}
-                />
-              ))}
-            </section>
+            <div className="tab-panel shape-tab">
+              {SLIDER_GROUPS.map((group) => {
+                const Icon = group.icon;
+                return (
+                  <section key={group.id} className="panel slider-group">
+                    <h2 className="panel-title">
+                      <Icon size={13} strokeWidth={2.3} />
+                      <span>{group.label}</span>
+                      <small>{group.caption}</small>
+                    </h2>
+                    <div className="slider-stack">
+                      {group.sliders.map((spec) => (
+                        <ParameterSlider
+                          key={spec.key}
+                          spec={spec}
+                          value={state[spec.key]}
+                          onChange={(v) => setParam(spec.key, v)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           )}
         </main>
 

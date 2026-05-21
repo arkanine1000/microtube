@@ -21,7 +21,10 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
   return (
     <section className="panel journey-panel">
       <div className="journey-head">
-        <h2 className="panel-title">Journey Through the Cosmos</h2>
+        <h2 className="panel-title">
+          <Orbit size={13} strokeWidth={2.3} />
+          <span>Journey Through the Cosmos</span>
+        </h2>
         <span className="journey-meta">13-step strange loop · ~25 min</span>
       </div>
 

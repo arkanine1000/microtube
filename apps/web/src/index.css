@@ -1,3 +1,11 @@
+/* The accent is registered so it can interpolate — band-keyed retints then
+   glide instead of snapping when the beat frequency crosses a boundary. */
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #50e6e6;
+}
+
 :root {
   --space-0: #03050c;
   --space-1: #070a14;
@@ -29,6 +37,7 @@
   --radius-sm: 12px;
   --control-h: 46px;
   --topbar-h: 60px;
+  --ease: cubic-bezier(0.33, 1, 0.68, 1);
 
   /* safe-area shorthands — folded into layout padding */
   --safe-t: env(safe-area-inset-top, 0px);
@@ -42,6 +51,7 @@
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 html,
@@ -64,10 +74,7 @@ body {
     BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-}
-
-::selection {
-  background: rgba(80, 230, 230, 0.3);
+  user-select: none;
 }
 
 button,
@@ -121,6 +128,7 @@ svg {
     inset 0 1px rgba(255, 255, 255, 0.045);
   backdrop-filter: blur(20px);
   overflow: clip;
+  transition: --accent 0.6s var(--ease);
 }
 
 /* --- sticky transport bar ------------------------------------------------- */
@@ -142,6 +150,7 @@ svg {
     rgba(7, 10, 20, 0.92);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(18px);
+  transition: border-color 0.6s var(--ease), background 0.6s var(--ease);
 }
 
 .topbar-play {
@@ -158,11 +167,13 @@ svg {
   box-shadow:
     0 0 26px color-mix(in srgb, var(--accent) 40%, transparent),
     inset 0 1px rgba(255, 255, 255, 0.4);
-  transition: transform 0.16s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  transition: transform 0.2s var(--ease), box-shadow 0.3s var(--ease),
+    filter 0.2s var(--ease), border-color 0.6s var(--ease), background 0.6s var(--ease);
 }
 
 .topbar-play svg {
   margin-left: 1px;
+  transition: margin 0.2s var(--ease);
 }
 
 .topbar-play[data-playing='true'] svg {
@@ -174,7 +185,7 @@ svg {
 }
 
 .topbar-play:active {
-  transform: scale(0.94);
+  transform: scale(0.93);
 }
 
 .topbar-id {
@@ -191,6 +202,7 @@ svg {
 .topbar-brand span {
   color: var(--accent);
   text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 50%, transparent);
+  transition: color 0.6s var(--ease), text-shadow 0.6s var(--ease);
 }
 
 .topbar-status {
@@ -200,7 +212,7 @@ svg {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-faint);
-  transition: color 0.25s ease;
+  transition: color 0.4s var(--ease);
 }
 
 .topbar-status[data-playing='true'] {
@@ -227,6 +239,8 @@ svg {
   font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  transition: color 0.5s var(--ease), border-color 0.5s var(--ease),
+    background 0.5s var(--ease);
 }
 
 .topbar-band-greek {
@@ -246,12 +260,6 @@ svg {
 .strip {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.strip-section {
-  display: flex;
-  flex-direction: column;
   gap: 8px;
 }
 
@@ -263,116 +271,84 @@ svg {
   text-transform: uppercase;
 }
 
-.preset-chips {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  gap: 7px;
-}
-
-.preset-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  padding: 9px 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.04), transparent 60%),
-    rgba(18, 23, 40, 0.66);
-  color: var(--text);
-  text-align: left;
-  touch-action: manipulation;
-  transition: border-color 0.18s ease, background 0.18s ease, transform 0.16s ease,
-    box-shadow 0.2s ease;
-}
-
-.preset-chip b {
-  font-size: 12.5px;
-  font-weight: 720;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.preset-chip small {
-  font-size: 10px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.preset-chip:hover {
-  border-color: var(--line-bright);
-}
-
-.preset-chip:active {
-  transform: translateY(1px);
-}
-
-.preset-chip.on {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
-    rgba(18, 23, 40, 0.86);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.07),
-    0 0 22px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.preset-chip.on small {
-  color: color-mix(in srgb, var(--accent) 60%, var(--text-soft));
-}
-
-.bands {
+.preset-bands {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
-.band {
+.preset-band {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   min-width: 0;
-  padding: 9px 3px 8px;
+  padding: 10px 3px 9px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: rgba(18, 23, 40, 0.44);
+  background: rgba(18, 23, 40, 0.46);
+  color: inherit; /* band hue is set inline */
   text-align: center;
-  opacity: 0.5;
-  transition: opacity 0.25s ease, border-color 0.25s ease, background 0.25s ease,
-    box-shadow 0.25s ease, transform 0.25s ease;
+  opacity: 0.6;
+  touch-action: manipulation;
+  transition: opacity 0.4s var(--ease), border-color 0.4s var(--ease),
+    background 0.4s var(--ease), box-shadow 0.4s var(--ease),
+    transform 0.25s var(--ease);
 }
 
-.band.active {
-  border-color: currentColor;
-  background: color-mix(in srgb, currentColor 17%, rgba(18, 23, 40, 0.72));
-  box-shadow: 0 0 26px color-mix(in srgb, currentColor 30%, transparent);
+.preset-band:hover {
+  opacity: 0.88;
+  border-color: var(--line-bright);
+}
+
+.preset-band:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+.preset-band.in-band {
   opacity: 1;
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, currentColor 40%, var(--line));
 }
 
-.band-greek {
-  font-size: 21px;
+.preset-band.on {
+  opacity: 1;
+  border-color: currentColor;
+  background: color-mix(in srgb, currentColor 17%, rgba(18, 23, 40, 0.74));
+  box-shadow: 0 0 26px color-mix(in srgb, currentColor 30%, transparent);
+  transform: translateY(-2px);
+}
+
+.pb-greek {
+  font-size: 20px;
   line-height: 1;
   font-weight: 700;
 }
 
-.band-name {
-  margin-top: 5px;
-  overflow: hidden;
+.pb-name {
+  max-width: 100%;
   color: var(--text);
   font-size: 10px;
-  font-weight: 760;
-  letter-spacing: 0.04em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 720;
+  line-height: 1.18;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
 }
 
-.band-blurb {
-  margin-top: 2px;
+.pb-meta {
   overflow: hidden;
+  max-width: 100%;
   color: var(--text-faint);
   font-size: 8px;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 0.4s var(--ease);
+}
+
+.preset-band.on .pb-meta {
+  color: color-mix(in srgb, currentColor 62%, var(--text-soft));
 }
 
 /* --- tabs ----------------------------------------------------------------- */
@@ -403,7 +379,8 @@ svg {
   background: transparent;
   color: var(--text-dim);
   text-align: center;
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  transition: border-color 0.25s var(--ease), background 0.25s var(--ease),
+    color 0.25s var(--ease);
 }
 
 .studio-tab span,
@@ -453,14 +430,15 @@ svg {
 
 .studio-stage,
 .tab-panel,
-.play-tab {
+.play-tab,
+.shape-tab {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
 .tab-panel {
-  animation: panel-rise 0.32s ease both;
+  animation: panel-rise 0.36s var(--ease) both;
 }
 
 .panel {
@@ -476,12 +454,37 @@ svg {
 }
 
 .panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 0 0 13px;
   color: var(--text-dim);
   font-size: 10px;
   font-weight: 780;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.panel-title svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+  transition: color 0.6s var(--ease);
+}
+
+.panel-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-title small {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text-faint);
 }
 
 /* --- transport ------------------------------------------------------------ */
@@ -490,6 +493,7 @@ svg {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 56%),
     var(--surface);
+  transition: background 0.6s var(--ease);
 }
 
 .transport-vol {
@@ -518,8 +522,9 @@ svg {
   font-size: 14px;
   font-weight: 760;
   touch-action: manipulation;
-  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease,
-    box-shadow 0.18s ease, filter 0.18s ease;
+  transition: transform 0.18s var(--ease), border-color 0.2s var(--ease),
+    background 0.2s var(--ease), box-shadow 0.25s var(--ease),
+    filter 0.2s var(--ease);
 }
 
 .btn:hover {
@@ -554,31 +559,75 @@ svg {
 
 /* --- sliders -------------------------------------------------------------- */
 
-.sliders {
+.slider-group {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.038), transparent 36%),
+    var(--surface);
+}
+
+.slider-stack {
+  display: flex;
+  flex-direction: column;
   gap: 17px;
 }
 
 .slider {
   min-width: 0;
+  transition: opacity 0.4s var(--ease);
+}
+
+/* A toggleable function sitting at zero recedes — it should not compete for
+   attention until the user engages it. Hover/focus restores it as a hint. */
+.slider.off {
+  opacity: 0.46;
+}
+
+.slider.off:hover,
+.slider.off:focus-within {
+  opacity: 0.9;
 }
 
 .slider-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 12px;
-  margin-bottom: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
 }
 
-.slider-label,
-.slider-value {
+.slider-icon {
+  display: grid;
+  place-items: center;
+  width: 33px;
+  height: 33px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(18, 23, 40, 0.7);
+  color: var(--text-dim);
+  transition: color 0.4s var(--ease), border-color 0.4s var(--ease),
+    background 0.4s var(--ease), box-shadow 0.4s var(--ease);
+}
+
+.slider-icon.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, rgba(18, 23, 40, 0.7));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.slider-titles {
+  min-width: 0;
+}
+
+.slider-label {
+  display: block;
   font-size: 13px;
   font-weight: 760;
 }
 
 .slider-hint {
   display: block;
-  margin-top: 2px;
+  margin-top: 1px;
   overflow: hidden;
   color: var(--text-dim);
   font-size: 11px;
@@ -587,11 +636,13 @@ svg {
 }
 
 .slider-value {
+  font-size: 13px;
+  font-weight: 760;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
-  transition: color 0.25s ease;
+  transition: color 0.4s var(--ease);
 }
 
 .slider-row {
@@ -613,7 +664,8 @@ svg {
     var(--surface-strong);
   color: var(--text-soft);
   touch-action: manipulation;
-  transition: border-color 0.16s ease, color 0.16s ease, transform 0.14s ease;
+  transition: border-color 0.18s var(--ease), color 0.18s var(--ease),
+    transform 0.16s var(--ease), background 0.18s var(--ease);
 }
 
 .nudge:hover {
@@ -622,7 +674,7 @@ svg {
 }
 
 .nudge:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.95);
 }
 
 .track {
@@ -636,6 +688,7 @@ svg {
     rgba(16, 21, 36, 0.88);
   cursor: pointer;
   touch-action: none;
+  transition: border-color 0.6s var(--ease);
 }
 
 .track-fill {
@@ -648,7 +701,7 @@ svg {
     color-mix(in srgb, var(--accent) 96%, white)
   );
   box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 28%, transparent);
-  transition: background 0.3s ease;
+  transition: width 0.13s var(--ease), background 0.6s var(--ease);
 }
 
 .track-knob {
@@ -662,6 +715,7 @@ svg {
   box-shadow:
     0 0 14px rgba(255, 255, 255, 0.7),
     0 0 4px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition: left 0.13s var(--ease);
 }
 
 /* --- timer ---------------------------------------------------------------- */
@@ -700,7 +754,7 @@ svg {
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   font-weight: 780;
-  transition: color 0.25s ease;
+  transition: color 0.4s var(--ease);
 }
 
 .timer-readout.fired {
@@ -741,11 +795,60 @@ svg {
 }
 
 .toggle-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--text-dim);
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.toggle-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  transition: color 0.35s var(--ease), border-color 0.35s var(--ease),
+    background 0.35s var(--ease);
+}
+
+.toggle-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  transition: box-shadow 0.35s var(--ease);
+}
+
+.toggle-status.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* An off function's options recede; the on/off pip stays lit so it reads as
+   a toggle. Picking any option engages the function and restores it. */
+.toggle-block.off .segmented,
+.toggle-block.off .toggle-name {
+  opacity: 0.5;
+  transition: opacity 0.4s var(--ease);
+}
+
+.toggle-block.off:hover .segmented,
+.toggle-block.off:focus-within .segmented,
+.toggle-block.off:hover .toggle-name,
+.toggle-block.off:focus-within .toggle-name {
+  opacity: 0.92;
 }
 
 .segmented {
@@ -766,8 +869,9 @@ svg {
   font-weight: 760;
   overflow-wrap: anywhere;
   touch-action: manipulation;
-  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease,
-    box-shadow 0.18s ease;
+  transition: border-color 0.22s var(--ease), background 0.22s var(--ease),
+    color 0.22s var(--ease), box-shadow 0.25s var(--ease),
+    transform 0.16s var(--ease);
 }
 
 .seg:hover {
@@ -775,7 +879,7 @@ svg {
 }
 
 .seg:active {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.98);
 }
 
 .seg.on {
@@ -800,13 +904,14 @@ svg {
 
 .journey-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
 .journey-head .panel-title {
   margin-bottom: 0;
+  min-width: 0;
 }
 
 .journey-meta {
@@ -840,7 +945,7 @@ svg {
     rgba(250, 204, 92, 0.72)
   );
   box-shadow: 0 0 18px rgba(210, 145, 255, 0.34);
-  transition: width 0.3s ease;
+  transition: width 0.4s var(--ease), background 0.6s var(--ease);
 }
 
 .journey-status {
@@ -898,20 +1003,101 @@ svg {
   box-shadow: 0 28px 80px var(--shadow);
 }
 
-.start-aurora {
+.start-aurora,
+.start-stars,
+.start-orbits {
   position: absolute;
-  inset: -30%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
+}
+
+.start-aurora {
+  inset: -30%;
   background:
-    radial-gradient(38% 30% at 28% 30%, rgba(80, 230, 230, 0.3), transparent 70%),
-    radial-gradient(40% 32% at 74% 38%, rgba(210, 145, 255, 0.28), transparent 72%),
-    radial-gradient(46% 34% at 52% 78%, rgba(250, 204, 92, 0.16), transparent 74%);
-  filter: blur(38px);
+    radial-gradient(38% 30% at 28% 30%, rgba(80, 230, 230, 0.32), transparent 70%),
+    radial-gradient(40% 32% at 74% 38%, rgba(210, 145, 255, 0.3), transparent 72%),
+    radial-gradient(46% 34% at 52% 78%, rgba(250, 204, 92, 0.17), transparent 74%);
+  filter: blur(40px);
   animation: aurora-drift 19s ease-in-out infinite alternate;
 }
 
-.start > *:not(.start-aurora) {
+.start-stars {
+  background-image:
+    radial-gradient(1.5px 1.5px at 8% 14%, #fff, transparent),
+    radial-gradient(1.4px 1.4px at 23% 62%, #d6f6ff, transparent),
+    radial-gradient(1.7px 1.7px at 41% 24%, #fff, transparent),
+    radial-gradient(1.3px 1.3px at 57% 79%, #ffe6f6, transparent),
+    radial-gradient(1.6px 1.6px at 68% 17%, #fff, transparent),
+    radial-gradient(1.4px 1.4px at 82% 52%, #d6f6ff, transparent),
+    radial-gradient(1.5px 1.5px at 91% 31%, #fff, transparent),
+    radial-gradient(1.3px 1.3px at 14% 88%, #fff, transparent),
+    radial-gradient(1.6px 1.6px at 35% 93%, #ffe6f6, transparent),
+    radial-gradient(1.4px 1.4px at 73% 89%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 49% 8%, #fff, transparent),
+    radial-gradient(1.3px 1.3px at 88% 76%, #d6f6ff, transparent),
+    radial-gradient(1.4px 1.4px at 5% 44%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 62% 47%, #fff, transparent);
+  animation: twinkle 5.5s ease-in-out infinite alternate;
+}
+
+.start-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid color-mix(in srgb, var(--c-cyan) 14%, transparent);
+  border-radius: 50%;
+}
+
+.start-orbit::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: var(--c-cyan);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c-cyan) 70%, transparent);
+}
+
+.start-orbit-1 {
+  width: 252px;
+  height: 252px;
+  animation: orbit-spin 26s linear infinite;
+}
+
+.start-orbit-2 {
+  width: 408px;
+  height: 408px;
+  border-color: color-mix(in srgb, var(--c-violet) 13%, transparent);
+  animation: orbit-spin 40s linear infinite reverse;
+}
+
+.start-orbit-2::after {
+  background: var(--c-violet);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c-violet) 70%, transparent);
+}
+
+.start-orbit-3 {
+  width: 560px;
+  height: 560px;
+  border-color: color-mix(in srgb, var(--c-gold) 9%, transparent);
+  animation: orbit-spin 58s linear infinite;
+}
+
+.start-orbit-3::after {
+  background: var(--c-gold);
+  box-shadow: 0 0 14px 2px color-mix(in srgb, var(--c-gold) 60%, transparent);
+}
+
+.start-mark,
+.start-tagline,
+.start-blurb,
+.btn-enter,
+.start-headphones,
+.error {
   position: relative;
   z-index: 1;
 }
@@ -925,7 +1111,7 @@ svg {
 
 .start-mark span {
   color: var(--accent);
-  text-shadow: 0 0 36px rgba(80, 230, 230, 0.5);
+  animation: mark-glow 4.4s ease-in-out infinite alternate;
 }
 
 .start-tagline {
@@ -949,17 +1135,18 @@ svg {
   margin-top: 4px;
   padding: 16px 30px;
   font-size: 15px;
+  animation: cta-pulse 3.6s ease-in-out infinite;
 }
 
 .start-headphones {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 340px;
+  max-width: 332px;
   padding: 9px 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(12, 16, 28, 0.6);
+  background: rgba(12, 16, 28, 0.62);
   color: var(--text-dim);
   font-size: 11px;
   line-height: 1.4;
@@ -1014,13 +1201,10 @@ svg {
     grid-column: 1 / -1;
   }
 
-  .sliders {
+  .slider-stack {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .sliders .panel-title {
-    grid-column: 1 / -1;
+    gap: 14px 16px;
   }
 }
 
@@ -1046,8 +1230,12 @@ svg {
     padding: 13px;
   }
 
-  .preset-chips {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .preset-band {
+    padding: 9px 2px 8px;
+  }
+
+  .pb-name {
+    font-size: 9px;
   }
 }
 
@@ -1067,7 +1255,7 @@ svg {
 @keyframes panel-rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(9px);
   }
 
   to {
@@ -1083,5 +1271,52 @@ svg {
 
   to {
     transform: translate3d(4%, 3%, 0) rotate(5deg) scale(1.16);
+  }
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.32;
+  }
+
+  to {
+    opacity: 0.92;
+  }
+}
+
+@keyframes orbit-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes mark-glow {
+  from {
+    text-shadow: 0 0 22px rgba(80, 230, 230, 0.32);
+  }
+
+  to {
+    text-shadow:
+      0 0 40px rgba(80, 230, 230, 0.6),
+      0 0 14px rgba(210, 145, 255, 0.4);
+  }
+}
+
+@keyframes cta-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 30px color-mix(in srgb, var(--accent) 22%, transparent),
+      inset 0 1px rgba(255, 255, 255, 0.36);
+  }
+
+  50% {
+    box-shadow:
+      0 0 46px color-mix(in srgb, var(--accent) 42%, transparent),
+      inset 0 1px rgba(255, 255, 255, 0.36);
   }
 }
