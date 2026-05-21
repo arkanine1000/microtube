@@ -18,7 +18,6 @@ export function StripDashboard({
 
   return (
     <section className="strip">
-      <span className="strip-label">Presets · EEG bands</span>
       <div className="preset-bands">
         {EEG_BANDS.map((band, i) => {
           const preset = PRESETS[i];

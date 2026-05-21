@@ -288,14 +288,6 @@ svg {
   gap: 8px;
 }
 
-.strip-label {
-  color: var(--text-faint);
-  font-size: 9px;
-  font-weight: 760;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
 .preset-bands {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
