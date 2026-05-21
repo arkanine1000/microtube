@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type React from 'react';
 import { useRef } from 'react';
 import { clamp, type SliderSpec } from '../audio/params';
@@ -60,10 +61,11 @@ export function ParameterSlider({
       <div className="slider-row">
         <button
           className="nudge"
+          type="button"
           onClick={() => nudge(-1)}
           aria-label={`decrease ${spec.label}`}
         >
-          ◂
+          <ChevronLeft size={18} strokeWidth={2.4} />
         </button>
         <div
           className="track"
@@ -81,10 +83,11 @@ export function ParameterSlider({
         </div>
         <button
           className="nudge"
+          type="button"
           onClick={() => nudge(1)}
           aria-label={`increase ${spec.label}`}
         >
-          ▸
+          <ChevronRight size={18} strokeWidth={2.4} />
         </button>
       </div>
     </div>

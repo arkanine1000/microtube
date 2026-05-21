@@ -1,4 +1,4 @@
-import { PRESETS, type Preset } from '../audio/sequences';
+import { Orbit, Square } from 'lucide-react';
 import type { MicroTube } from '../audio/useMicroTube';
 
 function mmss(secs: number): string {
@@ -9,36 +9,27 @@ function mmss(secs: number): string {
 }
 
 /**
- * Quick presets plus the "Journey Through the Cosmos" sequence — the
- * 13-step strange loop, executed on the frontend with a 250 ms scheduler.
+ * "Journey Through the Cosmos" — the 13-step strange loop, executed on the
+ * frontend with a 250 ms scheduler. Quick presets now live in the strip;
+ * this panel is the guided long-form experience.
  */
 export function JourneyPanel({ mt }: { mt: MicroTube }) {
   const { journey } = mt;
-
-  const applyPreset = (preset: Preset) => {
-    mt.setParam('beatFreq', preset.beatFreq);
-    mt.setParam('baseFreq', preset.baseFreq);
-    mt.setParam('noiseLevel', preset.noiseLevel);
-  };
-
-  const progress = journey.total > 0 ? (journey.elapsed / journey.total) * 100 : 0;
+  const progress =
+    journey.total > 0 ? (journey.elapsed / journey.total) * 100 : 0;
 
   return (
-    <section className="panel">
-      <h2 className="panel-title">Presets &amp; Journey</h2>
-
-      <div className="journey-grid">
-        {PRESETS.map((preset) => (
-          <button
-            key={preset.name}
-            className="preset"
-            onClick={() => applyPreset(preset)}
-          >
-            <b>{preset.name}</b>
-            <small>{preset.description}</small>
-          </button>
-        ))}
+    <section className="panel journey-panel">
+      <div className="journey-head">
+        <h2 className="panel-title">Journey Through the Cosmos</h2>
+        <span className="journey-meta">13-step strange loop · ~25 min</span>
       </div>
+
+      <p className="journey-copy">
+        A guided descent and return — every parameter automated, interpolating
+        between thirteen named worlds. Hand the controls to the sequence and
+        listen.
+      </p>
 
       <div className="journey-bar">
         <div className="journey-bar-fill" style={{ width: `${progress}%` }} />
@@ -47,7 +38,7 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
         <span>
           {journey.active
             ? `Step ${journey.stepIndex + 1}/13 · ${journey.stepName}`
-            : 'Journey Through the Cosmos — 13-step strange loop'}
+            : 'Idle — press begin to set off'}
         </span>
         <span>
           {mmss(journey.elapsed)} / {mmss(journey.total)}
@@ -55,10 +46,21 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
       </div>
 
       <button
-        className={`btn journey-action ${journey.active ? '' : 'btn-primary'}`}
+        className={`btn journey-action${journey.active ? '' : ' btn-primary'}`}
+        type="button"
         onClick={journey.active ? mt.stopJourney : mt.startJourney}
       >
-        {journey.active ? 'Stop journey' : 'Begin journey'}
+        {journey.active ? (
+          <>
+            <Square size={15} strokeWidth={2.6} fill="currentColor" />
+            Stop journey
+          </>
+        ) : (
+          <>
+            <Orbit size={16} strokeWidth={2.2} />
+            Begin journey
+          </>
+        )}
       </button>
     </section>
   );

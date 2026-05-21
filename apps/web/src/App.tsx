@@ -1,16 +1,20 @@
+import { Headphones, Minus, Plus } from 'lucide-react';
 import { useState } from 'react';
 import {
   DIRECTIONS,
+  EEG_BANDS,
   MISTS,
   SLIDERS,
   SPAWN_MODES,
   TIMBRES,
   VOLUME,
+  eegBandIndex,
   type Direction,
   type MistType,
   type SpawnMode,
   type Timbre,
 } from './audio/params';
+import type { Preset } from './audio/sequences';
 import {
   TIMER_MAX_MINUTES,
   TIMER_MIN_MINUTES,
@@ -21,13 +25,13 @@ import { JourneyPanel } from './components/JourneyPanel';
 import { ParameterSlider } from './components/ParameterSlider';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
+import { TopBar } from './components/TopBar';
 
-type StudioTab = 'session' | 'parameters' | 'program';
+type StudioTab = 'play' | 'shape';
 
 const TABS: Array<{ id: StudioTab; label: string; caption: string }> = [
-  { id: 'session', label: 'Session', caption: 'live controls' },
-  { id: 'parameters', label: 'Parameters', caption: 'tone shaping' },
-  { id: 'program', label: 'Program', caption: 'presets' },
+  { id: 'play', label: 'Play', caption: 'transport · modes · journey' },
+  { id: 'shape', label: 'Shape', caption: 'tone parameters' },
 ];
 
 function formatClock(secs: number | null): string {
@@ -43,25 +47,34 @@ function formatClock(secs: number | null): string {
 
 export default function App() {
   const mt = useMicroTube();
-  const [activeTab, setActiveTab] = useState<StudioTab>('session');
+  const [activeTab, setActiveTab] = useState<StudioTab>('play');
 
   if (mt.status !== 'running') {
     return (
       <div className="app">
         <div className="start" aria-live="polite">
-          <div className="start-mark">micro<span>tube</span></div>
-          <p>
-            A binaural-beat synthesis studio. Audio is rendered by a Rust DSP
-            engine compiled to WebAssembly, running on a dedicated audio
-            thread. Use headphones.
+          <div className="start-aurora" aria-hidden="true" />
+          <div className="start-mark">
+            micro<span>tube</span>
+          </div>
+          <p className="start-tagline">Tune your mind to a frequency.</p>
+          <p className="start-blurb">
+            A binaural-beat synthesis studio. A Rust DSP engine, compiled to
+            WebAssembly, renders every tone on a dedicated audio thread.
           </p>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-enter"
+            type="button"
             disabled={mt.status === 'loading'}
             onClick={mt.start}
           >
             {mt.status === 'loading' ? 'Spinning up engine…' : 'Enter studio'}
           </button>
+          <div className="start-headphones">
+            <Headphones size={15} strokeWidth={2.1} />
+            Headphones required — the binaural effect lives in the gap between
+            your ears.
+          </div>
           {mt.status === 'error' && (
             <p className="error">Engine failed to start: {mt.error}</p>
           )}
@@ -74,21 +87,28 @@ export default function App() {
   const timerLabel = mt.timer.fired
     ? 'stopped'
     : formatClock(mt.timer.remainingSecs);
+  const accent = EEG_BANDS[eegBandIndex(state.beatFreq)].color;
+
+  const applyPreset = (preset: Preset) => {
+    mt.setParam('beatFreq', preset.beatFreq);
+    mt.setParam('baseFreq', preset.baseFreq);
+    mt.setParam('noiseLevel', preset.noiseLevel);
+  };
 
   return (
     <div className="app">
-      <div className="studio-shell">
-        <div className="studio-chrome">
-          <div>
-            <div className="brand-lockup">
-              micro<span>tube</span>
-            </div>
-            <div className="session-kicker">
-              {state.playing ? 'signal active' : 'signal paused'}
-            </div>
-          </div>
-          <div className="session-clock">{Math.round(mt.uptimeSecs)}s</div>
-        </div>
+      <div
+        className="studio-shell"
+        style={{ ['--accent' as string]: accent }}
+      >
+        <TopBar
+          playing={state.playing}
+          onToggle={mt.togglePlaying}
+          uptimeSecs={mt.uptimeSecs}
+          beatFreq={state.beatFreq}
+        />
+
+        <StripDashboard beatFreq={state.beatFreq} onApplyPreset={applyPreset} />
 
         <nav className="studio-tabs" aria-label="Studio sections">
           {TABS.map((tab) => (
@@ -106,50 +126,46 @@ export default function App() {
         </nav>
 
         <main className="studio-stage">
-          {activeTab === 'session' && (
-            <div className="tab-panel session-tab">
-              <StripDashboard beatFreq={state.beatFreq} uptimeSecs={mt.uptimeSecs} />
-
+          {activeTab === 'play' && (
+            <div className="tab-panel play-tab">
               <section className="panel transport-panel">
                 <h2 className="panel-title">Transport</h2>
-                <div className="transport">
-                  <button
-                    className="btn btn-play btn-primary"
-                    onClick={mt.togglePlaying}
-                    aria-label={state.playing ? 'pause' : 'play'}
-                  >
-                    {state.playing ? '⏸' : '▶'}
-                  </button>
-                  <div className="transport-vol">
-                    <ParameterSlider
-                      spec={VOLUME}
-                      value={state.volume}
-                      onChange={(v) => mt.setParam('volume', v)}
-                    />
-                  </div>
+                <div className="transport-vol">
+                  <ParameterSlider
+                    spec={VOLUME}
+                    value={state.volume}
+                    onChange={(v) => mt.setParam('volume', v)}
+                  />
                 </div>
                 <div className="timer-controls">
                   <label className="timer-toggle">
                     <input
                       type="checkbox"
                       checked={mt.timer.enabled}
-                      onChange={(e) => mt.setTimerEnabled(e.currentTarget.checked)}
+                      onChange={(e) =>
+                        mt.setTimerEnabled(e.currentTarget.checked)
+                      }
                     />
                     <span>Auto-stop</span>
                   </label>
-                  <span className={`timer-readout${mt.timer.fired ? ' fired' : ''}`}>
+                  <span
+                    className={`timer-readout${
+                      mt.timer.fired ? ' fired' : ''
+                    }`}
+                  >
                     {timerLabel}
                   </span>
                 </div>
                 <div className="timer-row">
                   <button
                     className="nudge"
+                    type="button"
                     onClick={() =>
                       mt.setTimerMinutes(mt.timer.minutes - TIMER_STEP_MINUTES)
                     }
                     aria-label="decrease auto-stop timer"
                   >
-                    ◂
+                    <Minus size={16} strokeWidth={2.6} />
                   </button>
                   <input
                     className="timer-range"
@@ -165,12 +181,13 @@ export default function App() {
                   />
                   <button
                     className="nudge"
+                    type="button"
                     onClick={() =>
                       mt.setTimerMinutes(mt.timer.minutes + TIMER_STEP_MINUTES)
                     }
                     aria-label="increase auto-stop timer"
                   >
-                    ▸
+                    <Plus size={16} strokeWidth={2.6} />
                   </button>
                   <span className="timer-minutes">{mt.timer.minutes} min</span>
                 </div>
@@ -194,7 +211,9 @@ export default function App() {
                   caption="Drift direction"
                   options={DIRECTIONS}
                   value={state.shepardDirection}
-                  onChange={(v) => mt.setParam('shepardDirection', v as Direction)}
+                  onChange={(v) =>
+                    mt.setParam('shepardDirection', v as Direction)
+                  }
                 />
                 <Segmented
                   caption="Emergence spawn"
@@ -203,10 +222,12 @@ export default function App() {
                   onChange={(v) => mt.setParam('spawnMode', v as SpawnMode)}
                 />
               </section>
+
+              <JourneyPanel mt={mt} />
             </div>
           )}
 
-          {activeTab === 'parameters' && (
+          {activeTab === 'shape' && (
             <section className="tab-panel panel sliders">
               <h2 className="panel-title">Parameters</h2>
               {SLIDERS.map((spec) => (
@@ -219,16 +240,11 @@ export default function App() {
               ))}
             </section>
           )}
-
-          {activeTab === 'program' && (
-            <div className="tab-panel program-tab">
-              <JourneyPanel mt={mt} />
-            </div>
-          )}
         </main>
 
         <footer className="studio-footer">
-          engine · microtube-core (Rust → WebAssembly) · {Math.round(mt.uptimeSecs)}s session
+          engine · microtube-core (Rust → WebAssembly) ·{' '}
+          {Math.round(mt.uptimeSecs)}s session
         </footer>
       </div>
     </div>
