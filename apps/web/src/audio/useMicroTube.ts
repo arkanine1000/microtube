@@ -56,6 +56,7 @@ export interface MicroTube {
   setTimerMinutes: (minutes: number) => void;
   startJourney: () => void;
   stopJourney: () => void;
+  returnToStart: () => Promise<void>;
 }
 
 export function useMicroTube(): MicroTube {
@@ -88,6 +89,7 @@ export function useMicroTube(): MicroTube {
   const timerStartedAtRef = useRef<number | null>(null);
   const timerElapsedBeforePauseRef = useRef<number>(0);
   const timerFiredRef = useRef<boolean>(false);
+  const shuttingDownRef = useRef<boolean>(false);
 
   const pauseJourneyClock = useCallback((now: number) => {
     if (!journeyActiveRef.current || journeyLastTickRef.current === null) return;
@@ -242,7 +244,7 @@ export function useMicroTube(): MicroTube {
   // --- boot pipeline -------------------------------------------------------
 
   const start = useCallback(async () => {
-    if (status === 'loading' || status === 'running') return;
+    if (status === 'loading' || status === 'running' || shuttingDownRef.current) return;
     setStatus('loading');
     setError(null);
     try {
@@ -443,6 +445,58 @@ export function useMicroTube(): MicroTube {
     });
   }, [post]);
 
+  const returnToStart = useCallback(async () => {
+    if (status !== 'running' || shuttingDownRef.current) return;
+    shuttingDownRef.current = true;
+    setStatus('idle');
+
+    journeyActiveRef.current = false;
+    journeyLastTickRef.current = null;
+    journeyElapsedRef.current = 0;
+
+    timerEnabledRef.current = true;
+    timerMinutesRef.current = TIMER_DEFAULT_MINUTES;
+    timerElapsedBeforePauseRef.current = 0;
+    timerStartedAtRef.current = null;
+    timerFiredRef.current = false;
+
+    stateRef.current = { ...DEFAULT_STATE };
+    setState(stateRef.current);
+    setUptimeSecs(0);
+    setError(null);
+    setTimer({
+      enabled: true,
+      minutes: TIMER_DEFAULT_MINUTES,
+      remainingSecs: TIMER_DEFAULT_MINUTES * 60,
+      fired: false,
+    });
+    setJourney({
+      active: false,
+      stepIndex: 0,
+      elapsed: 0,
+      total: JOURNEY_TOTAL_SECS,
+    });
+
+    const node = nodeRef.current;
+    const ctx = ctxRef.current;
+    nodeRef.current = null;
+    ctxRef.current = null;
+
+    try {
+      node?.disconnect();
+    } catch {
+      // Ignore teardown races while the worklet is being torn down.
+    }
+
+    try {
+      await ctx?.close();
+    } catch {
+      // Closing a context can fail if the browser has already discarded it.
+    } finally {
+      shuttingDownRef.current = false;
+    }
+  }, [status]);
+
   useEffect(() => {
     if (!journey.active) return;
     // A 250 ms tick is well inside the engine's 50 ms smoothing window, so
@@ -504,5 +558,6 @@ export function useMicroTube(): MicroTube {
     setTimerMinutes,
     startJourney,
     stopJourney,
+    returnToStart,
   };
 }

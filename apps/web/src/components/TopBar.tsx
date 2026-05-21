@@ -20,11 +20,13 @@ function mmss(secs: number): string {
 export function TopBar({
   playing,
   onToggle,
+  onBrandClick,
   beatFreq,
   timer,
 }: {
   playing: boolean;
   onToggle: () => void;
+  onBrandClick: () => void | Promise<void>;
   beatFreq: number;
   timer: TimerStatus;
 }) {
@@ -55,14 +57,19 @@ export function TopBar({
         )}
       </button>
 
-      <div className="topbar-id">
+      <button
+        className="topbar-id"
+        type="button"
+        onClick={onBrandClick}
+        aria-label={copy.topbar.backToStart}
+      >
         <div className="topbar-brand">
           micro<span>tube</span>
         </div>
         <div className="topbar-status" data-playing={playing}>
           {playing ? copy.topbar.signalActive : copy.topbar.signalPaused}
         </div>
-      </div>
+      </button>
 
       <div className="topbar-meta">
         <span className="topbar-band" style={{ color: band.color }}>

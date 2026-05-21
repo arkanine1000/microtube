@@ -138,6 +138,7 @@ export default function App() {
         <TopBar
           playing={state.playing}
           onToggle={mt.togglePlaying}
+          onBrandClick={mt.returnToStart}
           beatFreq={state.beatFreq}
           timer={mt.timer}
         />

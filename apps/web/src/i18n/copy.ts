@@ -79,6 +79,7 @@ export interface Copy {
     signalPaused: string;
     timeRemaining: string;
     left: string;
+    backToStart: string;
   };
   tabs: Record<StudioTab, LabelCaption>;
   studioSectionsLabel: string;
@@ -156,6 +157,7 @@ export const COPY: Record<Locale, Copy> = {
       signalPaused: 'signal paused',
       timeRemaining: 'session time remaining',
       left: 'left',
+      backToStart: 'return to start screen',
     },
     tabs: {
       play: { label: 'Play', caption: 'basic' },
@@ -324,6 +326,7 @@ export const COPY: Record<Locale, Copy> = {
       signalPaused: 'signal pauziran',
       timeRemaining: 'preostalo vrijeme sesije',
       left: 'preostalo',
+      backToStart: 'povratak na početni zaslon',
     },
     tabs: {
       play: { label: 'Slušaj', caption: 'osnovno' },
