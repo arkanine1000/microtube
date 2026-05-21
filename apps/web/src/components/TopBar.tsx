@@ -1,6 +1,7 @@
 import { Pause, Play } from 'lucide-react';
 import { EEG_BANDS, clamp, eegBandIndex } from '../audio/params';
 import type { TimerStatus } from '../audio/useMicroTube';
+import { useLocale } from '../i18n/LocaleProvider';
 
 function mmss(secs: number): string {
   const total = Math.max(0, Math.floor(secs));
@@ -27,7 +28,9 @@ export function TopBar({
   beatFreq: number;
   timer: TimerStatus;
 }) {
+  const { copy } = useLocale();
   const band = EEG_BANDS[eegBandIndex(beatFreq)];
+  const bandCopy = copy.bands[band.id];
 
   const showTimer = timer.enabled && !timer.fired;
   const totalSecs = timer.minutes * 60;
@@ -43,7 +46,7 @@ export function TopBar({
         onClick={onToggle}
         onContextMenu={(e) => e.preventDefault()}
         data-playing={playing}
-        aria-label={playing ? 'pause' : 'play'}
+        aria-label={playing ? copy.topbar.pause : copy.topbar.play}
       >
         {playing ? (
           <Pause size={20} strokeWidth={2.4} fill="currentColor" />
@@ -57,17 +60,19 @@ export function TopBar({
           micro<span>tube</span>
         </div>
         <div className="topbar-status" data-playing={playing}>
-          {playing ? 'signal active' : 'signal paused'}
+          {playing ? copy.topbar.signalActive : copy.topbar.signalPaused}
         </div>
       </div>
 
       <div className="topbar-meta">
         <span className="topbar-band" style={{ color: band.color }}>
           <span className="topbar-band-greek">{band.greek}</span>
-          {band.name} · {beatFreq.toFixed(1)} Hz
+          {bandCopy.name} · {beatFreq.toFixed(1)} Hz
         </span>
         {showTimer && (
-          <span className="topbar-timer">{mmss(remaining)} left</span>
+          <span className="topbar-timer">
+            {mmss(remaining)} {copy.topbar.left}
+          </span>
         )}
       </div>
 
@@ -75,7 +80,7 @@ export function TopBar({
         <div
           className="topbar-progress"
           role="progressbar"
-          aria-label="session time remaining"
+          aria-label={copy.topbar.timeRemaining}
           aria-valuemin={0}
           aria-valuemax={totalSecs}
           aria-valuenow={Math.round(remaining)}

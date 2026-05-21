@@ -1,5 +1,6 @@
 import { EEG_BANDS, eegBandIndex } from '../audio/params';
 import { PRESETS, type Preset } from '../audio/sequences';
+import { useLocale } from '../i18n/LocaleProvider';
 
 /**
  * The persistent strip — the EEG band ladder, where each band cell *is* its
@@ -14,6 +15,7 @@ export function StripDashboard({
   beatFreq: number;
   onApplyPreset: (preset: Preset) => void;
 }) {
+  const { copy } = useLocale();
   const active = eegBandIndex(beatFreq);
 
   return (
@@ -21,11 +23,13 @@ export function StripDashboard({
       <div className="preset-bands">
         {EEG_BANDS.map((band, i) => {
           const preset = PRESETS[i];
+          const presetCopy = copy.presets[i];
+          const bandCopy = copy.bands[band.id];
           const inBand = i === active;
           const exact = Math.abs(preset.beatFreq - beatFreq) < 0.05;
           return (
             <button
-              key={band.name}
+              key={band.id}
               className={`preset-band${inBand ? ' in-band' : ''}${
                 exact ? ' on' : ''
               }`}
@@ -33,13 +37,13 @@ export function StripDashboard({
               type="button"
               onClick={() => onApplyPreset(preset)}
               onContextMenu={(e) => e.preventDefault()}
-              title={preset.description}
+              title={presetCopy.description}
               aria-pressed={exact}
             >
               <span className="pb-greek">{band.greek}</span>
-              <span className="pb-name">{preset.name}</span>
+              <span className="pb-name">{presetCopy.name}</span>
               <span className="pb-meta">
-                {band.name} · {preset.beatFreq} Hz
+                {bandCopy.name} · {preset.beatFreq} Hz
               </span>
             </button>
           );

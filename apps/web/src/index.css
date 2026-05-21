@@ -1046,6 +1046,111 @@ svg {
   box-shadow: 0 28px 80px var(--shadow);
 }
 
+.language-select {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+}
+
+.language-toggle,
+.language-option {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 66px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 10px 0 12px;
+  background: rgba(12, 16, 28, 0.72);
+  color: var(--text-soft);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(16px);
+  touch-action: manipulation;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease),
+    color 0.2s var(--ease), transform 0.16s var(--ease);
+}
+
+.language-toggle:hover,
+.language-toggle[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  color: var(--text);
+  background: rgba(17, 22, 38, 0.9);
+}
+
+.language-toggle:active {
+  transform: translateY(1px);
+}
+
+.language-toggle span {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.language-toggle svg {
+  transition: transform 0.18s var(--ease);
+}
+
+.language-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.language-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 4px;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(7, 10, 20, 0.94);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.language-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 720;
+  text-align: left;
+  touch-action: manipulation;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+
+.language-option:hover,
+.language-option.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.language-option svg {
+  color: var(--accent);
+}
+
+.language-flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
 .start-aurora,
 .start-stars,
 .start-orbits {

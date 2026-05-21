@@ -22,6 +22,14 @@ npm run dev                        # builds the Wasm core, then runs Vite
 
 Use headphones — the binaural effect depends on per-ear separation.
 
+## Localization
+
+The UI copy lives in a typed internal dictionary at `src/i18n/copy.ts`, wired
+through `LocaleProvider`. English is the default language, Croatian is
+available from the start-screen selector, and explicit choices persist in
+`localStorage` before falling back to browser language detection for `hr*`
+locales.
+
 ## Build
 
 ```bash
@@ -41,3 +49,6 @@ npm run build      # release Wasm + tsc + vite build  ->  apps/web/dist
   the raw `.wasm` bytes and transfers the `ArrayBuffer` into the worklet;
   `initSync` compiles + instantiates them there.
 - Parameter changes flow main-thread → worklet over the `MessagePort`.
+- User-facing web labels are kept out of the audio/domain parameter metadata;
+  localized labels, hints, presets, EEG band text, and Journey step names come
+  from `src/i18n/copy.ts`.

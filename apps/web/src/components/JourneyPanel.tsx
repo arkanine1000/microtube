@@ -1,5 +1,6 @@
 import { Orbit, Square } from 'lucide-react';
 import type { MicroTube } from '../audio/useMicroTube';
+import { useLocale } from '../i18n/LocaleProvider';
 
 function mmss(secs: number): string {
   const total = Math.floor(secs);
@@ -14,16 +15,16 @@ function mmss(secs: number): string {
  * this component only supplies the body content.
  */
 export function JourneyPanel({ mt }: { mt: MicroTube }) {
+  const { copy } = useLocale();
   const { journey } = mt;
   const progress =
     journey.total > 0 ? (journey.elapsed / journey.total) * 100 : 0;
+  const stepName = copy.journey.steps[journey.stepIndex];
 
   return (
     <>
       <p className="journey-copy">
-        A guided descent and return. Every parameter automated, interpolating
-        between thirteen named worlds. Hand the controls to the sequence and
-        listen.
+        {copy.journey.copy}
       </p>
 
       <div className="journey-progress">
@@ -36,8 +37,10 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
         <div className="journey-status">
           <span>
             {journey.active
-              ? `Step ${journey.stepIndex + 1}/13 · ${journey.stepName}`
-              : 'Idle — press begin to set off'}
+              ? `${copy.journey.stepPrefix} ${journey.stepIndex + 1}/${
+                  copy.journey.steps.length
+                } · ${stepName}`
+              : copy.journey.idle}
           </span>
           <span>
             {mmss(journey.elapsed)} / {mmss(journey.total)}
@@ -53,12 +56,12 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
         {journey.active ? (
           <>
             <Square size={15} strokeWidth={2.6} fill="currentColor" />
-            Stop journey
+            {copy.journey.stop}
           </>
         ) : (
           <>
             <Orbit size={16} strokeWidth={2.2} />
-            Begin journey
+            {copy.journey.begin}
           </>
         )}
       </button>

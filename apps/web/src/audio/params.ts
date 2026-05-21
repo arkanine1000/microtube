@@ -24,11 +24,6 @@ export type MistType = 0 | 1 | 2 | 3 | 4;
 export type SpawnMode = 0 | 1;
 export type Direction = 0 | 1;
 
-export const TIMBRES = ['Organ', 'Flute', 'Bell', 'Saw'] as const;
-export const MISTS = ['Pink', 'White', 'Brown', 'Blue', 'Velvet'] as const;
-export const SPAWN_MODES = ['Canon', 'Penrose'] as const;
-export const DIRECTIONS = ['Rising', 'Falling'] as const;
-
 /** The full live engine state the UI mirrors. */
 export interface MicroTubeState {
   playing: boolean;
@@ -81,8 +76,6 @@ export type SliderKey =
 /** A continuous slider-backed parameter. */
 export interface SliderSpec {
   key: SliderKey;
-  label: string;
-  hint: string;
   /** Glyph shown beside the label so a long list stays scannable. */
   icon: LucideIcon;
   min: number;
@@ -103,8 +96,6 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 const BASE_FREQ: SliderSpec = {
   key: 'baseFreq',
-  label: 'Base frequency',
-  hint: 'Carrier pitch of the binaural pair',
   icon: Radio,
   min: 50,
   max: 500,
@@ -116,8 +107,6 @@ const BASE_FREQ: SliderSpec = {
 
 const BEAT_FREQ: SliderSpec = {
   key: 'beatFreq',
-  label: 'Beat frequency',
-  hint: 'L/R offset — sets the EEG band',
   icon: AudioWaveform,
   min: 0.5,
   max: 100,
@@ -129,8 +118,6 @@ const BEAT_FREQ: SliderSpec = {
 
 const WARMTH: SliderSpec = {
   key: 'harmonics',
-  label: 'Warmth',
-  hint: 'Harmonic partials mixed into the carrier',
   icon: Flame,
   min: 0,
   max: 1,
@@ -142,8 +129,6 @@ const WARMTH: SliderSpec = {
 
 const NOISE: SliderSpec = {
   key: 'noiseLevel',
-  label: 'Mist',
-  hint: 'Ambient coloured-noise mist layer',
   icon: CloudFog,
   min: 0,
   max: 1,
@@ -156,8 +141,6 @@ const NOISE: SliderSpec = {
 
 const EMERGENCE: SliderSpec = {
   key: 'emergence',
-  label: 'Emergence',
-  hint: 'Generative canon / quasicrystal voices',
   icon: Sparkles,
   min: 0,
   max: 1,
@@ -170,8 +153,6 @@ const EMERGENCE: SliderSpec = {
 
 const DRIFT_GAIN: SliderSpec = {
   key: 'shepard',
-  label: 'Drift gain',
-  hint: 'Shepard-Risset endless-glissando level',
   icon: Waves,
   min: 0,
   max: 1,
@@ -184,8 +165,6 @@ const DRIFT_GAIN: SliderSpec = {
 
 const DRIFT_BASE: SliderSpec = {
   key: 'shepardBase',
-  label: 'Drift base',
-  hint: 'Lowest oscillator in the Shepard stack',
   icon: Anchor,
   min: SHEPARD_BASE_MIN,
   max: SHEPARD_BASE_MAX,
@@ -210,32 +189,26 @@ export const SLIDERS: SliderSpec[] = [
  * poorly, so the Shape tab renders these as labelled, icon-led sections.
  */
 export interface SliderGroup {
-  id: string;
-  label: string;
-  caption: string;
+  id: SliderGroupId;
   icon: LucideIcon;
   sliders: SliderSpec[];
 }
 
+export type SliderGroupId = 'carrier' | 'texture' | 'motion';
+
 export const SLIDER_GROUPS: SliderGroup[] = [
   {
     id: 'carrier',
-    label: 'Carrier',
-    caption: 'the binaural pair',
     icon: RadioTower,
     sliders: [BASE_FREQ, BEAT_FREQ],
   },
   {
     id: 'texture',
-    label: 'Texture',
-    caption: 'tone & atmosphere',
     icon: Layers,
     sliders: [WARMTH, NOISE],
   },
   {
     id: 'motion',
-    label: 'Motion',
-    caption: 'generative movement',
     icon: Orbit,
     sliders: [EMERGENCE, DRIFT_GAIN, DRIFT_BASE],
   },
@@ -244,8 +217,6 @@ export const SLIDER_GROUPS: SliderGroup[] = [
 /** Master volume — rendered separately in the transport bar. */
 export const VOLUME: SliderSpec = {
   key: 'volume',
-  label: 'Master volume',
-  hint: 'Overall output level',
   icon: Volume2,
   min: 0,
   max: 1,
@@ -256,18 +227,19 @@ export const VOLUME: SliderSpec = {
 };
 
 export interface EegBand {
-  name: string;
+  id: EegBandId;
   greek: string;
-  blurb: string;
   color: string;
 }
 
+export type EegBandId = 'delta' | 'theta' | 'alpha' | 'beta' | 'gamma';
+
 export const EEG_BANDS: EegBand[] = [
-  { name: 'Delta', greek: 'δ', blurb: 'deep sleep', color: '#b478ff' },
-  { name: 'Theta', greek: 'θ', blurb: 'meditation', color: '#8c64ff' },
-  { name: 'Alpha', greek: 'α', blurb: 'calm focus', color: '#50e6e6' },
-  { name: 'Beta', greek: 'β', blurb: 'alertness', color: '#50ff8c' },
-  { name: 'Gamma', greek: 'γ', blurb: 'peak insight', color: '#ffdc50' },
+  { id: 'delta', greek: 'δ', color: '#b478ff' },
+  { id: 'theta', greek: 'θ', color: '#8c64ff' },
+  { id: 'alpha', greek: 'α', color: '#50e6e6' },
+  { id: 'beta', greek: 'β', color: '#50ff8c' },
+  { id: 'gamma', greek: 'γ', color: '#ffdc50' },
 ];
 
 /** Index into EEG_BANDS for a given beat frequency. Mirrors `freq_band_name`. */

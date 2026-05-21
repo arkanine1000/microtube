@@ -1,12 +1,8 @@
 import { Gauge, Headphones, Minus, Orbit, Plus, Shapes } from 'lucide-react';
 import { useState } from 'react';
 import {
-  DIRECTIONS,
   EEG_BANDS,
-  MISTS,
   SLIDER_GROUPS,
-  SPAWN_MODES,
-  TIMBRES,
   VOLUME,
   eegBandIndex,
   type Direction,
@@ -23,18 +19,16 @@ import {
   useMicroTube,
 } from './audio/useMicroTube';
 import { JourneyPanel } from './components/JourneyPanel';
+import { LanguageSelector } from './components/LanguageSelector';
 import { Panel } from './components/Panel';
 import { ParameterSlider } from './components/ParameterSlider';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
 import { TopBar } from './components/TopBar';
+import { useLocale } from './i18n/LocaleProvider';
+import type { StudioTab } from './i18n/copy';
 
-type StudioTab = 'play' | 'shape';
-
-const TABS: Array<{ id: StudioTab; label: string; caption: string }> = [
-  { id: 'play', label: 'Play', caption: 'basic' },
-  { id: 'shape', label: 'Shape', caption: 'advanced' },
-];
+const STUDIO_TABS: StudioTab[] = ['play', 'shape'];
 
 /**
  * Mode-style controls coupled to a gain parameter — touching one of these
@@ -55,8 +49,8 @@ const AUTO_ON_VALUE = {
   shepard: 0.4,
 } as const;
 
-function formatClock(secs: number | null): string {
-  if (secs === null) return 'off';
+function formatClock(secs: number | null, offLabel: string): string {
+  if (secs === null) return offLabel;
   const total = Math.max(0, Math.ceil(secs));
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
@@ -68,12 +62,14 @@ function formatClock(secs: number | null): string {
 
 export default function App() {
   const mt = useMicroTube();
+  const { copy } = useLocale();
   const [activeTab, setActiveTab] = useState<StudioTab>('play');
 
   if (mt.status !== 'running') {
     return (
       <div className="app">
         <div className="start" aria-live="polite">
+          <LanguageSelector />
           <div className="start-aurora" aria-hidden="true" />
           <div className="start-stars" aria-hidden="true" />
           <div className="start-orbits" aria-hidden="true">
@@ -84,22 +80,23 @@ export default function App() {
           <div className="start-mark">
             micro<span>tube</span>
           </div>
-          <p className="start-tagline">Tune your mind to a frequency.</p>
+          <p className="start-tagline">{copy.start.tagline}</p>
           <button
             className="btn btn-primary btn-enter"
             type="button"
             disabled={mt.status === 'loading'}
             onClick={mt.start}
           >
-            {mt.status === 'loading' ? 'Spinning up engine…' : 'Enter studio'}
+            {mt.status === 'loading' ? copy.start.loading : copy.start.enter}
           </button>
           <div className="start-headphones">
             <Headphones size={15} strokeWidth={2.1} />
-            Headphones recommended. The binaural effect lives in the gap between
-            your ears.
+            {copy.start.headphones}
           </div>
           {mt.status === 'error' && (
-            <p className="error">Engine failed to start: {mt.error}</p>
+            <p className="error">
+              {copy.start.errorPrefix} {mt.error}
+            </p>
           )}
         </div>
       </div>
@@ -108,8 +105,8 @@ export default function App() {
 
   const { state } = mt;
   const timerLabel = mt.timer.fired
-    ? 'stopped'
-    : formatClock(mt.timer.remainingSecs);
+    ? copy.timer.stopped
+    : formatClock(mt.timer.remainingSecs, copy.timer.off);
   const accent = EEG_BANDS[eegBandIndex(state.beatFreq)].color;
 
   /**
@@ -147,18 +144,18 @@ export default function App() {
 
         <StripDashboard beatFreq={state.beatFreq} onApplyPreset={applyPreset} />
 
-        <nav className="studio-tabs" aria-label="Studio sections">
-          {TABS.map((tab) => (
+        <nav className="studio-tabs" aria-label={copy.studioSectionsLabel}>
+          {STUDIO_TABS.map((tab) => (
             <button
-              key={tab.id}
-              className={`studio-tab${activeTab === tab.id ? ' active' : ''}`}
+              key={tab}
+              className={`studio-tab${activeTab === tab ? ' active' : ''}`}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => setActiveTab(tab)}
               onContextMenu={(e) => e.preventDefault()}
-              aria-current={activeTab === tab.id ? 'page' : undefined}
+              aria-current={activeTab === tab ? 'page' : undefined}
             >
-              <span>{tab.label}</span>
-              <small>{tab.caption}</small>
+              <span>{copy.tabs[tab].label}</span>
+              <small>{copy.tabs[tab].caption}</small>
             </button>
           ))}
         </nav>
@@ -166,7 +163,11 @@ export default function App() {
         <main className="studio-stage">
           {activeTab === 'play' && (
             <div className="tab-panel play-tab">
-              <Panel icon={Gauge} title="Transport" className="transport-panel">
+              <Panel
+                icon={Gauge}
+                title={copy.panels.transport}
+                className="transport-panel"
+              >
                 <div className="transport-vol">
                   <ParameterSlider
                     spec={VOLUME}
@@ -184,7 +185,7 @@ export default function App() {
                           mt.setTimerEnabled(e.currentTarget.checked)
                         }
                       />
-                      <span>Auto-stop</span>
+                      <span>{copy.timer.autoStop}</span>
                     </label>
                     <span
                       className={`timer-readout${
@@ -204,7 +205,7 @@ export default function App() {
                         )
                       }
                       onContextMenu={(e) => e.preventDefault()}
-                      aria-label="decrease auto-stop timer"
+                      aria-label={copy.timer.decrease}
                     >
                       <Minus size={16} strokeWidth={2.6} />
                     </button>
@@ -218,7 +219,7 @@ export default function App() {
                       onChange={(e) =>
                         mt.setTimerMinutes(Number(e.currentTarget.value))
                       }
-                      aria-label="auto-stop minutes"
+                      aria-label={copy.timer.minutes}
                     />
                     <button
                       className="nudge"
@@ -229,52 +230,56 @@ export default function App() {
                         )
                       }
                       onContextMenu={(e) => e.preventDefault()}
-                      aria-label="increase auto-stop timer"
+                      aria-label={copy.timer.increase}
                     >
                       <Plus size={16} strokeWidth={2.6} />
                     </button>
                     <span className="timer-minutes">
-                      {mt.timer.minutes} min
+                      {mt.timer.minutes} {copy.timer.minutesAbbrev}
                     </span>
                   </div>
                 </div>
               </Panel>
 
-              <Panel icon={Shapes} title="Modes">
+              <Panel icon={Shapes} title={copy.panels.modes}>
                 <Segmented
-                  caption="Timbre"
-                  options={TIMBRES}
+                  caption={copy.modes.captions.timbre}
+                  options={copy.modes.timbres}
                   value={state.timbre}
+                  statusLabels={copy.modes.status}
                   onChange={(v) => setParam('timbre', v as Timbre)}
                 />
                 <Segmented
-                  caption="Mist colour"
-                  options={MISTS}
+                  caption={copy.modes.captions.mist}
+                  options={copy.modes.mists}
                   value={state.mistType}
                   enabled={state.noiseLevel > 0}
+                  statusLabels={copy.modes.status}
                   onChange={(v) => setParam('mistType', v as MistType)}
                 />
                 <Segmented
-                  caption="Drift direction"
-                  options={DIRECTIONS}
+                  caption={copy.modes.captions.direction}
+                  options={copy.modes.directions}
                   value={state.shepardDirection}
                   enabled={state.shepard > 0}
+                  statusLabels={copy.modes.status}
                   onChange={(v) =>
                     setParam('shepardDirection', v as Direction)
                   }
                 />
                 <Segmented
-                  caption="Emergence spawn"
-                  options={SPAWN_MODES}
+                  caption={copy.modes.captions.spawn}
+                  options={copy.modes.spawnModes}
                   value={state.spawnMode}
                   enabled={state.emergence > 0}
+                  statusLabels={copy.modes.status}
                   onChange={(v) => setParam('spawnMode', v as SpawnMode)}
                 />
               </Panel>
 
               <Panel
                 icon={Orbit}
-                title="Journey Through the Cosmos"
+                title={copy.panels.journey}
                 className="journey-panel"
               >
                 <JourneyPanel mt={mt} />
@@ -288,8 +293,8 @@ export default function App() {
                 <Panel
                   key={group.id}
                   icon={group.icon}
-                  title={group.label}
-                  caption={group.caption}
+                  title={copy.sliderGroups[group.id].label}
+                  caption={copy.sliderGroups[group.id].caption}
                   className="slider-group"
                 >
                   <div className="slider-stack">
@@ -309,7 +314,14 @@ export default function App() {
         </main>
 
         <footer className="studio-footer">
-          <a href="https://github.com/arkanine1000/microtube" target='_blank' rel="noopener noreferrer">microtube</a> engine · ars gratia artis
+          <a
+            href="https://github.com/arkanine1000/microtube"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            microtube
+          </a>{' '}
+          {copy.footer.engine} · ars gratia artis
         </footer>
       </div>
     </div>

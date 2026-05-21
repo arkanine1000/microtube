@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type React from 'react';
 import { useRef } from 'react';
 import { clamp, type SliderSpec } from '../audio/params';
+import { useLocale } from '../i18n/LocaleProvider';
 
 /**
  * A touch-friendly parameter slider. Dragging the track gives fine control
@@ -20,6 +21,8 @@ export function ParameterSlider({
   onChange: (v: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const { copy } = useLocale();
+  const sliderCopy = copy.sliders[spec.key];
   const Icon = spec.icon;
 
   const snap = (v: number, step: number) => {
@@ -63,8 +66,8 @@ export function ParameterSlider({
           <Icon size={16} strokeWidth={2.1} />
         </span>
         <div className="slider-titles">
-          <span className="slider-label">{spec.label}</span>
-          <span className="slider-hint">{spec.hint}</span>
+          <span className="slider-label">{sliderCopy.label}</span>
+          <span className="slider-hint">{sliderCopy.hint}</span>
         </div>
         <span className="slider-value">{spec.format(value)}</span>
       </div>
@@ -74,7 +77,7 @@ export function ParameterSlider({
           type="button"
           onClick={() => nudge(-1)}
           onContextMenu={(e) => e.preventDefault()}
-          aria-label={`decrease ${spec.label}`}
+          aria-label={sliderCopy.decrease}
         >
           <ChevronLeft size={18} strokeWidth={2.4} />
         </button>
@@ -85,7 +88,7 @@ export function ParameterSlider({
           onPointerMove={onPointerMove}
           onContextMenu={(e) => e.preventDefault()}
           role="slider"
-          aria-label={spec.label}
+          aria-label={sliderCopy.label}
           aria-valuemin={spec.min}
           aria-valuemax={spec.max}
           aria-valuenow={value}
@@ -98,7 +101,7 @@ export function ParameterSlider({
           type="button"
           onClick={() => nudge(1)}
           onContextMenu={(e) => e.preventDefault()}
-          aria-label={`increase ${spec.label}`}
+          aria-label={sliderCopy.increase}
         >
           <ChevronRight size={18} strokeWidth={2.4} />
         </button>

@@ -30,7 +30,6 @@ const snapTimerMinutes = (minutes: number) =>
 export interface JourneyStatus {
   active: boolean;
   stepIndex: number;
-  stepName: string;
   elapsed: number;
   total: number;
 }
@@ -73,7 +72,6 @@ export function useMicroTube(): MicroTube {
   const [journey, setJourney] = useState<JourneyStatus>({
     active: false,
     stepIndex: 0,
-    stepName: '',
     elapsed: 0,
     total: JOURNEY_TOTAL_SECS,
   });
@@ -421,7 +419,6 @@ export function useMicroTube(): MicroTube {
       active: true,
       elapsed: 0,
       stepIndex: sample.stepIndex,
-      stepName: sample.stepName,
     }));
   }, [post, status]);
 
@@ -441,7 +438,6 @@ export function useMicroTube(): MicroTube {
     setJourney({
       active: false,
       stepIndex: 0,
-      stepName: '',
       elapsed: 0,
       total: JOURNEY_TOTAL_SECS,
     });
@@ -474,7 +470,6 @@ export function useMicroTube(): MicroTube {
         ...j,
         elapsed: Math.min(elapsed, JOURNEY_TOTAL_SECS),
         stepIndex: sample.stepIndex,
-        stepName: sample.stepName,
       }));
 
       if (sample.done) {
