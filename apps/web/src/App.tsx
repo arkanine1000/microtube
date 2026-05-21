@@ -165,6 +165,7 @@ export default function App() {
           {activeTab === 'play' && (
             <div className="tab-panel play-tab">
               <Panel
+                id="transport"
                 icon={Gauge}
                 title={copy.panels.transport}
                 className="transport-panel"
@@ -242,7 +243,7 @@ export default function App() {
                 </div>
               </Panel>
 
-              <Panel icon={Shapes} title={copy.panels.modes}>
+              <Panel id="modes" icon={Shapes} title={copy.panels.modes}>
                 <Segmented
                   caption={copy.modes.captions.timbre}
                   options={copy.modes.timbres}
@@ -279,6 +280,7 @@ export default function App() {
               </Panel>
 
               <Panel
+                id="journey"
                 icon={Orbit}
                 title={copy.panels.journey}
                 className="journey-panel"
@@ -293,6 +295,7 @@ export default function App() {
               {SLIDER_GROUPS.map((group) => (
                 <Panel
                   key={group.id}
+                  id={`slider-${group.id}`}
                   icon={group.icon}
                   title={copy.sliderGroups[group.id].label}
                   caption={copy.sliderGroups[group.id].caption}
