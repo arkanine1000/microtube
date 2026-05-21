@@ -41,9 +41,11 @@ export function Panel({
         {caption && <small>{caption}</small>}
         <ChevronDown className="panel-chevron" size={16} strokeWidth={2.4} />
       </button>
-      <div className="panel-body">
-        <div className="panel-body-inner">{children}</div>
-      </div>
+      {open && (
+        <div className="panel-body">
+          <div className="panel-body-inner">{children}</div>
+        </div>
+      )}
     </section>
   );
 }
