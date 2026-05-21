@@ -55,8 +55,7 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
       </div>
 
       <button
-        className={`btn ${journey.active ? '' : 'btn-primary'}`}
-        style={{ width: '100%', marginTop: 10 }}
+        className={`btn journey-action ${journey.active ? '' : 'btn-primary'}`}
         onClick={journey.active ? mt.stopJourney : mt.startJourney}
       >
         {journey.active ? 'Stop journey' : 'Begin journey'}
