@@ -428,8 +428,24 @@ export function useMicroTube(): MicroTube {
   const stopJourney = useCallback(() => {
     journeyActiveRef.current = false;
     journeyLastTickRef.current = null;
-    setJourney((j) => ({ ...j, active: false }));
-  }, []);
+    journeyElapsedRef.current = 0;
+
+    // The journey sweeps every parameter — leaving it mid-sweep would strand
+    // the user in an arbitrary state, so revert the engine to its defaults.
+    const defaults: Partial<MicroTubeState> = { ...DEFAULT_STATE };
+    delete defaults.playing;
+    stateRef.current = { ...stateRef.current, ...defaults };
+    setState(stateRef.current);
+    post({ type: 'params', value: defaults });
+
+    setJourney({
+      active: false,
+      stepIndex: 0,
+      stepName: '',
+      elapsed: 0,
+      total: JOURNEY_TOTAL_SECS,
+    });
+  }, [post]);
 
   useEffect(() => {
     if (!journey.active) return;

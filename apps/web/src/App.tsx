@@ -1,4 +1,4 @@
-import { Gauge, Headphones, Minus, Plus, Shapes } from 'lucide-react';
+import { Gauge, Headphones, Minus, Orbit, Plus, Shapes } from 'lucide-react';
 import { useState } from 'react';
 import {
   DIRECTIONS,
@@ -23,6 +23,7 @@ import {
   useMicroTube,
 } from './audio/useMicroTube';
 import { JourneyPanel } from './components/JourneyPanel';
+import { Panel } from './components/Panel';
 import { ParameterSlider } from './components/ParameterSlider';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
@@ -31,8 +32,8 @@ import { TopBar } from './components/TopBar';
 type StudioTab = 'play' | 'shape';
 
 const TABS: Array<{ id: StudioTab; label: string; caption: string }> = [
-  { id: 'play', label: 'Play', caption: 'transport · modes · journey' },
-  { id: 'shape', label: 'Shape', caption: 'tone parameters' },
+  { id: 'play', label: 'Play', caption: 'basic' },
+  { id: 'shape', label: 'Shape', caption: 'advanced' },
 ];
 
 /**
@@ -84,10 +85,6 @@ export default function App() {
             micro<span>tube</span>
           </div>
           <p className="start-tagline">Tune your mind to a frequency.</p>
-          <p className="start-blurb">
-            A binaural-beat synthesis studio. A Rust DSP engine, compiled to
-            WebAssembly, renders every tone on a dedicated audio thread.
-          </p>
           <button
             className="btn btn-primary btn-enter"
             type="button"
@@ -98,7 +95,7 @@ export default function App() {
           </button>
           <div className="start-headphones">
             <Headphones size={15} strokeWidth={2.1} />
-            Headphones required — the binaural effect lives in the gap between
+            Headphones recommended. The binaural effect lives in the gap between
             your ears.
           </div>
           {mt.status === 'error' && (
@@ -144,8 +141,8 @@ export default function App() {
         <TopBar
           playing={state.playing}
           onToggle={mt.togglePlaying}
-          uptimeSecs={mt.uptimeSecs}
           beatFreq={state.beatFreq}
+          timer={mt.timer}
         />
 
         <StripDashboard beatFreq={state.beatFreq} onApplyPreset={applyPreset} />
@@ -169,11 +166,7 @@ export default function App() {
         <main className="studio-stage">
           {activeTab === 'play' && (
             <div className="tab-panel play-tab">
-              <section className="panel transport-panel">
-                <h2 className="panel-title">
-                  <Gauge size={13} strokeWidth={2.3} />
-                  <span>Transport</span>
-                </h2>
+              <Panel icon={Gauge} title="Transport" className="transport-panel">
                 <div className="transport-vol">
                   <ParameterSlider
                     spec={VOLUME}
@@ -181,67 +174,73 @@ export default function App() {
                     onChange={(v) => setParam('volume', v)}
                   />
                 </div>
-                <div className="timer-controls">
-                  <label className="timer-toggle">
-                    <input
-                      type="checkbox"
-                      checked={mt.timer.enabled}
-                      onChange={(e) =>
-                        mt.setTimerEnabled(e.currentTarget.checked)
+                <div className="timer-block">
+                  <div className="timer-controls">
+                    <label className="timer-toggle">
+                      <input
+                        type="checkbox"
+                        checked={mt.timer.enabled}
+                        onChange={(e) =>
+                          mt.setTimerEnabled(e.currentTarget.checked)
+                        }
+                      />
+                      <span>Auto-stop</span>
+                    </label>
+                    <span
+                      className={`timer-readout${
+                        mt.timer.fired ? ' fired' : ''
+                      }`}
+                    >
+                      {timerLabel}
+                    </span>
+                  </div>
+                  <div className="timer-row">
+                    <button
+                      className="nudge"
+                      type="button"
+                      onClick={() =>
+                        mt.setTimerMinutes(
+                          mt.timer.minutes - TIMER_STEP_MINUTES,
+                        )
                       }
+                      onContextMenu={(e) => e.preventDefault()}
+                      aria-label="decrease auto-stop timer"
+                    >
+                      <Minus size={16} strokeWidth={2.6} />
+                    </button>
+                    <input
+                      className="timer-range"
+                      type="range"
+                      min={TIMER_MIN_MINUTES}
+                      max={TIMER_MAX_MINUTES}
+                      step={TIMER_STEP_MINUTES}
+                      value={mt.timer.minutes}
+                      onChange={(e) =>
+                        mt.setTimerMinutes(Number(e.currentTarget.value))
+                      }
+                      aria-label="auto-stop minutes"
                     />
-                    <span>Auto-stop</span>
-                  </label>
-                  <span
-                    className={`timer-readout${mt.timer.fired ? ' fired' : ''}`}
-                  >
-                    {timerLabel}
-                  </span>
+                    <button
+                      className="nudge"
+                      type="button"
+                      onClick={() =>
+                        mt.setTimerMinutes(
+                          mt.timer.minutes + TIMER_STEP_MINUTES,
+                        )
+                      }
+                      onContextMenu={(e) => e.preventDefault()}
+                      aria-label="increase auto-stop timer"
+                    >
+                      <Plus size={16} strokeWidth={2.6} />
+                    </button>
+                    <span className="timer-minutes">
+                      {mt.timer.minutes} min
+                    </span>
+                  </div>
                 </div>
-                <div className="timer-row">
-                  <button
-                    className="nudge"
-                    type="button"
-                    onClick={() =>
-                      mt.setTimerMinutes(mt.timer.minutes - TIMER_STEP_MINUTES)
-                    }
-                    onContextMenu={(e) => e.preventDefault()}
-                    aria-label="decrease auto-stop timer"
-                  >
-                    <Minus size={16} strokeWidth={2.6} />
-                  </button>
-                  <input
-                    className="timer-range"
-                    type="range"
-                    min={TIMER_MIN_MINUTES}
-                    max={TIMER_MAX_MINUTES}
-                    step={TIMER_STEP_MINUTES}
-                    value={mt.timer.minutes}
-                    onChange={(e) =>
-                      mt.setTimerMinutes(Number(e.currentTarget.value))
-                    }
-                    aria-label="auto-stop minutes"
-                  />
-                  <button
-                    className="nudge"
-                    type="button"
-                    onClick={() =>
-                      mt.setTimerMinutes(mt.timer.minutes + TIMER_STEP_MINUTES)
-                    }
-                    onContextMenu={(e) => e.preventDefault()}
-                    aria-label="increase auto-stop timer"
-                  >
-                    <Plus size={16} strokeWidth={2.6} />
-                  </button>
-                  <span className="timer-minutes">{mt.timer.minutes} min</span>
-                </div>
-              </section>
+              </Panel>
 
-              <section className="panel mode-panel">
-                <h2 className="panel-title">
-                  <Shapes size={13} strokeWidth={2.3} />
-                  <span>Modes</span>
-                </h2>
+              <Panel icon={Shapes} title="Modes">
                 <Segmented
                   caption="Timbre"
                   options={TIMBRES}
@@ -271,43 +270,46 @@ export default function App() {
                   enabled={state.emergence > 0}
                   onChange={(v) => setParam('spawnMode', v as SpawnMode)}
                 />
-              </section>
+              </Panel>
 
-              <JourneyPanel mt={mt} />
+              <Panel
+                icon={Orbit}
+                title="Journey Through the Cosmos"
+                className="journey-panel"
+              >
+                <JourneyPanel mt={mt} />
+              </Panel>
             </div>
           )}
 
           {activeTab === 'shape' && (
             <div className="tab-panel shape-tab">
-              {SLIDER_GROUPS.map((group) => {
-                const Icon = group.icon;
-                return (
-                  <section key={group.id} className="panel slider-group">
-                    <h2 className="panel-title">
-                      <Icon size={13} strokeWidth={2.3} />
-                      <span>{group.label}</span>
-                      <small>{group.caption}</small>
-                    </h2>
-                    <div className="slider-stack">
-                      {group.sliders.map((spec) => (
-                        <ParameterSlider
-                          key={spec.key}
-                          spec={spec}
-                          value={state[spec.key]}
-                          onChange={(v) => setParam(spec.key, v)}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+              {SLIDER_GROUPS.map((group) => (
+                <Panel
+                  key={group.id}
+                  icon={group.icon}
+                  title={group.label}
+                  caption={group.caption}
+                  className="slider-group"
+                >
+                  <div className="slider-stack">
+                    {group.sliders.map((spec) => (
+                      <ParameterSlider
+                        key={spec.key}
+                        spec={spec}
+                        value={state[spec.key]}
+                        onChange={(v) => setParam(spec.key, v)}
+                      />
+                    ))}
+                  </div>
+                </Panel>
+              ))}
             </div>
           )}
         </main>
 
         <footer className="studio-footer">
-          engine · microtube-core (Rust → WebAssembly) ·{' '}
-          {Math.round(mt.uptimeSecs)}s session
+          <a href="https://github.com/arkanine1000/microtube" target='_blank' rel="noopener noreferrer">microtube</a> engine · ars gratia artis
         </footer>
       </div>
     </div>

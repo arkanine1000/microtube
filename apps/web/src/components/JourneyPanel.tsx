@@ -10,8 +10,8 @@ function mmss(secs: number): string {
 
 /**
  * "Journey Through the Cosmos" — the 13-step strange loop, executed on the
- * frontend with a 250 ms scheduler. Quick presets now live in the strip;
- * this panel is the guided long-form experience.
+ * frontend with a 250 ms scheduler. Rendered inside a collapsible Panel, so
+ * this component only supplies the body content.
  */
 export function JourneyPanel({ mt }: { mt: MicroTube }) {
   const { journey } = mt;
@@ -19,33 +19,30 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
     journey.total > 0 ? (journey.elapsed / journey.total) * 100 : 0;
 
   return (
-    <section className="panel journey-panel">
-      <div className="journey-head">
-        <h2 className="panel-title">
-          <Orbit size={13} strokeWidth={2.3} />
-          <span>Journey Through the Cosmos</span>
-        </h2>
-        <span className="journey-meta">13-step strange loop · ~25 min</span>
-      </div>
-
+    <>
       <p className="journey-copy">
-        A guided descent and return — every parameter automated, interpolating
+        A guided descent and return. Every parameter automated, interpolating
         between thirteen named worlds. Hand the controls to the sequence and
         listen.
       </p>
 
-      <div className="journey-bar">
-        <div className="journey-bar-fill" style={{ width: `${progress}%` }} />
-      </div>
-      <div className="journey-status">
-        <span>
-          {journey.active
-            ? `Step ${journey.stepIndex + 1}/13 · ${journey.stepName}`
-            : 'Idle — press begin to set off'}
-        </span>
-        <span>
-          {mmss(journey.elapsed)} / {mmss(journey.total)}
-        </span>
+      <div className="journey-progress">
+        <div className="journey-bar">
+          <div
+            className="journey-bar-fill"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="journey-status">
+          <span>
+            {journey.active
+              ? `Step ${journey.stepIndex + 1}/13 · ${journey.stepName}`
+              : 'Idle — press begin to set off'}
+          </span>
+          <span>
+            {mmss(journey.elapsed)} / {mmss(journey.total)}
+          </span>
+        </div>
       </div>
 
       <button
@@ -65,6 +62,6 @@ export function JourneyPanel({ mt }: { mt: MicroTube }) {
           </>
         )}
       </button>
-    </section>
+    </>
   );
 }
