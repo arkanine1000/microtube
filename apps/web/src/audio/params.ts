@@ -4,6 +4,21 @@
 // `emergence` exactly — the worklet forwards these integers straight into
 // the Wasm `set_*` calls, so they must not drift apart.
 
+import {
+  Anchor,
+  AudioWaveform,
+  CloudFog,
+  Flame,
+  Layers,
+  type LucideIcon,
+  Orbit,
+  Radio,
+  RadioTower,
+  Sparkles,
+  Volume2,
+  Waves,
+} from 'lucide-react';
+
 export type Timbre = 0 | 1 | 2 | 3;
 export type MistType = 0 | 1 | 2 | 3 | 4;
 export type SpawnMode = 0 | 1;
@@ -68,6 +83,8 @@ export interface SliderSpec {
   key: SliderKey;
   label: string;
   hint: string;
+  /** Glyph shown beside the label so a long list stays scannable. */
+  icon: LucideIcon;
   min: number;
   max: number;
   step: number;
@@ -75,87 +92,152 @@ export interface SliderSpec {
   coarse: number;
   unit: string;
   format: (v: number) => string;
+  /**
+   * True for a function that is genuinely on/off (mist, drift, emergence) —
+   * its minimum is 0, and the UI recedes it while it sits there.
+   */
+  toggle?: boolean;
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
+const BASE_FREQ: SliderSpec = {
+  key: 'baseFreq',
+  label: 'Base frequency',
+  hint: 'Carrier pitch of the binaural pair',
+  icon: Radio,
+  min: 50,
+  max: 500,
+  step: 1,
+  coarse: 10,
+  unit: 'Hz',
+  format: (v) => `${v.toFixed(0)} Hz`,
+};
+
+const BEAT_FREQ: SliderSpec = {
+  key: 'beatFreq',
+  label: 'Beat frequency',
+  hint: 'L/R offset — sets the EEG band',
+  icon: AudioWaveform,
+  min: 0.5,
+  max: 100,
+  step: 0.1,
+  coarse: 1,
+  unit: 'Hz',
+  format: (v) => `${v.toFixed(1)} Hz`,
+};
+
+const WARMTH: SliderSpec = {
+  key: 'harmonics',
+  label: 'Warmth',
+  hint: 'Harmonic partials mixed into the carrier',
+  icon: Flame,
+  min: 0,
+  max: 1,
+  step: 0.01,
+  coarse: 0.1,
+  unit: '',
+  format: pct,
+};
+
+const NOISE: SliderSpec = {
+  key: 'noiseLevel',
+  label: 'Mist',
+  hint: 'Ambient coloured-noise mist layer',
+  icon: CloudFog,
+  min: 0,
+  max: 1,
+  step: 0.01,
+  coarse: 0.1,
+  unit: '',
+  format: pct,
+  toggle: true,
+};
+
+const EMERGENCE: SliderSpec = {
+  key: 'emergence',
+  label: 'Emergence',
+  hint: 'Generative canon / quasicrystal voices',
+  icon: Sparkles,
+  min: 0,
+  max: 1,
+  step: 0.01,
+  coarse: 0.1,
+  unit: '',
+  format: pct,
+  toggle: true,
+};
+
+const DRIFT_GAIN: SliderSpec = {
+  key: 'shepard',
+  label: 'Drift gain',
+  hint: 'Shepard-Risset endless-glissando level',
+  icon: Waves,
+  min: 0,
+  max: 1,
+  step: 0.01,
+  coarse: 0.1,
+  unit: '',
+  format: pct,
+  toggle: true,
+};
+
+const DRIFT_BASE: SliderSpec = {
+  key: 'shepardBase',
+  label: 'Drift base',
+  hint: 'Lowest oscillator in the Shepard stack',
+  icon: Anchor,
+  min: SHEPARD_BASE_MIN,
+  max: SHEPARD_BASE_MAX,
+  step: 0.1,
+  coarse: 1,
+  unit: 'Hz',
+  format: (v) => `${v.toFixed(1)} Hz`,
+};
+
 export const SLIDERS: SliderSpec[] = [
+  BASE_FREQ,
+  BEAT_FREQ,
+  WARMTH,
+  EMERGENCE,
+  NOISE,
+  DRIFT_GAIN,
+  DRIFT_BASE,
+];
+
+/**
+ * Sliders split into themed groups — a long unbroken list of sliders reads
+ * poorly, so the Shape tab renders these as labelled, icon-led sections.
+ */
+export interface SliderGroup {
+  id: string;
+  label: string;
+  caption: string;
+  icon: LucideIcon;
+  sliders: SliderSpec[];
+}
+
+export const SLIDER_GROUPS: SliderGroup[] = [
   {
-    key: 'baseFreq',
-    label: 'Base frequency',
-    hint: 'Carrier pitch of the binaural pair',
-    min: 50,
-    max: 500,
-    step: 1,
-    coarse: 10,
-    unit: 'Hz',
-    format: (v) => `${v.toFixed(0)} Hz`,
+    id: 'carrier',
+    label: 'Carrier',
+    caption: 'the binaural pair',
+    icon: RadioTower,
+    sliders: [BASE_FREQ, BEAT_FREQ],
   },
   {
-    key: 'beatFreq',
-    label: 'Beat frequency',
-    hint: 'L/R offset — sets the EEG band',
-    min: 0.5,
-    max: 100,
-    step: 0.1,
-    coarse: 1,
-    unit: 'Hz',
-    format: (v) => `${v.toFixed(1)} Hz`,
+    id: 'texture',
+    label: 'Texture',
+    caption: 'tone & atmosphere',
+    icon: Layers,
+    sliders: [WARMTH, NOISE],
   },
   {
-    key: 'harmonics',
-    label: 'Warmth',
-    hint: 'Harmonic partials mixed into the carrier',
-    min: 0,
-    max: 1,
-    step: 0.01,
-    coarse: 0.1,
-    unit: '',
-    format: pct,
-  },
-  {
-    key: 'emergence',
-    label: 'Emergence',
-    hint: 'Generative canon / quasicrystal voices',
-    min: 0,
-    max: 1,
-    step: 0.01,
-    coarse: 0.1,
-    unit: '',
-    format: pct,
-  },
-  {
-    key: 'noiseLevel',
-    label: 'Noise',
-    hint: 'Ambient coloured-noise mist layer',
-    min: 0,
-    max: 1,
-    step: 0.01,
-    coarse: 0.1,
-    unit: '',
-    format: pct,
-  },
-  {
-    key: 'shepard',
-    label: 'Drift gain',
-    hint: 'Shepard-Risset endless-glissando level',
-    min: 0,
-    max: 1,
-    step: 0.01,
-    coarse: 0.1,
-    unit: '',
-    format: pct,
-  },
-  {
-    key: 'shepardBase',
-    label: 'Drift base',
-    hint: 'Lowest oscillator in the Shepard stack',
-    min: SHEPARD_BASE_MIN,
-    max: SHEPARD_BASE_MAX,
-    step: 0.1,
-    coarse: 1,
-    unit: 'Hz',
-    format: (v) => `${v.toFixed(1)} Hz`,
+    id: 'motion',
+    label: 'Motion',
+    caption: 'generative movement',
+    icon: Orbit,
+    sliders: [EMERGENCE, DRIFT_GAIN, DRIFT_BASE],
   },
 ];
 
@@ -164,6 +246,7 @@ export const VOLUME: SliderSpec = {
   key: 'volume',
   label: 'Master volume',
   hint: 'Overall output level',
+  icon: Volume2,
   min: 0,
   max: 1,
   step: 0.01,

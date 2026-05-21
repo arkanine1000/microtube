@@ -1,52 +1,51 @@
 import { EEG_BANDS, eegBandIndex } from '../audio/params';
-
-function formatUptime(secs: number): string {
-  const total = Math.floor(secs);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const mm = String(m).padStart(2, '0');
-  const ss = String(s).padStart(2, '0');
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
+import { PRESETS, type Preset } from '../audio/sequences';
 
 /**
- * The strip dashboard — the EEG band ladder plus session uptime, sitting
- * prominently at the top of the app.
+ * The persistent strip — the EEG band ladder, where each band cell *is* its
+ * preset button (the five presets map one-to-one onto the five bands).
+ * Rendered once in the shell, above the tab nav, so it stays available on
+ * every tab: tapping a band is the lowest-friction way to explore the engine.
  */
 export function StripDashboard({
   beatFreq,
-  uptimeSecs,
+  onApplyPreset,
 }: {
   beatFreq: number;
-  uptimeSecs: number;
+  onApplyPreset: (preset: Preset) => void;
 }) {
   const active = eegBandIndex(beatFreq);
 
   return (
-    <header className="panel strip">
-      <div className="strip-top">
-        <div className="brand">
-          micro<span>tube</span>
-        </div>
-        <div className="uptime">
-          <span className="uptime-label">session</span>
-          {formatUptime(uptimeSecs)}
-        </div>
+    <section className="strip">
+      <span className="strip-label">Presets · EEG bands</span>
+      <div className="preset-bands">
+        {EEG_BANDS.map((band, i) => {
+          const preset = PRESETS[i];
+          const inBand = i === active;
+          const exact = Math.abs(preset.beatFreq - beatFreq) < 0.05;
+          return (
+            <button
+              key={band.name}
+              className={`preset-band${inBand ? ' in-band' : ''}${
+                exact ? ' on' : ''
+              }`}
+              style={{ color: band.color }}
+              type="button"
+              onClick={() => onApplyPreset(preset)}
+              onContextMenu={(e) => e.preventDefault()}
+              title={preset.description}
+              aria-pressed={exact}
+            >
+              <span className="pb-greek">{band.greek}</span>
+              <span className="pb-name">{preset.name}</span>
+              <span className="pb-meta">
+                {band.name} · {preset.beatFreq} Hz
+              </span>
+            </button>
+          );
+        })}
       </div>
-      <div className="bands">
-        {EEG_BANDS.map((band, i) => (
-          <div
-            key={band.name}
-            className={`band${i === active ? ' active' : ''}`}
-            style={{ color: band.color }}
-          >
-            <div className="band-greek">{band.greek}</div>
-            <div className="band-name">{band.name}</div>
-            <div className="band-blurb">{band.blurb}</div>
-          </div>
-        ))}
-      </div>
-    </header>
+    </section>
   );
 }

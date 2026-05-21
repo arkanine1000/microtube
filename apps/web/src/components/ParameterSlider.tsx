@@ -1,10 +1,14 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type React from 'react';
 import { useRef } from 'react';
 import { clamp, type SliderSpec } from '../audio/params';
 
 /**
  * A touch-friendly parameter slider. Dragging the track gives fine control
- * (snapped to `spec.step`); the ◂ ▸ buttons nudge by the coarse step.
+ * (snapped to `spec.step`); the chevron buttons nudge by the coarse step.
+ * The icon badge lights when the parameter is above its minimum, so the
+ * on/off state of toggleable functions (mist, drift, emergence) is legible
+ * at a glance without leaving the tab.
  */
 export function ParameterSlider({
   spec,
@@ -16,6 +20,7 @@ export function ParameterSlider({
   onChange: (v: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const Icon = spec.icon;
 
   const snap = (v: number, step: number) => {
     const snapped = Math.round((v - spec.min) / step) * step + spec.min;
@@ -40,19 +45,25 @@ export function ParameterSlider({
     onChange(fromClientX(e.clientX));
   };
 
-  const nudge = (dir: number) => onChange(snap(value + dir * spec.coarse, spec.step));
+  const nudge = (dir: number) =>
+    onChange(snap(value + dir * spec.coarse, spec.step));
 
   const fillPct = clamp(
     ((value - spec.min) / (spec.max - spec.min)) * 100,
     0,
     100,
   );
+  const active = value > spec.min;
+  const off = spec.toggle === true && !active;
 
   return (
-    <div className="slider">
+    <div className={`slider${off ? ' off' : ''}`}>
       <div className="slider-head">
-        <div>
-          <span className="slider-label">{spec.label}</span>{' '}
+        <span className={`slider-icon${active ? ' active' : ''}`}>
+          <Icon size={16} strokeWidth={2.1} />
+        </span>
+        <div className="slider-titles">
+          <span className="slider-label">{spec.label}</span>
           <span className="slider-hint">{spec.hint}</span>
         </div>
         <span className="slider-value">{spec.format(value)}</span>
@@ -60,16 +71,19 @@ export function ParameterSlider({
       <div className="slider-row">
         <button
           className="nudge"
+          type="button"
           onClick={() => nudge(-1)}
+          onContextMenu={(e) => e.preventDefault()}
           aria-label={`decrease ${spec.label}`}
         >
-          ◂
+          <ChevronLeft size={18} strokeWidth={2.4} />
         </button>
         <div
           className="track"
           ref={trackRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
+          onContextMenu={(e) => e.preventDefault()}
           role="slider"
           aria-label={spec.label}
           aria-valuemin={spec.min}
@@ -81,10 +95,12 @@ export function ParameterSlider({
         </div>
         <button
           className="nudge"
+          type="button"
           onClick={() => nudge(1)}
+          onContextMenu={(e) => e.preventDefault()}
           aria-label={`increase ${spec.label}`}
         >
-          ▸
+          <ChevronRight size={18} strokeWidth={2.4} />
         </button>
       </div>
     </div>
