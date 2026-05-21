@@ -30,6 +30,23 @@ available from the start-screen selector, and explicit choices persist in
 `localStorage` before falling back to browser language detection for `hr*`
 locales.
 
+## Progressive Web App
+
+The web UI is installable as a PWA. Manifest metadata, the service worker, and
+install icons live in `public/` so Vite copies them directly into
+`apps/web/dist`.
+
+- `public/manifest.webmanifest` defines the app name, standalone display mode,
+  start URL, theme colors, categories, and standard/maskable icon entries.
+- `public/sw.js` is intentionally install-focused and network-only: it
+  registers a service worker for installability, but does not cache the app
+  shell, worklet, or Wasm for offline playback.
+- PWA icons are generated from `public/microtube-icon.png`. Use ImageMagick's
+  `convert` command to regenerate `apple-touch-icon.png`, `pwa-192.png`,
+  `pwa-512.png`, and the maskable variants after changing the source artwork.
+- Vercel serves `/sw.js` and `/manifest.webmanifest` with no-cache headers from
+  the root `vercel.json`, so installed clients can pick up redeploys promptly.
+
 ## Build
 
 ```bash
@@ -52,3 +69,6 @@ npm run build      # release Wasm + tsc + vite build  ->  apps/web/dist
 - User-facing web labels are kept out of the audio/domain parameter metadata;
   localized labels, hints, presets, EEG band text, and Journey step names come
   from `src/i18n/copy.ts`.
+- The service worker is registered only in production from `src/main.tsx`;
+  local `npm run dev` sessions stay unregistered unless a browser still has an
+  older worker from a previous production preview.
