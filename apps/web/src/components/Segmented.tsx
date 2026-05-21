@@ -22,6 +22,8 @@ export function Segmented({
             key={option}
             className={`seg${i === value ? ' on' : ''}`}
             onClick={() => onChange(i)}
+            type="button"
+            aria-pressed={i === value}
           >
             {option}
           </button>

@@ -29,7 +29,10 @@ export function StripDashboard({
         <div className="brand">
           micro<span>tube</span>
         </div>
-        <div className="uptime">⏱ {formatUptime(uptimeSecs)}</div>
+        <div className="uptime">
+          <span className="uptime-label">session</span>
+          {formatUptime(uptimeSecs)}
+        </div>
       </div>
       <div className="bands">
         {EEG_BANDS.map((band, i) => (
