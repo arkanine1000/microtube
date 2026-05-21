@@ -540,15 +540,11 @@ svg {
   transform: rotate(180deg);
 }
 
-/* Collapse animation — grid-template-rows 0fr→1fr glides the body height. */
+/* Panel bodies are mounted only while open; use an open-only reveal instead
+   of animating height/grid tracks, which is expensive on mobile layouts. */
 .panel-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.34s var(--ease);
-}
-
-.collapsible.open .panel-body {
-  grid-template-rows: 1fr;
+  overflow: clip;
+  contain: layout paint;
 }
 
 .panel-body-inner {
@@ -557,7 +553,9 @@ svg {
   gap: 14px;
   min-height: 0;
   padding-top: 14px;
-  overflow: hidden;
+  transform-origin: top center;
+  animation: panel-body-enter 0.2s var(--ease) both;
+  will-change: opacity, transform;
 }
 
 /* --- transport ------------------------------------------------------------ */
@@ -1310,6 +1308,18 @@ svg {
   from {
     opacity: 0;
     transform: translateY(9px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes panel-body-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
   }
 
   to {
