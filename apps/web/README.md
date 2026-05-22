@@ -65,6 +65,8 @@ npm run build      # release Wasm + tsc + vite build  ->  apps/web/dist
 - The worklet scope has no dependable `fetch`, so the main thread fetches
   the raw `.wasm` bytes and transfers the `ArrayBuffer` into the worklet;
   `initSync` compiles + instantiates them there.
+- The processor renders into Wasm-owned buffers and copies cached memory views
+  to the output bus, avoiding per-quantum wasm-bindgen array marshaling.
 - Parameter changes flow main-thread → worklet over the `MessagePort`.
 - User-facing web labels are kept out of the audio/domain parameter metadata;
   localized labels, hints, presets, EEG band text, sequence names, and step

@@ -24,7 +24,8 @@ pub struct WasmEngine {
 #[wasm_bindgen]
 impl WasmEngine {
     /// Build an engine for `sample_rate` Hz, with scratch buffers sized for
-    /// blocks of up to `max_block` frames (an `AudioWorklet` quantum is 128).
+    /// blocks of up to `max_block` frames. Current `AudioWorklet` quanta are
+    /// usually 128 frames, but browsers may vary this block size.
     #[wasm_bindgen(constructor)]
     pub fn new(sample_rate: f32, max_block: usize) -> WasmEngine {
         WasmEngine {
@@ -37,6 +38,16 @@ impl WasmEngine {
     /// Alternative named constructor mirroring the blueprint's `init`.
     pub fn init(sample_rate: f32, max_block: usize) -> WasmEngine {
         WasmEngine::new(sample_rate, max_block)
+    }
+
+    /// Grow the internal render buffers if a browser supplies larger blocks.
+    /// This is only expected to run on rare block-size changes, not per render.
+    pub fn ensure_capacity(&mut self, max_block: usize) {
+        let max_block = max_block.max(1);
+        if self.buf_l.len() < max_block {
+            self.buf_l.resize(max_block, 0.0);
+            self.buf_r.resize(max_block, 0.0);
+        }
     }
 
     // --- Zero-copy rendering -------------------------------------------------

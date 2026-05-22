@@ -38,6 +38,14 @@ const snapTimerMinutes = (minutes: number) =>
     TIMER_MAX_MINUTES,
   );
 
+function createPlaybackAudioContext(): AudioContext {
+  try {
+    return new AudioContext({ latencyHint: 'playback' });
+  } catch {
+    return new AudioContext();
+  }
+}
+
 export interface SequenceStatus {
   active: boolean;
   activeId: SequenceId | null;
@@ -333,7 +341,7 @@ export function useMicroTube(): MicroTube {
     setStatus('loading');
     setError(null);
     try {
-      const ctx = new AudioContext();
+      const ctx = createPlaybackAudioContext();
       ctxRef.current = ctx;
 
       // 1. Resume inside the click gesture. A suspended context never pumps
@@ -387,22 +395,6 @@ export function useMicroTube(): MicroTube {
           // Connect only once the processor is fully initialised.
           node.connect(ctx.destination);
 
-          // Graph probe: tap the node through an analyser to confirm signal
-          // actually reaches the render graph (and hence the destination).
-          const analyser = ctx.createAnalyser();
-          node.connect(analyser);
-          const probe = new Float32Array(analyser.fftSize);
-          window.setTimeout(() => {
-            analyser.getFloatTimeDomainData(probe);
-            let peak = 0;
-            for (const v of probe) peak = Math.max(peak, Math.abs(v));
-            console.info(
-              `[microtube] graph probe — analyser peak: ${peak.toFixed(4)}, ` +
-                `ctx.state: ${ctx.state}`,
-            );
-            node.disconnect(analyser);
-          }, 1500);
-
           const now = performance.now();
           sessionStartRef.current = now;
           timerStartedAtRef.current =
@@ -410,13 +402,6 @@ export function useMicroTube(): MicroTube {
           syncTimerState(now);
           setUptimeSecs(0);
           setStatus('running');
-        } else if (msg?.type === 'diag') {
-          // Surfaced so a silent-output problem is immediately visible.
-          console.info(
-            `[microtube] worklet diag — output channels: ${msg.channels}, ` +
-              `frames: ${msg.frames}, engine peak: ${msg.enginePeak?.toFixed(4)}, ` +
-              `context: ${ctx.state}`,
-          );
         } else if (msg?.type === 'error') {
           settled = true;
           setError(msg.message ?? 'worklet error');

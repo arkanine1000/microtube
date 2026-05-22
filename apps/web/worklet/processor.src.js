@@ -6,20 +6,23 @@
 // `import` is the only shape that loads reliably across browsers — so
 // `WasmEngine` / `initSync` below resolve from the prepended glue's scope.
 
-// One audio quantum is always 128 frames.
-const QUANTUM = 128;
+// Current AudioWorklet quanta are usually 128 frames. Keep a larger initial
+// Wasm buffer so render stays allocation-free in normal playback, while still
+// allowing rare growth if a browser supplies larger blocks.
+const INITIAL_RENDER_FRAMES = 2048;
 
 class MicrotubeProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.engine = null;
     this.ready = false;
-    // Persistent render scratch — the engine always gets two valid 128-frame
-    // buffers, regardless of how many channels the output bus exposes.
-    this.scratchL = new Float32Array(QUANTUM);
-    this.scratchR = new Float32Array(QUANTUM);
-    this.calls = 0;
-    this.diagSent = false;
+    this.renderCapacity = INITIAL_RENDER_FRAMES;
+    this.memoryBuffer = null;
+    this.leftPtr = 0;
+    this.rightPtr = 0;
+    this.viewFrames = 0;
+    this.leftView = null;
+    this.rightView = null;
     this.port.onmessage = (event) => this.handleMessage(event.data);
     // Diagnostic heartbeat: tells the main thread the processor was built
     // and its port is live, even before the engine is initialised.
@@ -38,7 +41,9 @@ class MicrotubeProcessor extends AudioWorkletProcessor {
           } catch {
             initSync(msg.wasm);
           }
-          this.engine = new WasmEngine(sampleRate, QUANTUM);
+          this.engine = new WasmEngine(sampleRate, INITIAL_RENDER_FRAMES);
+          this.renderCapacity = INITIAL_RENDER_FRAMES;
+          this.invalidateViews();
           if (msg.params) this.applyAll(msg.params);
           this.ready = true;
           this.port.postMessage({ type: 'ready' });
@@ -56,6 +61,43 @@ class MicrotubeProcessor extends AudioWorkletProcessor {
       default:
         break;
     }
+  }
+
+  invalidateViews() {
+    this.memoryBuffer = null;
+    this.leftPtr = 0;
+    this.rightPtr = 0;
+    this.viewFrames = 0;
+    this.leftView = null;
+    this.rightView = null;
+  }
+
+  ensureCapacity(frames) {
+    if (frames <= this.renderCapacity) return;
+    this.engine.ensure_capacity(frames);
+    this.renderCapacity = frames;
+    this.invalidateViews();
+  }
+
+  renderViews(frames) {
+    const memoryBuffer = wasm.memory.buffer;
+    const leftPtr = this.engine.left_ptr();
+    const rightPtr = this.engine.right_ptr();
+    if (
+      this.leftView === null ||
+      this.memoryBuffer !== memoryBuffer ||
+      this.leftPtr !== leftPtr ||
+      this.rightPtr !== rightPtr ||
+      this.viewFrames !== frames
+    ) {
+      this.memoryBuffer = memoryBuffer;
+      this.leftPtr = leftPtr;
+      this.rightPtr = rightPtr;
+      this.viewFrames = frames;
+      this.leftView = new Float32Array(memoryBuffer, leftPtr, frames);
+      this.rightView = new Float32Array(memoryBuffer, rightPtr, frames);
+    }
+    return { left: this.leftView, right: this.rightView };
   }
 
   applyAll(params) {
@@ -90,29 +132,19 @@ class MicrotubeProcessor extends AudioWorkletProcessor {
       // Keep the node alive even before the engine is wired up.
       return true;
     }
-
-    // Render into our own buffers, then fan out to whatever channels the
-    // output bus actually has (channel 0 -> left, others -> right).
-    this.engine.process(this.scratchL, this.scratchR);
-    for (let ch = 0; ch < out.length; ch += 1) {
-      out[ch].set(ch === 0 ? this.scratchL : this.scratchR);
+    const frames = out[0]?.length ?? 0;
+    if (frames === 0) {
+      return true;
     }
 
-    // One-shot diagnostic once the engine has had time to ramp up.
-    this.calls += 1;
-    if (!this.diagSent && this.calls === 50) {
-      this.diagSent = true;
-      let peak = 0;
-      for (let i = 0; i < this.scratchL.length; i += 1) {
-        const a = Math.abs(this.scratchL[i]);
-        if (a > peak) peak = a;
-      }
-      this.port.postMessage({
-        type: 'diag',
-        channels: out.length,
-        frames: out[0].length,
-        enginePeak: peak,
-      });
+    // Render into Wasm-owned buffers, then fan out to whatever channels the
+    // output bus exposes (channel 0 -> left, others -> right). This avoids
+    // wasm-bindgen's per-quantum typed-array marshaling allocations.
+    this.ensureCapacity(frames);
+    this.engine.render(frames);
+    const views = this.renderViews(frames);
+    for (let ch = 0; ch < out.length; ch += 1) {
+      out[ch].set(ch === 0 ? views.left : views.right);
     }
     return true;
   }
