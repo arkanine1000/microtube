@@ -67,8 +67,8 @@ npm run build      # release Wasm + tsc + vite build  ->  apps/web/dist
   `initSync` compiles + instantiates them there.
 - Parameter changes flow main-thread → worklet over the `MessagePort`.
 - User-facing web labels are kept out of the audio/domain parameter metadata;
-  localized labels, hints, presets, EEG band text, and Journey step names come
-  from `src/i18n/copy.ts`.
+  localized labels, hints, presets, EEG band text, sequence names, and step
+  names come from `src/i18n/copy.ts`.
 - The service worker is registered only in production from `src/main.tsx`;
   local `npm run dev` sessions stay unregistered unless a browser still has an
   older worker from a previous production preview.

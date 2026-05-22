@@ -1,22 +1,28 @@
 import {
   Bookmark,
+  CloudFog,
+  Flame,
   Gauge,
   Headphones,
   Minus,
   Orbit,
   Plus,
-  Shapes,
+  RadioTower,
+  Sparkles,
+  Waves,
 } from 'lucide-react';
 import { useState } from 'react';
 import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
   EEG_BANDS,
-  SLIDER_GROUPS,
+  SLIDERS,
   VOLUME,
   eegBandIndex,
   type Direction,
   type MicroTubeState,
   type MistType,
+  type SliderKey,
+  type SliderSpec,
   type SpawnMode,
   type Timbre,
 } from './audio/params';
@@ -27,30 +33,18 @@ import {
   TIMER_STEP_MINUTES,
   useMicroTube,
 } from './audio/useMicroTube';
-import { JourneyPanel } from './components/JourneyPanel';
 import { LanguageSelector } from './components/LanguageSelector';
 import { LocalPresetsPanel } from './components/LocalPresetsPanel';
 import { Panel } from './components/Panel';
 import { ParameterSlider } from './components/ParameterSlider';
+import { SequencesPanel } from './components/SequencesPanel';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
 import { TopBar } from './components/TopBar';
 import { useLocale } from './i18n/LocaleProvider';
 import type { StudioTab } from './i18n/copy';
 
-const STUDIO_TABS: StudioTab[] = ['play', 'shape'];
-
-/**
- * Mode-style controls coupled to a gain parameter — touching one of these
- * while its function is silent should engage the function automatically, so
- * the user never has to hunt for an on/off switch on another tab.
- */
-const GAIN_FOR = {
-  mistType: 'noiseLevel',
-  spawnMode: 'emergence',
-  shepardDirection: 'shepard',
-  shepardBase: 'shepard',
-} as const;
+const STUDIO_TABS: StudioTab[] = ['main', 'sequences'];
 
 /** The level a coupled function jumps to when auto-engaged from silence. */
 const AUTO_ON_VALUE = {
@@ -58,6 +52,10 @@ const AUTO_ON_VALUE = {
   emergence: 0.45,
   shepard: 0.4,
 } as const;
+
+const SLIDER_BY_KEY = Object.fromEntries(
+  SLIDERS.map((spec) => [spec.key, spec]),
+) as Record<SliderKey, SliderSpec>;
 
 function formatClock(secs: number | null, offLabel: string): string {
   if (secs === null) return offLabel;
@@ -73,7 +71,7 @@ function formatClock(secs: number | null, offLabel: string): string {
 export default function App() {
   const mt = useMicroTube();
   const { copy } = useLocale();
-  const [activeTab, setActiveTab] = useState<StudioTab>('play');
+  const [activeTab, setActiveTab] = useState<StudioTab>('main');
   const [localPresets, setLocalPresets] = useState(loadLocalPresets);
 
   if (mt.status !== 'running') {
@@ -120,21 +118,29 @@ export default function App() {
     : formatClock(mt.timer.remainingSecs, copy.timer.off);
   const accent = EEG_BANDS[eegBandIndex(state.beatFreq)].color;
 
-  /**
-   * Set a parameter, then engage its coupled function if it was silent —
-   * e.g. picking a mist colour turns the mist layer on by itself.
-   */
   const setParam = <K extends keyof MicroTubeState>(
     key: K,
     value: MicroTubeState[K],
   ) => {
     mt.setParam(key, value);
-    const gainKey = GAIN_FOR[key as keyof typeof GAIN_FOR] as
-      | keyof typeof AUTO_ON_VALUE
-      | undefined;
-    if (gainKey && state[gainKey] === 0) {
+  };
+
+  const setFeatureOption = <
+    OptionKey extends 'mistType' | 'spawnMode' | 'shepardDirection',
+    GainKey extends keyof typeof AUTO_ON_VALUE,
+  >(
+    optionKey: OptionKey,
+    optionValue: MicroTubeState[OptionKey],
+    gainKey: GainKey,
+  ) => {
+    mt.setParam(optionKey, optionValue);
+    if (state[gainKey] === 0) {
       mt.setParam(gainKey, AUTO_ON_VALUE[gainKey]);
     }
+  };
+
+  const disableFeature = (gainKey: keyof typeof AUTO_ON_VALUE) => {
+    mt.setParam(gainKey, 0);
   };
 
   const applyPreset = (preset: Preset) => {
@@ -176,8 +182,22 @@ export default function App() {
         </nav>
 
         <main className="studio-stage">
-          {activeTab === 'play' && (
-            <div className="tab-panel play-tab">
+          {activeTab === 'main' && (
+            <div className="tab-panel main-tab">
+              <Panel
+                id="local-presets"
+                icon={Bookmark}
+                title={copy.panels.presets}
+                className="presets-panel"
+                defaultOpen={localPresets.length > 0}
+              >
+                <LocalPresetsPanel
+                  mt={mt}
+                  presets={localPresets}
+                  onPresetsChange={setLocalPresets}
+                />
+              </Panel>
+
               <Panel
                 id="transport"
                 icon={Gauge}
@@ -258,39 +278,112 @@ export default function App() {
               </Panel>
 
               <Panel
-                id="local-presets"
-                icon={Bookmark}
-                title={copy.panels.presets}
-                className="presets-panel"
+                id="carrier"
+                icon={RadioTower}
+                title={copy.panels.carrier}
+                className="slider-group carrier-panel"
               >
-                <LocalPresetsPanel
-                  mt={mt}
-                  presets={localPresets}
-                  onPresetsChange={setLocalPresets}
-                />
+                <div className="slider-stack">
+                  <ParameterSlider
+                    spec={SLIDER_BY_KEY.baseFreq}
+                    value={state.baseFreq}
+                    onChange={(v) => setParam('baseFreq', v)}
+                  />
+                  <ParameterSlider
+                    spec={SLIDER_BY_KEY.beatFreq}
+                    value={state.beatFreq}
+                    onChange={(v) => setParam('beatFreq', v)}
+                  />
+                </div>
               </Panel>
 
               <Panel
-                id="modes"
-                icon={Shapes}
-                title={copy.panels.modes}
-                className="modes-panel"
+                id="tone"
+                icon={Flame}
+                title={copy.panels.tone}
+                className="tone-panel"
               >
                 <Segmented
                   caption={copy.modes.captions.timbre}
                   options={copy.modes.timbres}
                   value={state.timbre}
-                  statusLabels={copy.modes.status}
                   onChange={(v) => setParam('timbre', v as Timbre)}
                 />
+                <ParameterSlider
+                  spec={SLIDER_BY_KEY.harmonics}
+                  value={state.harmonics}
+                  onChange={(v) => setParam('harmonics', v)}
+                />
+              </Panel>
+
+              <Panel
+                id="mist"
+                icon={CloudFog}
+                title={copy.panels.mist}
+                className={`feature-panel mist-panel${
+                  state.noiseLevel > 0 ? '' : ' off'
+                }`}
+              >
                 <Segmented
                   caption={copy.modes.captions.mist}
                   options={copy.modes.mists}
                   value={state.mistType}
                   enabled={state.noiseLevel > 0}
                   statusLabels={copy.modes.status}
-                  onChange={(v) => setParam('mistType', v as MistType)}
+                  onChange={(v) =>
+                    setFeatureOption('mistType', v as MistType, 'noiseLevel')
+                  }
+                  onDisable={() => disableFeature('noiseLevel')}
                 />
+                {state.noiseLevel > 0 && (
+                  <div className="feature-controls">
+                    <ParameterSlider
+                      spec={SLIDER_BY_KEY.noiseLevel}
+                      value={state.noiseLevel}
+                      onChange={(v) => setParam('noiseLevel', v)}
+                    />
+                  </div>
+                )}
+              </Panel>
+
+              <Panel
+                id="emergence"
+                icon={Sparkles}
+                title={copy.panels.emergence}
+                className={`feature-panel emergence-panel${
+                  state.emergence > 0 ? '' : ' off'
+                }`}
+              >
+                <Segmented
+                  caption={copy.modes.captions.spawn}
+                  options={copy.modes.spawnModes}
+                  value={state.spawnMode}
+                  enabled={state.emergence > 0}
+                  statusLabels={copy.modes.status}
+                  onChange={(v) =>
+                    setFeatureOption('spawnMode', v as SpawnMode, 'emergence')
+                  }
+                  onDisable={() => disableFeature('emergence')}
+                />
+                {state.emergence > 0 && (
+                  <div className="feature-controls">
+                    <ParameterSlider
+                      spec={SLIDER_BY_KEY.emergence}
+                      value={state.emergence}
+                      onChange={(v) => setParam('emergence', v)}
+                    />
+                  </div>
+                )}
+              </Panel>
+
+              <Panel
+                id="drift"
+                icon={Waves}
+                title={copy.panels.drift}
+                className={`feature-panel drift-panel${
+                  state.shepard > 0 ? '' : ' off'
+                }`}
+              >
                 <Segmented
                   caption={copy.modes.captions.direction}
                   options={copy.modes.directions}
@@ -298,53 +391,43 @@ export default function App() {
                   enabled={state.shepard > 0}
                   statusLabels={copy.modes.status}
                   onChange={(v) =>
-                    setParam('shepardDirection', v as Direction)
+                    setFeatureOption(
+                      'shepardDirection',
+                      v as Direction,
+                      'shepard',
+                    )
                   }
+                  onDisable={() => disableFeature('shepard')}
                 />
-                <Segmented
-                  caption={copy.modes.captions.spawn}
-                  options={copy.modes.spawnModes}
-                  value={state.spawnMode}
-                  enabled={state.emergence > 0}
-                  statusLabels={copy.modes.status}
-                  onChange={(v) => setParam('spawnMode', v as SpawnMode)}
-                />
-              </Panel>
-
-              <Panel
-                id="journey"
-                icon={Orbit}
-                title={copy.panels.journey}
-                className="journey-panel"
-              >
-                <JourneyPanel mt={mt} />
+                {state.shepard > 0 && (
+                  <div className="feature-controls drift-controls">
+                    <ParameterSlider
+                      spec={SLIDER_BY_KEY.shepardBase}
+                      value={state.shepardBase}
+                      onChange={(v) => setParam('shepardBase', v)}
+                    />
+                    <ParameterSlider
+                      spec={SLIDER_BY_KEY.shepard}
+                      value={state.shepard}
+                      onChange={(v) => setParam('shepard', v)}
+                    />
+                  </div>
+                )}
               </Panel>
             </div>
           )}
 
-          {activeTab === 'shape' && (
-            <div className="tab-panel shape-tab">
-              {SLIDER_GROUPS.map((group) => (
-                <Panel
-                  key={group.id}
-                  id={`slider-${group.id}`}
-                  icon={group.icon}
-                  title={copy.sliderGroups[group.id].label}
-                  caption={copy.sliderGroups[group.id].caption}
-                  className="slider-group"
-                >
-                  <div className="slider-stack">
-                    {group.sliders.map((spec) => (
-                      <ParameterSlider
-                        key={spec.key}
-                        spec={spec}
-                        value={state[spec.key]}
-                        onChange={(v) => setParam(spec.key, v)}
-                      />
-                    ))}
-                  </div>
-                </Panel>
-              ))}
+          {activeTab === 'sequences' && (
+            <div className="tab-panel sequences-tab">
+              <Panel
+                id="sequences"
+                icon={Orbit}
+                title={copy.tabs.sequences.label}
+                className="sequences-shell-panel"
+                defaultOpen
+              >
+                <SequencesPanel mt={mt} />
+              </Panel>
             </div>
           )}
         </main>

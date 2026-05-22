@@ -1,5 +1,5 @@
 import { Save, Trash2 } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   normalizePresetName,
   nextPresetName,
@@ -24,6 +24,8 @@ type DialogState =
   | { type: 'save' }
   | { type: 'delete'; preset: LocalPreset };
 
+const PAGE_SIZE = 3;
+
 export function LocalPresetsPanel({
   mt,
   presets,
@@ -37,12 +39,20 @@ export function LocalPresetsPanel({
   const [dialog, setDialog] = useState<DialogState>({ type: 'closed' });
   const [presetName, setPresetName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const accent = EEG_BANDS[eegBandIndex(mt.state.beatFreq)].color;
 
   const sortedPresets = useMemo(
     () => [...presets].sort((a, b) => b.updatedAt - a.updatedAt),
     [presets],
   );
+  const visiblePresets = sortedPresets.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount((count) =>
+      Math.min(Math.max(count, PAGE_SIZE), Math.max(sortedPresets.length, PAGE_SIZE)),
+    );
+  }, [sortedPresets.length]);
 
   const closeDialog = () => {
     setDialog({ type: 'closed' });
@@ -103,7 +113,7 @@ export function LocalPresetsPanel({
         <p className="local-preset-empty">{copy.localPresets.empty}</p>
       ) : (
         <div className="local-preset-list" role="list">
-          {sortedPresets.map((preset) => (
+          {visiblePresets.map((preset) => (
             <div className="local-preset-row" role="listitem" key={preset.id}>
               <button
                 className="local-preset-load"
@@ -130,6 +140,15 @@ export function LocalPresetsPanel({
               </button>
             </div>
           ))}
+          {visibleCount < sortedPresets.length && (
+            <button
+              className="btn local-preset-more"
+              type="button"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            >
+              {copy.localPresets.showMore}
+            </button>
+          )}
         </div>
       )}
 

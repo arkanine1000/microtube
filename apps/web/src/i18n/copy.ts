@@ -1,9 +1,10 @@
 import type { EegBandId, SliderGroupId, SliderKey } from '../audio/params';
+import type { SequenceId } from '../audio/sequences';
 
 export const LOCALES = ['en', 'hr'] as const;
 
 export type Locale = (typeof LOCALES)[number];
-export type StudioTab = 'play' | 'shape';
+export type StudioTab = 'main' | 'sequences';
 
 export interface LanguageOption {
   locale: Locale;
@@ -21,22 +22,6 @@ type PresetTuple = readonly [
   PresetText,
   PresetText,
 ];
-type JourneyStepTuple = readonly [
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-];
-
 interface LabelCaption {
   label: string;
   caption: string;
@@ -57,6 +42,12 @@ interface BandText {
 interface PresetText {
   name: string;
   description: string;
+}
+
+interface SequenceText {
+  name: string;
+  description: string;
+  steps: readonly string[];
 }
 
 export interface Copy {
@@ -95,8 +86,11 @@ export interface Copy {
   panels: {
     transport: string;
     presets: string;
-    modes: string;
-    journey: string;
+    carrier: string;
+    tone: string;
+    mist: string;
+    emergence: string;
+    drift: string;
   };
   localPresets: {
     saveCurrent: string;
@@ -119,6 +113,7 @@ export interface Copy {
     baseLabel: string;
     mistLabel: string;
     driftLabel: string;
+    showMore: string;
   };
   modes: {
     captions: {
@@ -140,13 +135,14 @@ export interface Copy {
   sliderGroups: Record<SliderGroupId, LabelCaption>;
   bands: Record<EegBandId, BandText>;
   presets: PresetTuple;
-  journey: {
-    copy: string;
+  sequences: {
+    intro: string;
     idle: string;
+    running: string;
     stepPrefix: string;
-    begin: string;
+    start: string;
     stop: string;
-    steps: JourneyStepTuple;
+    cards: Record<SequenceId, SequenceText>;
   };
   footer: {
     engine: string;
@@ -183,8 +179,8 @@ export const COPY: Record<Locale, Copy> = {
       backToStart: 'return to start screen',
     },
     tabs: {
-      play: { label: 'Play', caption: 'basic' },
-      shape: { label: 'Shape', caption: 'advanced' },
+      main: { label: 'Main', caption: 'controls' },
+      sequences: { label: 'Sequences', caption: 'timed' },
     },
     studioSectionsLabel: 'Studio sections',
     timer: {
@@ -199,8 +195,11 @@ export const COPY: Record<Locale, Copy> = {
     panels: {
       transport: 'Transport',
       presets: 'Presets',
-      modes: 'Modes',
-      journey: 'Journey Through the Cosmos',
+      carrier: 'Carrier',
+      tone: 'Tone',
+      mist: 'Mist',
+      emergence: 'Emergence',
+      drift: 'Drift',
     },
     localPresets: {
       saveCurrent: 'Save current sound',
@@ -223,6 +222,7 @@ export const COPY: Record<Locale, Copy> = {
       baseLabel: 'base',
       mistLabel: 'mist',
       driftLabel: 'drift',
+      showMore: 'Show more',
     },
     modes: {
       captions: {
@@ -324,28 +324,60 @@ export const COPY: Record<Locale, Copy> = {
         description: 'Gamma 40 Hz - peak performance, insight',
       },
     ],
-    journey: {
-      copy:
-        'A guided descent and return. Every parameter automated, interpolating between thirteen named worlds. Hand the controls to the sequence and listen.',
-      idle: 'Idle - press begin to set off',
+    sequences: {
+      intro:
+        'Timed programs automate the binaural pair, with Journey also shaping tone, mist, emergence, and drift.',
+      idle: 'Ready',
+      running: 'Running',
       stepPrefix: 'Step',
-      begin: 'Begin journey',
-      stop: 'Stop journey',
-      steps: [
-        'Microtubule',
-        'Synapse',
-        'Neural Awareness',
-        'Body',
-        'Earth · Schumann',
-        'Lunar Tide',
-        'Solar Wind',
-        'Stellar Bells',
-        'Galactic',
-        'Cosmic Web',
-        'Background Radiation',
-        'Singularity',
-        'Strange Loop',
-      ],
+      start: 'Start',
+      stop: 'Stop',
+      cards: {
+        'deep-focus': {
+          name: 'Deep Focus',
+          description: '25 min: Beta -> Alpha -> Theta',
+          steps: ['Beta focus', 'Alpha settle', 'Theta landing'],
+        },
+        'wake-up': {
+          name: 'Wake Up',
+          description: '10 min: Delta -> Theta -> Alpha -> Beta',
+          steps: ['Delta', 'Theta', 'Alpha', 'Beta'],
+        },
+        'power-nap': {
+          name: 'Power Nap',
+          description: '20 min: Alpha -> Theta -> Alpha -> Beta',
+          steps: ['Alpha descent', 'Theta nap', 'Alpha return', 'Beta lift'],
+        },
+        'deep-meditation': {
+          name: 'Deep Meditation',
+          description: '30 min: Alpha -> Theta -> Deep -> Alpha',
+          steps: ['Alpha gate', 'Theta field', 'Deep theta', 'Alpha return'],
+        },
+        'orch-or': {
+          name: 'Orch-OR',
+          description: '25 min: Gamma -> Schumann -> Gamma -> Theta',
+          steps: ['Gamma', 'Schumann', 'Gamma return', 'Theta'],
+        },
+        'journey-through-cosmos': {
+          name: 'Journey Through the Cosmos',
+          description: '25 min: Microtubule -> Cosmos -> Strange Loop',
+          steps: [
+            'Microtubule',
+            'Synapse',
+            'Neural Awareness',
+            'Body',
+            'Earth · Schumann',
+            'Lunar Tide',
+            'Solar Wind',
+            'Stellar Bells',
+            'Galactic',
+            'Cosmic Web',
+            'Background Radiation',
+            'Singularity',
+            'Strange Loop',
+          ],
+        },
+      },
     },
     footer: {
       engine: 'engine',
@@ -375,8 +407,8 @@ export const COPY: Record<Locale, Copy> = {
       backToStart: 'povratak na početni zaslon',
     },
     tabs: {
-      play: { label: 'Slušaj', caption: 'osnovno' },
-      shape: { label: 'Oblikuj', caption: 'napredno' },
+      main: { label: 'Glavno', caption: 'kontrole' },
+      sequences: { label: 'Sekvence', caption: 'vremenski' },
     },
     studioSectionsLabel: 'Dijelovi studija',
     timer: {
@@ -391,8 +423,11 @@ export const COPY: Record<Locale, Copy> = {
     panels: {
       transport: 'Kontrole',
       presets: 'Preseti',
-      modes: 'Načini',
-      journey: 'Putovanje kroz svemir',
+      carrier: 'Nositelj',
+      tone: 'Ton',
+      mist: 'Maglica',
+      emergence: 'Emergencija',
+      drift: 'Klizanje',
     },
     localPresets: {
       saveCurrent: 'Spremi trenutni zvuk',
@@ -415,6 +450,7 @@ export const COPY: Record<Locale, Copy> = {
       baseLabel: 'baza',
       mistLabel: 'maglica',
       driftLabel: 'klizanje',
+      showMore: 'Prikaži još',
     },
     modes: {
       captions: {
@@ -516,28 +552,60 @@ export const COPY: Record<Locale, Copy> = {
         description: 'Gamma 40 Hz - vrhunska izvedba, uvid',
       },
     ],
-    journey: {
-      copy:
-        'Vođeni silazak i povratak. Svaki parametar je automatiziran i prelazi između trinaest imenovanih svjetova. Prepusti kontrole sekvenci i slušaj.',
-      idle: 'Miruje - pritisni početak za polazak',
+    sequences: {
+      intro:
+        'Vremenski programi automatiziraju binauralni par, a Putovanje oblikuje i ton, maglicu, emergenciju i klizanje.',
+      idle: 'Spremno',
+      running: 'U tijeku',
       stepPrefix: 'Korak',
-      begin: 'Počni putovanje',
-      stop: 'Zaustavi putovanje',
-      steps: [
-        'Mikrotubul',
-        'Sinapsa',
-        'Neuralna svjesnost',
-        'Tijelo',
-        'Zemlja · Schumann',
-        'Mjesečeva plima',
-        'Sunčev vjetar',
-        'Zvjezdana zvona',
-        'Galaktika',
-        'Kozmička mreža',
-        'Pozadinsko zračenje',
-        'Singularnost',
-        'Čudna petlja',
-      ],
+      start: 'Pokreni',
+      stop: 'Zaustavi',
+      cards: {
+        'deep-focus': {
+          name: 'Duboki fokus',
+          description: '25 min: Beta -> Alpha -> Theta',
+          steps: ['Beta fokus', 'Alpha smirenje', 'Theta spuštanje'],
+        },
+        'wake-up': {
+          name: 'Buđenje',
+          description: '10 min: Delta -> Theta -> Alpha -> Beta',
+          steps: ['Delta', 'Theta', 'Alpha', 'Beta'],
+        },
+        'power-nap': {
+          name: 'Kratki san',
+          description: '20 min: Alpha -> Theta -> Alpha -> Beta',
+          steps: ['Alpha spuštanje', 'Theta san', 'Alpha povratak', 'Beta dizanje'],
+        },
+        'deep-meditation': {
+          name: 'Duboka meditacija',
+          description: '30 min: Alpha -> Theta -> Duboko -> Alpha',
+          steps: ['Alpha ulaz', 'Theta polje', 'Duboka theta', 'Alpha povratak'],
+        },
+        'orch-or': {
+          name: 'Orch-OR',
+          description: '25 min: Gamma -> Schumann -> Gamma -> Theta',
+          steps: ['Gamma', 'Schumann', 'Gamma povratak', 'Theta'],
+        },
+        'journey-through-cosmos': {
+          name: 'Putovanje kroz svemir',
+          description: '25 min: Mikrotubul -> svemir -> čudna petlja',
+          steps: [
+            'Mikrotubul',
+            'Sinapsa',
+            'Neuralna svjesnost',
+            'Tijelo',
+            'Zemlja · Schumann',
+            'Mjesečeva plima',
+            'Sunčev vjetar',
+            'Zvjezdana zvona',
+            'Galaktika',
+            'Kozmička mreža',
+            'Pozadinsko zračenje',
+            'Singularnost',
+            'Čudna petlja',
+          ],
+        },
+      },
     },
     footer: {
       engine: 'pogon',

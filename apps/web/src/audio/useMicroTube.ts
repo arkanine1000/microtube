@@ -1,7 +1,7 @@
 // useMicroTube — the Web Audio orchestration hook.
 //
 // Owns the AudioContext, boots the Wasm-in-worklet pipeline, mirrors engine
-// state for the UI, and drives the Journey sequence executor. Components
+// state for the UI, and drives the sequence executor. Components
 // only ever read `state` and call the returned actions.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,7 +11,13 @@ import {
   type MicroTubeState,
   type PresetSnapshot,
 } from './params';
-import { JOURNEY_TOTAL_SECS, sampleJourney } from './sequences';
+import {
+  DEFAULT_SEQUENCE_ID,
+  getSequence,
+  sampleSequence,
+  type MicroTubeSequence,
+  type SequenceId,
+} from './sequences';
 
 export type EngineStatus = 'idle' | 'loading' | 'running' | 'error';
 
@@ -32,8 +38,9 @@ const snapTimerMinutes = (minutes: number) =>
     TIMER_MAX_MINUTES,
   );
 
-export interface JourneyStatus {
+export interface SequenceStatus {
   active: boolean;
+  activeId: SequenceId | null;
   stepIndex: number;
   elapsed: number;
   total: number;
@@ -51,7 +58,7 @@ export interface MicroTube {
   error: string | null;
   state: MicroTubeState;
   uptimeSecs: number;
-  journey: JourneyStatus;
+  sequence: SequenceStatus;
   timer: TimerStatus;
   start: () => Promise<void>;
   setParam: <K extends keyof MicroTubeState>(key: K, value: MicroTubeState[K]) => void;
@@ -60,10 +67,56 @@ export interface MicroTube {
   setTimerEnabled: (enabled: boolean) => void;
   setTimerMinutes: (minutes: number) => void;
   applySnapshot: (snapshot: PresetSnapshot) => void;
-  startJourney: () => void;
-  stopJourney: () => void;
+  startSequence: (id: SequenceId) => void;
+  stopSequence: () => void;
   returnToStart: () => Promise<void>;
 }
+
+const DEFAULT_SEQUENCE = getSequence(DEFAULT_SEQUENCE_ID);
+
+const sequenceDefaults = (
+  sequence: MicroTubeSequence,
+): Partial<MicroTubeState> => {
+  if (sequence.id === DEFAULT_SEQUENCE_ID) {
+    const defaults: Partial<MicroTubeState> = { ...DEFAULT_STATE };
+    delete defaults.playing;
+    return defaults;
+  }
+
+  const defaults: Partial<MicroTubeState> = {
+    beatFreq: DEFAULT_STATE.beatFreq,
+    baseFreq: DEFAULT_STATE.baseFreq,
+  };
+  if (sequence.steps.some((step) => step.volume !== undefined)) {
+    defaults.volume = DEFAULT_STATE.volume;
+  }
+  if (sequence.steps.some((step) => step.noiseLevel !== undefined)) {
+    defaults.noiseLevel = DEFAULT_STATE.noiseLevel;
+  }
+  if (sequence.steps.some((step) => step.harmonics !== undefined)) {
+    defaults.harmonics = DEFAULT_STATE.harmonics;
+  }
+  if (sequence.steps.some((step) => step.emergence !== undefined)) {
+    defaults.emergence = DEFAULT_STATE.emergence;
+  }
+  if (sequence.steps.some((step) => step.shepard !== undefined)) {
+    defaults.shepard = DEFAULT_STATE.shepard;
+  }
+  if (sequence.steps.some((step) => step.timbre !== undefined)) {
+    defaults.timbre = DEFAULT_STATE.timbre;
+  }
+  if (sequence.steps.some((step) => step.mistType !== undefined)) {
+    defaults.mistType = DEFAULT_STATE.mistType;
+  }
+  if (sequence.steps.some((step) => step.shepardDirection !== undefined)) {
+    defaults.shepardDirection = DEFAULT_STATE.shepardDirection;
+  }
+  if (sequence.steps.some((step) => step.spawnMode !== undefined)) {
+    defaults.spawnMode = DEFAULT_STATE.spawnMode;
+  }
+
+  return defaults;
+};
 
 export function useMicroTube(): MicroTube {
   const [status, setStatus] = useState<EngineStatus>('idle');
@@ -76,20 +129,22 @@ export function useMicroTube(): MicroTube {
     remainingSecs: TIMER_DEFAULT_MINUTES * 60,
     fired: false,
   });
-  const [journey, setJourney] = useState<JourneyStatus>({
+  const [sequence, setSequence] = useState<SequenceStatus>({
     active: false,
+    activeId: null,
     stepIndex: 0,
     elapsed: 0,
-    total: JOURNEY_TOTAL_SECS,
+    total: DEFAULT_SEQUENCE.totalSecs,
   });
 
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const stateRef = useRef<MicroTubeState>(DEFAULT_STATE);
   const sessionStartRef = useRef<number>(0);
-  const journeyElapsedRef = useRef<number>(0);
-  const journeyLastTickRef = useRef<number | null>(null);
-  const journeyActiveRef = useRef<boolean>(false);
+  const sequenceElapsedRef = useRef<number>(0);
+  const sequenceLastTickRef = useRef<number | null>(null);
+  const sequenceActiveRef = useRef<boolean>(false);
+  const activeSequenceRef = useRef<MicroTubeSequence | null>(null);
   const timerEnabledRef = useRef<boolean>(true);
   const timerMinutesRef = useRef<number>(TIMER_DEFAULT_MINUTES);
   const timerStartedAtRef = useRef<number | null>(null);
@@ -97,15 +152,15 @@ export function useMicroTube(): MicroTube {
   const timerFiredRef = useRef<boolean>(false);
   const shuttingDownRef = useRef<boolean>(false);
 
-  const pauseJourneyClock = useCallback((now: number) => {
-    if (!journeyActiveRef.current || journeyLastTickRef.current === null) return;
-    journeyElapsedRef.current += (now - journeyLastTickRef.current) / 1000;
-    journeyLastTickRef.current = null;
+  const pauseSequenceClock = useCallback((now: number) => {
+    if (!sequenceActiveRef.current || sequenceLastTickRef.current === null) return;
+    sequenceElapsedRef.current += (now - sequenceLastTickRef.current) / 1000;
+    sequenceLastTickRef.current = null;
   }, []);
 
-  const resumeJourneyClock = useCallback((now: number) => {
-    if (journeyActiveRef.current) {
-      journeyLastTickRef.current = now;
+  const resumeSequenceClock = useCallback((now: number) => {
+    if (sequenceActiveRef.current) {
+      sequenceLastTickRef.current = now;
     }
   }, []);
 
@@ -196,19 +251,19 @@ export function useMicroTube(): MicroTube {
           }
           timerStartedAtRef.current = now;
         }
-        resumeJourneyClock(now);
+        resumeSequenceClock(now);
       } else {
         if (timerStartedAtRef.current !== null) {
           timerElapsedBeforePauseRef.current += now - timerStartedAtRef.current;
           timerStartedAtRef.current = null;
         }
-        pauseJourneyClock(now);
+        pauseSequenceClock(now);
       }
 
       commitParam('playing', playing);
       syncTimerState(now);
     },
-    [commitParam, pauseJourneyClock, resumeJourneyClock, syncTimerState],
+    [commitParam, pauseSequenceClock, resumeSequenceClock, syncTimerState],
   );
 
   const setParam = useCallback(
@@ -247,26 +302,28 @@ export function useMicroTube(): MicroTube {
     [syncTimerState],
   );
 
-  const cancelJourney = useCallback(() => {
-    journeyActiveRef.current = false;
-    journeyLastTickRef.current = null;
-    journeyElapsedRef.current = 0;
-    setJourney({
+  const cancelSequence = useCallback(() => {
+    sequenceActiveRef.current = false;
+    sequenceLastTickRef.current = null;
+    sequenceElapsedRef.current = 0;
+    activeSequenceRef.current = null;
+    setSequence({
       active: false,
+      activeId: null,
       stepIndex: 0,
       elapsed: 0,
-      total: JOURNEY_TOTAL_SECS,
+      total: DEFAULT_SEQUENCE.totalSecs,
     });
   }, []);
 
   const applySnapshot = useCallback(
     (snapshot: PresetSnapshot) => {
-      cancelJourney();
+      cancelSequence();
       stateRef.current = { ...stateRef.current, ...snapshot };
       setState(stateRef.current);
       post({ type: 'params', value: snapshot });
     },
-    [cancelJourney, post],
+    [cancelSequence, post],
   );
 
   // --- boot pipeline -------------------------------------------------------
@@ -413,7 +470,7 @@ export function useMicroTube(): MicroTube {
         timerElapsedBeforePauseRef.current = timerDurationMs();
         timerStartedAtRef.current = null;
         timerFiredRef.current = true;
-        pauseJourneyClock(now);
+        pauseSequenceClock(now);
         stateRef.current = { ...stateRef.current, playing: false };
         setState(stateRef.current);
         pushParam('playing', false);
@@ -422,7 +479,7 @@ export function useMicroTube(): MicroTube {
     }, 1000);
     return () => window.clearInterval(id);
   }, [
-    pauseJourneyClock,
+    pauseSequenceClock,
     pushParam,
     status,
     syncTimerState,
@@ -430,49 +487,52 @@ export function useMicroTube(): MicroTube {
     timerElapsedMs,
   ]);
 
-  // --- Journey sequence executor ------------------------------------------
+  // --- sequence executor ---------------------------------------------------
 
-  const startJourney = useCallback(() => {
+  const startSequence = useCallback((id: SequenceId) => {
     if (status !== 'running') return;
     const now = performance.now();
-    const sample = sampleJourney(0);
-    journeyElapsedRef.current = 0;
-    journeyLastTickRef.current = stateRef.current.playing ? now : null;
-    journeyActiveRef.current = true;
+    const selected = getSequence(id);
+    const sample = sampleSequence(selected, 0);
+    sequenceElapsedRef.current = 0;
+    sequenceLastTickRef.current = stateRef.current.playing ? now : null;
+    sequenceActiveRef.current = true;
+    activeSequenceRef.current = selected;
     if (stateRef.current.playing) {
       stateRef.current = { ...stateRef.current, ...sample.state };
       setState(stateRef.current);
       post({ type: 'params', value: sample.state });
     }
-    setJourney((j) => ({
-      ...j,
+    setSequence({
       active: true,
+      activeId: selected.id,
       elapsed: 0,
       stepIndex: sample.stepIndex,
-    }));
+      total: selected.totalSecs,
+    });
   }, [post, status]);
 
-  const stopJourney = useCallback(() => {
-    cancelJourney();
+  const stopSequence = useCallback(() => {
+    const selected = activeSequenceRef.current;
+    cancelSequence();
 
-    // The journey sweeps every parameter — leaving it mid-sweep would strand
-    // the user in an arbitrary state, so revert the engine to its defaults.
-    const defaults: Partial<MicroTubeState> = { ...DEFAULT_STATE };
-    delete defaults.playing;
+    if (!selected) return;
+    const defaults = sequenceDefaults(selected);
     stateRef.current = { ...stateRef.current, ...defaults };
     setState(stateRef.current);
     post({ type: 'params', value: defaults });
 
-  }, [cancelJourney, post]);
+  }, [cancelSequence, post]);
 
   const returnToStart = useCallback(async () => {
     if (status !== 'running' || shuttingDownRef.current) return;
     shuttingDownRef.current = true;
     setStatus('idle');
 
-    journeyActiveRef.current = false;
-    journeyLastTickRef.current = null;
-    journeyElapsedRef.current = 0;
+    sequenceActiveRef.current = false;
+    sequenceLastTickRef.current = null;
+    sequenceElapsedRef.current = 0;
+    activeSequenceRef.current = null;
 
     timerEnabledRef.current = true;
     timerMinutesRef.current = TIMER_DEFAULT_MINUTES;
@@ -490,11 +550,12 @@ export function useMicroTube(): MicroTube {
       remainingSecs: TIMER_DEFAULT_MINUTES * 60,
       fired: false,
     });
-    setJourney({
+    setSequence({
       active: false,
+      activeId: null,
       stepIndex: 0,
       elapsed: 0,
-      total: JOURNEY_TOTAL_SECS,
+      total: DEFAULT_SEQUENCE.totalSecs,
     });
 
     const node = nodeRef.current;
@@ -518,41 +579,44 @@ export function useMicroTube(): MicroTube {
   }, [status]);
 
   useEffect(() => {
-    if (!journey.active) return;
+    if (!sequence.active) return;
     // A 250 ms tick is well inside the engine's 50 ms smoothing window, so
     // lerped parameters move continuously without audible stair-stepping.
     const id = window.setInterval(() => {
-      if (!journeyActiveRef.current) return;
+      if (!sequenceActiveRef.current) return;
+      const selected = activeSequenceRef.current;
+      if (!selected) return;
       const now = performance.now();
       if (!stateRef.current.playing) {
-        journeyLastTickRef.current = null;
+        sequenceLastTickRef.current = null;
         return;
       }
-      if (journeyLastTickRef.current === null) {
-        journeyLastTickRef.current = now;
+      if (sequenceLastTickRef.current === null) {
+        sequenceLastTickRef.current = now;
       }
-      journeyElapsedRef.current += (now - journeyLastTickRef.current) / 1000;
-      journeyLastTickRef.current = now;
-      const elapsed = journeyElapsedRef.current;
-      const sample = sampleJourney(elapsed);
+      sequenceElapsedRef.current += (now - sequenceLastTickRef.current) / 1000;
+      sequenceLastTickRef.current = now;
+      const elapsed = sequenceElapsedRef.current;
+      const sample = sampleSequence(selected, elapsed);
 
       stateRef.current = { ...stateRef.current, ...sample.state };
       setState(stateRef.current);
       post({ type: 'params', value: sample.state });
 
-      setJourney((j) => ({
-        ...j,
-        elapsed: Math.min(elapsed, JOURNEY_TOTAL_SECS),
+      setSequence((current) => ({
+        ...current,
+        elapsed: Math.min(elapsed, selected.totalSecs),
         stepIndex: sample.stepIndex,
       }));
 
       if (sample.done) {
-        journeyActiveRef.current = false;
-        setJourney((j) => ({ ...j, active: false }));
+        sequenceActiveRef.current = false;
+        activeSequenceRef.current = null;
+        setSequence((current) => ({ ...current, active: false }));
       }
     }, 250);
     return () => window.clearInterval(id);
-  }, [journey.active, post]);
+  }, [sequence.active, post]);
 
   // --- teardown ------------------------------------------------------------
 
@@ -568,7 +632,7 @@ export function useMicroTube(): MicroTube {
     error,
     state,
     uptimeSecs,
-    journey,
+    sequence,
     timer,
     start,
     setParam,
@@ -577,8 +641,8 @@ export function useMicroTube(): MicroTube {
     setTimerEnabled,
     setTimerMinutes,
     applySnapshot,
-    startJourney,
-    stopJourney,
+    startSequence,
+    stopSequence,
     returnToStart,
   };
 }

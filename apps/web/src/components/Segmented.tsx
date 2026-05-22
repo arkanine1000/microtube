@@ -2,9 +2,9 @@
  * A segmented control. Option index is the value — which lines up with the
  * Wasm enum discriminants (Timbre, MistType, SpawnMode, Direction).
  *
- * When `enabled` is supplied the control belongs to a coupled function (mist,
- * drift, emergence): the caption carries a live on/off pip, and picking any
- * option auto-engages the function via the parent's coupling logic.
+ * When `enabled` is supplied, the option buttons are also the on/off surface:
+ * pressing an inactive option engages the feature, and pressing the active
+ * option again can disable it through `onDisable`.
  */
 export function Segmented({
   caption,
@@ -13,40 +13,52 @@ export function Segmented({
   onChange,
   enabled,
   statusLabels,
+  onDisable,
 }: {
   caption: string;
   options: readonly string[];
   value: number;
   onChange: (v: number) => void;
   enabled?: boolean;
-  statusLabels: {
+  statusLabels?: {
     on: string;
     off: string;
   };
+  onDisable?: () => void;
 }) {
   return (
     <div className={`toggle-block${enabled === false ? ' off' : ''}`}>
       <div className="toggle-caption">
         <span className="toggle-name">{caption}</span>
-        {enabled !== undefined && (
+        {enabled !== undefined && statusLabels && (
           <span className={`toggle-status${enabled ? ' on' : ''}`}>
             {enabled ? statusLabels.on : statusLabels.off}
           </span>
         )}
       </div>
       <div className="segmented">
-        {options.map((option, i) => (
-          <button
-            key={option}
-            className={`seg${i === value ? ' on' : ''}`}
-            onClick={() => onChange(i)}
-            onContextMenu={(e) => e.preventDefault()}
-            type="button"
-            aria-pressed={i === value}
-          >
-            {option}
-          </button>
-        ))}
+        {options.map((option, i) => {
+          const selected = i === value;
+          const active = enabled === undefined || enabled;
+          return (
+            <button
+              key={option}
+              className={`seg${selected && active ? ' on' : ''}`}
+              onClick={() => {
+                if (selected && enabled && onDisable) {
+                  onDisable();
+                  return;
+                }
+                onChange(i);
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+              type="button"
+              aria-pressed={selected && active}
+            >
+              {option}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
