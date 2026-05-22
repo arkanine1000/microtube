@@ -1,5 +1,5 @@
 import { ChevronDown, type LucideIcon } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 
 /**
  * Panel expansion state, keyed by panel id, kept in module scope so it
@@ -12,7 +12,7 @@ const expansionState = new Map<string, boolean>();
 /**
  * A collapsible studio panel. Every panel starts collapsed so a first-time
  * user sees a clean list of sections rather than a wall of controls — the
- * title bar is the toggle, and the chevron rotates to point the way.
+ * panel chrome is the toggle, and the chevron rotates to point the way.
  */
 export function Panel({
   id,
@@ -41,16 +41,27 @@ export function Panel({
     });
   };
 
+  const handlePanelClick = (event: MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    const body = event.currentTarget.querySelector('.panel-body');
+
+    if (target instanceof Node && body?.contains(target)) {
+      return;
+    }
+
+    toggle();
+  };
+
   return (
     <section
       className={`panel collapsible${open ? ' open' : ''}${
         className ? ` ${className}` : ''
       }`}
+      onClick={handlePanelClick}
     >
       <button
         className="panel-title"
         type="button"
-        onClick={toggle}
         onContextMenu={(e) => e.preventDefault()}
         aria-expanded={open}
       >
