@@ -43,9 +43,15 @@ export function Panel({
 
   const handlePanelClick = (event: MouseEvent<HTMLElement>) => {
     const target = event.target;
+    if (!(target instanceof Node) || !event.currentTarget.contains(target)) {
+      // React portal events bubble through this component tree even when the
+      // target lives outside the panel DOM, such as preset modal buttons.
+      return;
+    }
+
     const body = event.currentTarget.querySelector('.panel-body');
 
-    if (target instanceof Node && body?.contains(target)) {
+    if (body?.contains(target)) {
       return;
     }
 
