@@ -23,6 +23,12 @@ export type EngineStatus = 'idle' | 'loading' | 'running' | 'error';
 
 const WORKLET_URL = '/microtube-worklet/processor.js';
 const WASM_URL = '/microtube-worklet/wasm/microtube_core_bg.wasm';
+const MEDIA_SESSION_ARTWORK: MediaImage[] = [
+  { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
+  { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
+];
+const MEDIA_SESSION_ACTIONS = ['play', 'pause', 'stop', 'playpause'] as const;
+const MEDIA_KEY_ACTIONS = new Set(['MediaPlay', 'MediaPause', 'MediaPlayPause']);
 
 export const TIMER_DEFAULT_MINUTES = 60;
 export const TIMER_MIN_MINUTES = 5;
@@ -43,6 +49,39 @@ function createPlaybackAudioContext(): AudioContext {
     return new AudioContext({ latencyHint: 'playback' });
   } catch {
     return new AudioContext();
+  }
+}
+
+function mediaSession(): MediaSession | null {
+  return 'mediaSession' in navigator ? navigator.mediaSession : null;
+}
+
+function setMediaSessionHandler(
+  action: (typeof MEDIA_SESSION_ACTIONS)[number],
+  handler: MediaSessionActionHandler | null,
+) {
+  const session = mediaSession();
+  if (!session) return;
+  try {
+    session.setActionHandler(action as MediaSessionAction, handler);
+  } catch {
+    // Some browsers expose Media Session but not every action handler.
+  }
+}
+
+function clearMediaSessionHandlers() {
+  for (const action of MEDIA_SESSION_ACTIONS) {
+    setMediaSessionHandler(action, null);
+  }
+}
+
+function setMediaPlaybackState(state: MediaSessionPlaybackState) {
+  const session = mediaSession();
+  if (!session) return;
+  try {
+    session.playbackState = state;
+  } catch {
+    // Some implementations expose a partial Media Session surface.
   }
 }
 
@@ -247,6 +286,7 @@ export function useMicroTube(): MicroTube {
       const now = performance.now();
       const wasPlaying = stateRef.current.playing;
       if (wasPlaying === playing) {
+        setMediaPlaybackState(playing ? 'playing' : 'paused');
         syncTimerState(now);
         return;
       }
@@ -269,10 +309,44 @@ export function useMicroTube(): MicroTube {
       }
 
       commitParam('playing', playing);
+      setMediaPlaybackState(playing ? 'playing' : 'paused');
       syncTimerState(now);
     },
     [commitParam, pauseSequenceClock, resumeSequenceClock, syncTimerState],
   );
+
+  const resumeAudioContext = useCallback(() => {
+    const ctx = ctxRef.current;
+    if (!ctx || ctx.state !== 'suspended') return;
+    void ctx.resume().catch(() => {
+      // Media keys can arrive while the browser is tearing down the context.
+    });
+  }, []);
+
+  const mediaPlay = useCallback(() => {
+    resumeAudioContext();
+    setPlaying(true);
+  }, [resumeAudioContext, setPlaying]);
+
+  const mediaPause = useCallback(() => {
+    if (stateRef.current.playing) {
+      setPlaying(false);
+    } else {
+      mediaPlay();
+    }
+  }, [mediaPlay, setPlaying]);
+
+  const mediaToggle = useCallback(() => {
+    if (stateRef.current.playing) {
+      setPlaying(false);
+    } else {
+      mediaPlay();
+    }
+  }, [mediaPlay, setPlaying]);
+
+  const mediaStop = useCallback(() => {
+    setPlaying(false);
+  }, [setPlaying]);
 
   const setParam = useCallback(
     <K extends keyof MicroTubeState>(key: K, value: MicroTubeState[K]) => {
@@ -430,6 +504,66 @@ export function useMicroTube(): MicroTube {
       setStatus('error');
     }
   }, [status, syncTimerState]);
+
+  // --- media session -------------------------------------------------------
+
+  useEffect(() => {
+    const session = mediaSession();
+    if (!session || status !== 'running') return;
+
+    if ('MediaMetadata' in window) {
+      try {
+        session.metadata = new MediaMetadata({
+          title: 'MicroTube',
+          artist: 'MicroTube',
+          album: 'Binaural beat synthesis studio',
+          artwork: MEDIA_SESSION_ARTWORK,
+        });
+      } catch {
+        // Metadata artwork support varies; action handlers are the key part.
+      }
+    }
+
+    setMediaSessionHandler('play', mediaPlay);
+    setMediaSessionHandler('pause', mediaPause);
+    setMediaSessionHandler('stop', mediaStop);
+    setMediaSessionHandler('playpause', mediaToggle);
+
+    return () => {
+      clearMediaSessionHandlers();
+      try {
+        session.playbackState = 'none';
+        session.metadata = null;
+      } catch {
+        // Ignore browser-specific teardown behavior.
+      }
+    };
+  }, [mediaPause, mediaPlay, mediaStop, mediaToggle, status]);
+
+  useEffect(() => {
+    setMediaPlaybackState(
+      status === 'running' ? (state.playing ? 'playing' : 'paused') : 'none',
+    );
+  }, [state.playing, status]);
+
+  useEffect(() => {
+    if (status !== 'running') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!MEDIA_KEY_ACTIONS.has(event.key)) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      if (event.key === 'MediaPlay') {
+        mediaPlay();
+      } else if (event.key === 'MediaPause') {
+        mediaPause();
+      } else {
+        mediaToggle();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mediaPause, mediaPlay, mediaToggle, status]);
 
   // --- session uptime ------------------------------------------------------
 
