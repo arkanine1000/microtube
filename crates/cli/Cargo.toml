@@ -2,8 +2,8 @@
 name = "microtube"
 version = "0.1.0"
 edition = "2024"
-description = "MicroTube — a binaural-beat synthesis studio for the terminal."
-license = "MIT"
+description = "MicroTube: a binaural-beat synthesis studio for the terminal."
+license = "Unlicense"
 
 [[bin]]
 name = "microtube"

@@ -1,76 +1,160 @@
 # MicroTube Web
 
-A React + WebAssembly front-end for the MicroTube binaural-beat engine. The
-DSP runs in `microtube-core` (Rust), compiled to Wasm and executed inside an
-`AudioWorklet` on the browser's audio render thread.
+`apps/web` is the browser front end for MicroTube. It is a React + TypeScript +
+Vite app that runs the shared Rust DSP core as WebAssembly inside an
+`AudioWorklet`.
+
+This README is for web development. The project overview lives in the root
+[README.md](../../README.md), and deployment notes live in
+[DEPLOYMENT.md](../../DEPLOYMENT.md).
+
+## Requirements
+
+- Node.js 18 or newer.
+- Rust 1.85 or newer.
+- `wasm-pack` for building `crates/core` to WebAssembly.
+- Optional: `cargo-watch` for automatic Rust/Wasm rebuilds during development.
+- Headphones for manual audio testing.
+
+Install JavaScript dependencies from the repository root:
+
+```bash
+npm install
+```
 
 ## Develop
 
-From the **repository root**:
+From the repository root:
 
 ```bash
-npm install                       # once — installs workspace deps
-npm run dev                        # builds the Wasm core, then runs Vite
+npm run dev
 ```
 
-`npm run dev` first runs `wasm-pack` once, then concurrently starts:
+The root dev command does three things:
 
-1. a `cargo watch` that rebuilds the Wasm core on Rust changes
-   (needs `cargo install cargo-watch` — optional; without it, re-run
-   `npm run wasm:build` manually after editing `crates/core`), and
-2. the Vite dev server at <http://localhost:5173>.
+- Runs `npm run wasm:build` once.
+- Starts `npm run wasm:watch`, which watches `crates/core` and rebuilds the
+  Wasm/worklet artifacts after Rust changes.
+- Starts the Vite dev server for `@microtube/web` at
+  <http://localhost:5173>.
 
-Use headphones — the binaural effect depends on per-ear separation.
+If `cargo-watch` is not installed, use this manual loop instead:
 
-## Localization
+```bash
+npm run wasm:build
+npm run dev --workspace @microtube/web
+```
 
-The UI copy lives in a typed internal dictionary at `src/i18n/copy.ts`, wired
-through `LocaleProvider`. English is the default language, Croatian is
-available from the start-screen selector, and explicit choices persist in
-`localStorage` before falling back to browser language detection for `hr*`
-locales.
-
-## Progressive Web App
-
-The web UI is installable as a PWA. Manifest metadata, the service worker, and
-install icons live in `public/` so Vite copies them directly into
-`apps/web/dist`.
-
-- `public/manifest.webmanifest` defines the app name, standalone display mode,
-  start URL, theme colors, categories, and standard/maskable icon entries.
-- `public/sw.js` is intentionally install-focused and network-only: it
-  registers a service worker for installability, but does not cache the app
-  shell, worklet, or Wasm for offline playback.
-- PWA icons are generated from `public/microtube-icon.png`. Use ImageMagick's
-  `convert` command to regenerate `apple-touch-icon.png`, `pwa-192.png`,
-  `pwa-512.png`, and the maskable variants after changing the source artwork.
-- Vercel serves `/sw.js` and `/manifest.webmanifest` with no-cache headers from
-  the root `vercel.json`, so installed clients can pick up redeploys promptly.
+Then rerun `npm run wasm:build` whenever `crates/core` changes.
 
 ## Build
 
+Build the full production web app from the repository root:
+
 ```bash
-npm run build      # release Wasm + tsc + vite build  ->  apps/web/dist
+npm run build
 ```
 
-## How the pipeline fits together
+This runs release Wasm packaging and then `tsc && vite build`. The static output
+lands in `apps/web/dist`.
 
-- `crates/core` — pure Rust DSP, `crate-type = ["rlib", "cdylib"]`.
-- `public/microtube-worklet/wasm/` — `wasm-pack` output (git-ignored).
-- `worklet/processor.src.js` + `scripts/build-worklet.mjs` — the latter
-  prepends a `TextDecoder` shim and the wasm-bindgen glue to the former and
-  emits `public/microtube-worklet/processor.js`: a single, **import-free**
-  `AudioWorkletProcessor` module (nested imports inside a worklet are
-  unreliable). Regenerated on every `wasm:build`; git-ignored.
-- The worklet scope has no dependable `fetch`, so the main thread fetches
-  the raw `.wasm` bytes and transfers the `ArrayBuffer` into the worklet;
-  `initSync` compiles + instantiates them there.
-- The processor renders into Wasm-owned buffers and copies cached memory views
-  to the output bus, avoiding per-quantum wasm-bindgen array marshaling.
-- Parameter changes flow main-thread → worklet over the `MessagePort`.
-- User-facing web labels are kept out of the audio/domain parameter metadata;
-  localized labels, hints, presets, EEG band text, sequence names, and step
-  names come from `src/i18n/copy.ts`.
-- The service worker is registered only in production from `src/main.tsx`;
-  local `npm run dev` sessions stay unregistered unless a browser still has an
-  older worker from a previous production preview.
+When the Wasm/worklet artifacts already exist and only TypeScript or React code
+changed, this narrower command is useful:
+
+```bash
+npm run build --workspace @microtube/web
+```
+
+Preview an existing production build:
+
+```bash
+npm run preview --workspace @microtube/web
+```
+
+## Wasm And Worklet Pipeline
+
+The browser app does not call the Rust engine from the main thread. Audio runs
+on the browser audio render thread:
+
+- `crates/core` builds as both `rlib` and `cdylib`.
+- `npm run wasm:build` runs `wasm-pack build crates/core --target web
+  --features wasm`.
+- `wasm-pack` writes ignored generated files to
+  `apps/web/public/microtube-worklet/wasm/`.
+- `apps/web/scripts/build-worklet.mjs` combines the wasm-bindgen glue with
+  `apps/web/worklet/processor.src.js`.
+- The generated, import-free worklet module is written to
+  `apps/web/public/microtube-worklet/processor.js`.
+
+The worklet module is intentionally import-free because nested imports from
+`AudioWorkletProcessor` modules are unreliable across browsers. The main thread
+fetches `/microtube-worklet/wasm/microtube_core_bg.wasm`, transfers the raw
+`ArrayBuffer` into the worklet, and the worklet initializes the Wasm engine with
+`initSync`.
+
+Rendering uses Wasm-owned buffers and cached `Float32Array` views over Wasm
+memory. Parameter changes flow from React state to the worklet over the
+`MessagePort`.
+
+## Source Layout
+
+- `src/App.tsx`: top-level studio UI and tab layout.
+- `src/audio/useMicroTube.ts`: Web Audio session lifecycle, worklet messaging,
+  timer, Media Session integration, and sequence execution.
+- `src/audio/params.ts`: parameter metadata, EEG bands, enum values, and slider
+  specs.
+- `src/audio/sequences.ts`: web presets and executable timed sequences.
+- `src/audio/localPresets.ts`: localStorage persistence and validation.
+- `src/i18n/`: typed English and Croatian copy.
+- `src/components/`: reusable UI panels and controls.
+- `worklet/processor.src.js`: source for the generated audio worklet.
+- `scripts/build-worklet.mjs`: worklet bundling step.
+- `public/`: static PWA metadata, icons, service worker, and generated worklet
+  output.
+
+## Progressive Web App
+
+The web app is installable as a PWA:
+
+- `public/manifest.webmanifest` defines app metadata, standalone display mode,
+  theme colors, categories, and standard/maskable icons.
+- `public/sw.js` exists for installability and is intentionally network-only.
+  It does not cache the app shell, worklet, or Wasm for offline playback.
+- The service worker is registered only in production from `src/main.tsx`.
+- `vercel.json` serves `/sw.js` and `/manifest.webmanifest` with no-cache
+  headers so installed clients can pick up redeploys.
+- Vite-hashed `/assets/*` files are served with immutable caching in
+  production.
+
+PWA icons are generated from `public/microtube-icon.png`. If the source artwork
+changes, regenerate:
+
+- `apple-touch-icon.png`
+- `pwa-192.png`
+- `pwa-512.png`
+- `pwa-maskable-192.png`
+- `pwa-maskable-512.png`
+
+## Localization
+
+The UI copy lives in `src/i18n/copy.ts` and is provided through
+`LocaleProvider`.
+
+- English is the default locale.
+- Croatian is available from the start-screen language selector.
+- Explicit user choices persist in `localStorage`.
+- First visits fall back to browser language detection for `hr*` locales.
+- User-facing labels stay out of audio/domain parameter metadata; localized
+  labels, hints, preset text, EEG band text, sequence names, and step names come
+  from the i18n dictionary.
+
+## Notes
+
+- Use headphones when testing audio behavior. Speakers mix the channels and
+  destroy the binaural separation.
+- The app does not require COOP/COEP headers because it does not use
+  `SharedArrayBuffer`; parameters move over `MessagePort`.
+- If a production service worker from a previous preview sticks around during
+  local development, unregister it from the browser devtools Application panel.
+- Visualizations are currently terminal-only. The web app focuses on audio,
+  control ergonomics, local presets, sequences, and PWA installation.

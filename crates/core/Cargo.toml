@@ -2,8 +2,8 @@
 name = "microtube-core"
 version = "0.1.0"
 edition = "2024"
-description = "Pure DSP engine for MicroTube — shared by the CLI and Web apps."
-license = "MIT"
+description = "Pure DSP engine for MicroTube, shared by the CLI and Web apps."
+license = "Unlicense"
 
 [lib]
 # rlib so the native CLI can link it; cdylib so wasm-pack can emit a .wasm.
