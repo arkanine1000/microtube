@@ -102,7 +102,7 @@ memory. Parameter changes flow from React state to the worklet over the
 - `src/audio/useMicroTube.ts`: Web Audio session lifecycle, worklet messaging,
   timer, Media Session integration, and sequence execution.
 - `src/audio/params.ts`: parameter metadata, EEG bands, enum values, and slider
-  specs.
+  specs, including the Fuxian gravity control.
 - `src/audio/sequences.ts`: web presets and executable timed sequences.
 - `src/audio/localPresets.ts`: localStorage persistence and validation.
 - `src/i18n/`: typed English and Croatian copy.
@@ -154,6 +154,9 @@ The UI copy lives in `src/i18n/copy.ts` and is provided through
   destroy the binaural separation.
 - The app does not require COOP/COEP headers because it does not use
   `SharedArrayBuffer`; parameters move over `MessagePort`.
+- Emergence spawn mode values mirror Rust exactly: Canon `0`, Penrose `1`, and
+  Fuxian `2`. The web `gravity` slider defaults to `0.5` and is preserved in
+  local presets.
 - If a production service worker from a previous preview sticks around during
   local development, unregister it from the browser devtools Application panel.
 - Visualizations are currently terminal-only. The web app focuses on audio,

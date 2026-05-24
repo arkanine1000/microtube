@@ -18,15 +18,16 @@ The quick presets set the main carrier and beat:
 They are simple on purpose. Pick one, listen, and adjust.
 
 Press `S` to save the current Studio state as a local preset. Local presets
-remember the sound, mist, timbre, drift, emergence, spawn mode, and visual mode.
-They are stored in your user config directory and show up after the built-ins in
-the preset menu. Press `d` on a local preset in that menu to delete it.
+remember the sound, mist, timbre, drift, emergence, gravity, spawn mode, and
+visual mode. They are stored in your user config directory and show up after the
+built-ins in the preset menu. Press `d` on a local preset in that menu to delete
+it.
 
 ## Sequences
 
 A sequence changes settings over time. Beat and base frequency glide between
-steps. Some sequences also automate timbre, mist, emergence, drift, spawn mode,
-and visual mode.
+steps. Some sequences also automate timbre, mist, emergence, gravity, drift,
+spawn mode, and visual mode.
 
 This lets MicroTube behave more like a composed session than a static tone.
 

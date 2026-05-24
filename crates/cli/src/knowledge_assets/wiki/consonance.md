@@ -21,7 +21,10 @@ ratio       peak_score
 4/3   perfect fourth 0.85
 5/4   major third    0.80
 6/5   minor third    0.75
+9/8   major second   0.68
+16/15 minor second   0.62
 phi   golden ratio   0.70
+phi^2 golden square  0.65
 ```
 
 For each table entry *(r_i, peak_i)*, compute the **logarithmic distance**
@@ -53,9 +56,10 @@ nothing scores.
 
 ## Why these particular peaks?
 
-The first six are the classical just-intonation consonances, with peak
-scores ordered by their position in the harmonic series. The seventh is
-the golden ratio phi = 1.618..., which is by construction the *most*
+The first eight are classical just-intonation consonances and stepwise intervals,
+with peak scores ordered by their position in the harmonic series and by how
+stable they sound as sustained background voices. The next two are the golden
+ratio phi = 1.618... and phi squared. Phi is by construction the *most*
 irrational number — its continued-fraction expansion is `[1; 1, 1, 1, ...]`.
 A ratio of phi is mathematically the *least* approximable by a small
 fraction, which makes it audibly *strange* but not dissonant. Its score
@@ -68,4 +72,6 @@ When a voice spawns, its lifetime is partly weighted by its consonance
 score. Pure 3:2 voices get longer lifetimes; voices on awkward ratios
 fade quickly. Energy conservation enforces a cap on total amplitude, so
 the system has the property that **simple ratios live, complex ratios
-die** — a Darwinian filter expressed in ten lines of code.
+die** — a Darwinian filter expressed in ten lines of code. Fuxian mode also
+uses this same table as its interval pool before applying leap, parallel, and
+gravity constraints.

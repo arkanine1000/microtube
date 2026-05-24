@@ -7,8 +7,9 @@ beat in the space between them.
 
 Around that carrier, the instrument can add harmonic color, colored-noise mist,
 endless Shepard-Risset drift, and generative voices that follow canon patterns
-or a Penrose/Fibonacci walk. The same engine drives a keyboard-first terminal
-studio and a touch-friendly web studio running in an `AudioWorklet`.
+or a Penrose/Fibonacci walk, or use Fuxian counterpoint rules for voice leading.
+The same engine drives a keyboard-first terminal studio and a touch-friendly web
+studio running in an `AudioWorklet`.
 
 Headphones are required. Speakers mix the channels and remove the binaural
 separation.
@@ -30,7 +31,8 @@ separation.
 - Shepard-Risset drift layers seven octave-spaced oscillators under a
   raised-cosine bell, creating pitch motion that can rise or fall indefinitely.
 - Emergence adds up to 12 generative voices with consonance-weighted lifetimes,
-  lightweight spatialization, and bounded total energy.
+  lightweight spatialization, bounded total energy, and Canon, Penrose, or
+  Fuxian spawn modes.
 - Soft limiting keeps dense combinations of carrier, mist, harmonics, drift, and
   emergence under control.
 
@@ -41,10 +43,12 @@ separation.
 - Six built-in sequences range from simple carrier transitions to the
   25.5-minute Journey Through the Cosmos.
 - Journey is a 13-step arc with Fibonacci-timed epochs and automation for
-  timbre, mist, emergence, Shepard-Risset drift, spawn mode, and visualization
-  state.
+  timbre, mist, emergence, voice-leading gravity, Shepard-Risset drift, spawn
+  mode, and visualization state.
 - Penrose mode follows a Fibonacci-word walk through consonant interval choices,
   producing an ordered but non-repeating voice stream.
+- Fuxian mode chooses from the consonance pool with leap recovery, no repeated
+  fifth/octave parallels, and a gravity control that pulls lines back to root.
 
 **Terminal studio**
 
@@ -137,8 +141,8 @@ Sequences are composed sessions that move the instrument over time:
 
 Most legacy sequences automate the binaural carrier. Journey Through the Cosmos
 is the largest built-in sequence: a 13-step, 25.5-minute arc that also automates
-timbre, mist, emergence, Shepard-Risset drift, spawn mode, and visualization
-state. See
+timbre, mist, emergence, voice-leading gravity, Shepard-Risset drift, spawn
+mode, and visualization state. See
 [JOURNEY_THROUGH_THE_COSMOS.md](JOURNEY_THROUGH_THE_COSMOS.md) for its design
 essay and citations.
 
