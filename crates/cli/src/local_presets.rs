@@ -21,6 +21,7 @@ pub struct LocalPreset {
     pub mist_type: MistType,
     pub harmonics: f32,
     pub emergence: f32,
+    pub gravity: f32,
     pub spawn_mode: SpawnMode,
     pub shepard: f32,
     pub shepard_base_freq: f32,
@@ -57,6 +58,8 @@ struct StoredPreset {
     mist_type: String,
     harmonics: f32,
     emergence: f32,
+    #[serde(default = "default_gravity")]
+    gravity: f32,
     spawn_mode: String,
     shepard: f32,
     shepard_base_freq: f32,
@@ -76,6 +79,7 @@ impl From<&LocalPreset> for StoredPreset {
             mist_type: preset.mist_type.label().to_string(),
             harmonics: preset.harmonics,
             emergence: preset.emergence,
+            gravity: preset.gravity,
             spawn_mode: preset.spawn_mode.label().to_string(),
             shepard: preset.shepard,
             shepard_base_freq: preset.shepard_base_freq,
@@ -97,6 +101,7 @@ impl StoredPreset {
             mist_type: parse_mist_type(&self.mist_type)?,
             harmonics: finite("harmonics", self.harmonics)?,
             emergence: finite("emergence", self.emergence)?,
+            gravity: finite("gravity", self.gravity)?,
             spawn_mode: parse_spawn_mode(&self.spawn_mode)?,
             shepard: finite("shepard", self.shepard)?,
             shepard_base_freq: finite("shepard_base_freq", self.shepard_base_freq)?,
@@ -202,6 +207,10 @@ fn finite(field: &'static str, value: f32) -> io::Result<f32> {
     }
 }
 
+fn default_gravity() -> f32 {
+    0.5
+}
+
 fn parse_mist_type(value: &str) -> io::Result<MistType> {
     match value {
         "Pink" | "pink" => Ok(MistType::Pink),
@@ -241,6 +250,7 @@ fn parse_spawn_mode(value: &str) -> io::Result<SpawnMode> {
     match value {
         "canon" | "Canon" => Ok(SpawnMode::Canon),
         "penrose" | "Penrose" => Ok(SpawnMode::Penrose),
+        "fuxian" | "Fuxian" => Ok(SpawnMode::Fuxian),
         _ => Err(invalid_data(format!("unknown spawn mode {value:?}"))),
     }
 }
@@ -273,6 +283,7 @@ mod tests {
             mist_type: MistType::Velvet,
             harmonics: 0.7,
             emergence: 0.45,
+            gravity: 0.6,
             spawn_mode: SpawnMode::Penrose,
             shepard: 0.3,
             shepard_base_freq: DEFAULT_BASE_FREQ_HZ as f32,
@@ -297,6 +308,7 @@ mod tests {
         let json = serde_json::to_string(&stored).expect("serialize preset");
 
         assert!(json.contains("\"mist_type\":\"Velvet\""));
+        assert!(json.contains("\"gravity\":0.6"));
         assert!(json.contains("\"spawn_mode\":\"penrose\""));
         assert!(json.contains("\"shepard_direction\":\"rising\""));
         assert!(json.contains("\"timbre\":\"Bell\""));

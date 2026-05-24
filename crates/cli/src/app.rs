@@ -50,6 +50,7 @@ pub struct AudioParams {
     pub mist_type: AtomicU32,
     pub harmonics: AtomicU32,
     pub emergence: AtomicU32, // Emergence intensity 0.0-1.0
+    pub gravity: AtomicU32,   // Fuxian gravity 0.0-1.0
     pub spawn_mode: AtomicU32,
     pub shepard: AtomicU32, // Shepard intensity 0.0-1.0
     pub shepard_base_freq: AtomicU32,
@@ -68,6 +69,7 @@ impl AudioParams {
             mist_type: AtomicU32::new(MistType::Brown as u32),
             harmonics: AtomicU32::new(0.3_f32.to_bits()),
             emergence: AtomicU32::new(0.0_f32.to_bits()),
+            gravity: AtomicU32::new(0.5_f32.to_bits()),
             spawn_mode: AtomicU32::new(SpawnMode::Canon as u32),
             shepard: AtomicU32::new(0.0_f32.to_bits()),
             shepard_base_freq: AtomicU32::new((DEFAULT_BASE_FREQ_HZ as f32).to_bits()),
@@ -104,6 +106,10 @@ impl AudioParams {
         f32::from_bits(self.emergence.load(Ordering::Relaxed))
     }
 
+    pub fn get_gravity(&self) -> f32 {
+        f32::from_bits(self.gravity.load(Ordering::Relaxed))
+    }
+
     pub fn set_base_freq(&self, v: f32) {
         self.base_freq.store(v.to_bits(), Ordering::Relaxed);
     }
@@ -133,6 +139,11 @@ impl AudioParams {
 
     pub fn set_emergence(&self, v: f32) {
         self.emergence
+            .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn set_gravity(&self, v: f32) {
+        self.gravity
             .store(v.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
@@ -247,12 +258,13 @@ pub enum ActiveParam {
     Timer,
     Harmonics,
     Emergence,
+    Gravity,
     Shepard,
     ShepardBase,
     NoiseLevel,
 }
 
-pub const ACTIVE_PARAM_COUNT: usize = 9;
+pub const ACTIVE_PARAM_COUNT: usize = 10;
 
 impl ActiveParam {
     pub fn next(self) -> Self {
@@ -262,7 +274,8 @@ impl ActiveParam {
             Self::Volume => Self::Timer,
             Self::Timer => Self::Harmonics,
             Self::Harmonics => Self::Emergence,
-            Self::Emergence => Self::Shepard,
+            Self::Emergence => Self::Gravity,
+            Self::Gravity => Self::Shepard,
             Self::Shepard => Self::ShepardBase,
             Self::ShepardBase => Self::NoiseLevel,
             Self::NoiseLevel => Self::BaseFreq,
@@ -277,7 +290,8 @@ impl ActiveParam {
             Self::Timer => Self::Volume,
             Self::Harmonics => Self::Timer,
             Self::Emergence => Self::Harmonics,
-            Self::Shepard => Self::Emergence,
+            Self::Gravity => Self::Emergence,
+            Self::Shepard => Self::Gravity,
             Self::ShepardBase => Self::Shepard,
             Self::NoiseLevel => Self::ShepardBase,
         }
@@ -292,6 +306,7 @@ impl ActiveParam {
             Self::NoiseLevel => "Noise",
             Self::Harmonics => "Warmth",
             Self::Emergence => "Emergence",
+            Self::Gravity => "Gravity",
             Self::Shepard => "Shepard",
             Self::ShepardBase => "Drift Base",
         }
@@ -306,9 +321,10 @@ impl ActiveParam {
             Self::Timer => 3,
             Self::Harmonics => 4,
             Self::Emergence => 5,
-            Self::Shepard => 6,
-            Self::ShepardBase => 7,
-            Self::NoiseLevel => 8,
+            Self::Gravity => 6,
+            Self::Shepard => 7,
+            Self::ShepardBase => 8,
+            Self::NoiseLevel => 9,
         }
     }
 }
@@ -633,6 +649,7 @@ impl App {
         self.params.set_mist_type(preset.mist_type);
         self.params.set_harmonics(preset.harmonics);
         self.params.set_emergence(preset.emergence);
+        self.params.set_gravity(preset.gravity);
         self.params.set_spawn_mode(preset.spawn_mode);
         self.params.set_shepard(preset.shepard);
         self.params.set_shepard_base_freq(preset.shepard_base_freq);
@@ -701,6 +718,7 @@ impl App {
             mist_type: self.params.get_mist_type(),
             harmonics: self.params.get_harmonics(),
             emergence: self.params.get_emergence(),
+            gravity: self.params.get_gravity(),
             spawn_mode: self.params.get_spawn_mode(),
             shepard: self.params.get_shepard(),
             shepard_base_freq: self.params.get_shepard_base_freq(),
@@ -758,6 +776,7 @@ impl App {
             self.params.set_mist_type(MistType::Brown);
         }
         self.params.set_emergence(0.0);
+        self.params.set_gravity(0.5);
         self.params.set_shepard(0.0);
         self.clear_emergence_snapshot();
         self.current_preset = Some(PresetSelection::BuiltIn(idx));
@@ -791,6 +810,9 @@ impl App {
             self.params.set_emergence(0.0);
             self.clear_emergence_snapshot();
         }
+        if !steps.iter().any(|step| step.gravity.is_some()) {
+            self.params.set_gravity(0.5);
+        }
         if !steps.iter().any(|step| step.shepard.is_some()) {
             self.params.set_shepard(0.0);
         }
@@ -813,6 +835,9 @@ impl App {
         }
         if let Some(v) = step.emergence {
             self.params.set_emergence(v);
+        }
+        if let Some(v) = step.gravity {
+            self.params.set_gravity(v);
         }
         if let Some(v) = step.shepard {
             self.params.set_shepard(v);
@@ -883,6 +908,10 @@ impl App {
                 if let Some(v) = step.emergence {
                     let target = next.emergence.unwrap_or(v);
                     self.params.set_emergence(v + (target - v) * progress);
+                }
+                if let Some(v) = step.gravity {
+                    let target = next.gravity.unwrap_or(v);
+                    self.params.set_gravity(v + (target - v) * progress);
                 }
                 if let Some(v) = step.shepard {
                     let target = next.shepard.unwrap_or(v);
@@ -1115,6 +1144,11 @@ impl App {
                 }
                 true
             }
+            ActiveParam::Gravity => {
+                let v = (self.params.get_gravity() + delta * 0.05).clamp(0.0, 1.0);
+                self.params.set_gravity(v);
+                true
+            }
             ActiveParam::Shepard => {
                 let v = (self.params.get_shepard() + delta * 0.05).clamp(0.0, 1.0);
                 self.params.set_shepard(v);
@@ -1182,6 +1216,7 @@ mod tests {
             mist_type: MistType::Velvet,
             harmonics: 0.7,
             emergence: 0.45,
+            gravity: 0.6,
             spawn_mode: SpawnMode::Penrose,
             shepard: 0.35,
             shepard_base_freq: DEFAULT_BASE_FREQ_HZ as f32 * 2.0,
@@ -1207,6 +1242,7 @@ mod tests {
 
         assert_eq!(params.get_volume(), 0.5);
         assert_eq!(params.get_mist_type(), MistType::Brown);
+        assert_eq!(params.get_gravity(), 0.5);
         assert_eq!(params.get_shepard_base_freq(), DEFAULT_BASE_FREQ_HZ as f32);
     }
 
@@ -1216,12 +1252,14 @@ mod tests {
         app.params.set_noise_level(0.85);
         app.params.set_mist_type(MistType::Velvet);
         app.params.set_emergence(0.7);
+        app.params.set_gravity(0.9);
         app.params.set_shepard(0.6);
 
         app.apply_preset(2);
 
         assert_eq!(app.params.get_noise_level(), 0.0);
         assert_eq!(app.params.get_emergence(), 0.0);
+        assert_eq!(app.params.get_gravity(), 0.5);
         assert_eq!(app.params.get_shepard(), 0.0);
     }
 
@@ -1231,6 +1269,7 @@ mod tests {
         app.params.set_noise_level(0.85);
         app.params.set_mist_type(MistType::Blue);
         app.params.set_emergence(0.7);
+        app.params.set_gravity(0.9);
         app.params.set_shepard(0.6);
 
         app.start_sequence(0);
@@ -1238,6 +1277,7 @@ mod tests {
         assert_eq!(app.params.get_noise_level(), 0.0);
         assert_eq!(app.params.get_mist_type(), MistType::Brown);
         assert_eq!(app.params.get_emergence(), 0.0);
+        assert_eq!(app.params.get_gravity(), 0.5);
         assert_eq!(app.params.get_shepard(), 0.0);
     }
 
@@ -1261,6 +1301,8 @@ mod tests {
         app.toggle_spawn_mode();
 
         assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
+        app.toggle_spawn_mode();
+        assert_eq!(app.params.get_spawn_mode(), SpawnMode::Fuxian);
         assert_eq!(app.viz_mode, VizMode::Spectrum);
     }
 
@@ -1353,6 +1395,7 @@ mod tests {
         app.params.set_mist_type(MistType::Velvet);
         app.params.set_harmonics(0.7);
         app.params.set_emergence(0.45);
+        app.params.set_gravity(0.6);
         app.params.set_spawn_mode(SpawnMode::Penrose);
         app.params.set_shepard(0.35);
         app.params
@@ -1389,6 +1432,7 @@ mod tests {
         assert_eq!(app.params.get_mist_type(), MistType::Velvet);
         assert_eq!(app.params.get_harmonics(), 0.7);
         assert_eq!(app.params.get_emergence(), 0.45);
+        assert_eq!(app.params.get_gravity(), 0.6);
         assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
         assert_eq!(app.params.get_shepard(), 0.35);
         assert_eq!(

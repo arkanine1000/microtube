@@ -31,6 +31,7 @@ pub struct SequenceStep {
     pub noise_level: Option<f32>,
     pub harmonics: Option<f32>,
     pub emergence: Option<f32>,
+    pub gravity: Option<f32>,
     pub shepard: Option<f32>,
     pub timbre: Option<Timbre>,
     pub mist_type: Option<MistType>,
@@ -57,6 +58,7 @@ const fn legacy_step(beat_freq: f32, base_freq: f32, duration_secs: f32) -> Sequ
         noise_level: None,
         harmonics: None,
         emergence: None,
+        gravity: None,
         shepard: None,
         timbre: None,
         mist_type: None,
@@ -78,6 +80,7 @@ const fn epoch(
     noise_level: f32,
     harmonics: f32,
     emergence: f32,
+    gravity: f32,
     shepard: f32,
     timbre: Timbre,
     mist_type: MistType,
@@ -94,6 +97,7 @@ const fn epoch(
         noise_level: Some(noise_level),
         harmonics: Some(harmonics),
         emergence: Some(emergence),
+        gravity: Some(gravity),
         shepard: Some(shepard),
         timbre: Some(timbre),
         mist_type: Some(mist_type),
@@ -201,20 +205,20 @@ static PENROSE_STEPS: &[SequenceStep] = &[
 // Total: 1 529 s ≈ 25 min 29 s.
 #[rustfmt::skip]
 static JOURNEY_THROUGH_COSMOS_STEPS: &[SequenceStep] = &[
-    //    name                       beat   base     dur    vol  noise  harm  emer  shep  timbre         mist              direction         spawn               viz
-    epoch("Microtubule",          40.0, 432.00,  21.0,  0.40, 0.10, 0.85, 0.55, 0.00, Timbre::Bell,  MistType::Velvet, Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
-    epoch("Synapse",              22.0, 384.00,  34.0,  0.50, 0.15, 0.70, 0.60, 0.10, Timbre::Bell,  MistType::Velvet, Direction::Up,    SpawnMode::Canon,   VizMode::Waveform),
-    epoch("Neural Awareness",     14.0, 320.00,  55.0,  0.60, 0.20, 0.55, 0.45, 0.20, Timbre::Flute, MistType::Pink,   Direction::Up,    SpawnMode::Canon,   VizMode::Harmonics),
-    epoch("Body",                 10.0, 256.00,  89.0,  0.65, 0.25, 0.50, 0.35, 0.25, Timbre::Flute, MistType::Pink,   Direction::Up,    SpawnMode::Canon,   VizMode::Envelope),
-    epoch("Earth \u{00B7} Schumann", 7.83, 196.00, 144.0, 0.70, 0.40, 0.45, 0.30, 0.30, Timbre::Organ, MistType::Brown,  Direction::Up,    SpawnMode::Canon,   VizMode::Envelope),
-    epoch("Lunar Tide",            5.0, 165.00, 233.0,  0.70, 0.35, 0.50, 0.40, 0.45, Timbre::Organ, MistType::Pink,   Direction::Up,    SpawnMode::Canon,   VizMode::Penrose),
-    epoch("Solar Wind",            3.0, 130.81, 377.0,  0.70, 0.30, 0.60, 0.55, 0.60, Timbre::Organ, MistType::Pink,   Direction::Up,    SpawnMode::Penrose, VizMode::Penrose),
-    epoch("Stellar Bells",         2.0, 110.00, 233.0,  0.65, 0.25, 0.70, 0.70, 0.70, Timbre::Bell,  MistType::Blue,   Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
-    epoch("Galactic",              4.0,  87.31, 144.0,  0.60, 0.30, 0.80, 0.80, 0.80, Timbre::Bell,  MistType::Blue,   Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
-    epoch("Cosmic Web",            8.0,  73.42,  89.0,  0.55, 0.45, 0.85, 0.90, 0.85, Timbre::Saw,   MistType::White,  Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
-    epoch("Background Radiation",18.0,  65.41,  55.0,  0.45, 0.75, 0.50, 0.55, 0.70, Timbre::Saw,   MistType::White,  Direction::Up,    SpawnMode::Penrose, VizMode::Spectrum),
-    epoch("Singularity",          60.0,  55.00,  34.0,  0.25, 0.85, 0.35, 0.25, 0.40, Timbre::Saw,   MistType::Velvet, Direction::Down,  SpawnMode::Penrose, VizMode::Spectrum),
-    epoch("Strange Loop",         40.0, 432.00,  21.0,  0.50, 0.10, 0.85, 0.55, 0.00, Timbre::Bell,  MistType::Velvet, Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
+    //    name                       beat   base     dur    vol  noise  harm  emer  grav  shep  timbre         mist              direction         spawn               viz
+    epoch("Microtubule",          40.0, 432.00,  21.0,  0.40, 0.10, 0.85, 0.55, 0.50, 0.00, Timbre::Bell,  MistType::Velvet, Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
+    epoch("Synapse",              22.0, 384.00,  34.0,  0.50, 0.15, 0.70, 0.60, 0.50, 0.10, Timbre::Bell,  MistType::Velvet, Direction::Up,    SpawnMode::Canon,   VizMode::Waveform),
+    epoch("Neural Awareness",     14.0, 320.00,  55.0,  0.60, 0.20, 0.55, 0.45, 0.50, 0.20, Timbre::Flute, MistType::Pink,   Direction::Up,    SpawnMode::Canon,   VizMode::Harmonics),
+    epoch("Body",                 10.0, 256.00,  89.0,  0.65, 0.25, 0.50, 0.35, 0.50, 0.25, Timbre::Flute, MistType::Pink,   Direction::Up,    SpawnMode::Canon,   VizMode::Envelope),
+    epoch("Earth \u{00B7} Schumann", 7.83, 196.00, 144.0, 0.70, 0.40, 0.45, 0.30, 0.50, 0.30, Timbre::Organ, MistType::Brown,  Direction::Up,    SpawnMode::Canon,   VizMode::Envelope),
+    epoch("Lunar Tide",            5.0, 165.00, 233.0,  0.70, 0.35, 0.50, 0.40, 0.50, 0.45, Timbre::Organ, MistType::Pink,   Direction::Up,    SpawnMode::Canon,   VizMode::Penrose),
+    epoch("Solar Wind",            3.0, 130.81, 377.0,  0.70, 0.30, 0.60, 0.55, 0.50, 0.60, Timbre::Organ, MistType::Pink,   Direction::Up,    SpawnMode::Penrose, VizMode::Penrose),
+    epoch("Stellar Bells",         2.0, 110.00, 233.0,  0.65, 0.25, 0.70, 0.70, 0.50, 0.70, Timbre::Bell,  MistType::Blue,   Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
+    epoch("Galactic",              4.0,  87.31, 144.0,  0.60, 0.30, 0.80, 0.80, 0.50, 0.80, Timbre::Bell,  MistType::Blue,   Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
+    epoch("Cosmic Web",            8.0,  73.42,  89.0,  0.55, 0.45, 0.85, 0.90, 0.50, 0.85, Timbre::Saw,   MistType::White,  Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
+    epoch("Background Radiation",18.0,  65.41,  55.0,  0.45, 0.75, 0.50, 0.55, 0.50, 0.70, Timbre::Saw,   MistType::White,  Direction::Up,    SpawnMode::Penrose, VizMode::Spectrum),
+    epoch("Singularity",          60.0,  55.00,  34.0,  0.25, 0.85, 0.35, 0.25, 0.50, 0.40, Timbre::Saw,   MistType::Velvet, Direction::Down,  SpawnMode::Penrose, VizMode::Spectrum),
+    epoch("Strange Loop",         40.0, 432.00,  21.0,  0.50, 0.10, 0.85, 0.55, 0.50, 0.00, Timbre::Bell,  MistType::Velvet, Direction::Up,    SpawnMode::Penrose, VizMode::Emergence),
 ];
 
 pub static SEQUENCES: &[Sequence] = &[
