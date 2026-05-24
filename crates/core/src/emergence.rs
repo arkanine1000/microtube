@@ -348,11 +348,13 @@ struct ParentInfo {
 
 #[derive(Clone, Copy)]
 struct FuxianCandidate {
+    movement: f64,
     interval_from_root: f64,
     score: f64,
 }
 
 const EMPTY_FUXIAN_CANDIDATE: FuxianCandidate = FuxianCandidate {
+    movement: 0.0,
     interval_from_root: 0.0,
     score: 0.0,
 };
@@ -592,7 +594,7 @@ impl EmergenceEngine {
 
     fn fuxian_child_ratio(&mut self, parent: ParentInfo, gravity: f64) -> f64 {
         let mut pool = [EMPTY_FUXIAN_CANDIDATE; FUXIAN_POOL_CAPACITY];
-        let len = build_fuxian_pool(&mut pool);
+        let len = build_fuxian_pool(&mut pool, parent.interval_from_root);
         let parent_motion = safe_ln(parent.trajectory).unwrap_or(0.0);
         let require_step = parent_motion.abs() > MINOR_THIRD.ln();
 
@@ -699,12 +701,21 @@ impl EmergenceEngine {
     }
 }
 
-fn build_fuxian_pool(pool: &mut [FuxianCandidate; FUXIAN_POOL_CAPACITY]) -> usize {
+fn build_fuxian_pool(
+    pool: &mut [FuxianCandidate; FUXIAN_POOL_CAPACITY],
+    parent_interval_from_root: f64,
+) -> usize {
     let mut len = 0;
     for &(ratio, score) in CONSONANCE_RATIOS {
-        push_fuxian_candidate(pool, &mut len, ratio, score);
+        push_fuxian_candidate(pool, &mut len, parent_interval_from_root, ratio, score);
         if !ratio_close(ratio, 1.0) {
-            push_fuxian_candidate(pool, &mut len, 1.0 / ratio, score);
+            push_fuxian_candidate(
+                pool,
+                &mut len,
+                parent_interval_from_root,
+                1.0 / ratio,
+                score,
+            );
         }
     }
     len
@@ -725,8 +736,9 @@ fn build_step_recovery_pool(
     for step in steps {
         let interval_from_root = fold_voice_ratio(parent_interval_from_root * step);
         pool[len] = FuxianCandidate {
+            movement: step,
             interval_from_root,
-            score: consonance_score(interval_from_root),
+            score: consonance_score(step),
         };
         len += 1;
     }
@@ -737,10 +749,18 @@ fn build_step_recovery_pool(
 fn push_fuxian_candidate(
     pool: &mut [FuxianCandidate; FUXIAN_POOL_CAPACITY],
     len: &mut usize,
-    interval_from_root: f64,
+    parent_interval_from_root: f64,
+    movement: f64,
     score: f64,
 ) {
-    if *len >= pool.len() || !interval_from_root.is_finite() || interval_from_root <= 0.0 {
+    if *len >= pool.len() || !movement.is_finite() || movement <= 0.0 {
+        return;
+    }
+    if ratio_close(movement, 1.0) {
+        return;
+    }
+    let interval_from_root = fold_voice_ratio(parent_interval_from_root * movement);
+    if ratio_close(interval_from_root, parent_interval_from_root) {
         return;
     }
     if pool[..*len]
@@ -750,6 +770,7 @@ fn push_fuxian_candidate(
         return;
     }
     pool[*len] = FuxianCandidate {
+        movement,
         interval_from_root,
         score,
     };
@@ -762,6 +783,9 @@ fn fuxian_candidate_allowed(
     require_step: bool,
 ) -> bool {
     if candidate.interval_from_root <= 0.0 || !candidate.interval_from_root.is_finite() {
+        return false;
+    }
+    if ratio_close(candidate.interval_from_root, parent.interval_from_root) {
         return false;
     }
     if fuxian_parallel(candidate.interval_from_root, parent.interval_from_root) {
@@ -922,6 +946,35 @@ mod tests {
     }
 
     #[test]
+    fn fuxian_spawn_moves_from_the_parent_instead_of_duplication() {
+        let mut engine = EmergenceEngine::new(100.0);
+        engine.set_spawn_mode(SpawnMode::Fuxian);
+
+        engine.try_spawn(0.0, 0.5);
+
+        let spawned = engine.voices.last().expect("voice should spawn");
+        assert_ne!(spawned.interval_from_root, 1.0);
+        assert_ne!(spawned.trajectory, 1.0);
+        assert_eq!(spawned.generation, 1);
+    }
+
+    #[test]
+    fn fuxian_pool_builds_parent_relative_candidates() {
+        let mut pool = [EMPTY_FUXIAN_CANDIDATE; FUXIAN_POOL_CAPACITY];
+        let len = build_fuxian_pool(&mut pool, 3.0 / 2.0);
+
+        assert!(pool[..len].iter().any(|candidate| {
+            ratio_close(candidate.movement, 9.0 / 8.0)
+                && ratio_close(candidate.interval_from_root, 27.0 / 16.0)
+        }));
+        assert!(
+            pool[..len]
+                .iter()
+                .all(|candidate| !ratio_close(candidate.interval_from_root, 3.0 / 2.0))
+        );
+    }
+
+    #[test]
     fn fuxian_parallel_filter_rejects_repeated_fifths_and_octaves() {
         let fifth_parent = ParentInfo {
             interval_from_root: 3.0 / 2.0,
@@ -936,6 +989,7 @@ mod tests {
 
         assert!(!fuxian_candidate_allowed(
             FuxianCandidate {
+                movement: 1.0,
                 interval_from_root: 3.0 / 2.0,
                 score: 0.9,
             },
@@ -944,6 +998,7 @@ mod tests {
         ));
         assert!(!fuxian_candidate_allowed(
             FuxianCandidate {
+                movement: 1.0,
                 interval_from_root: 2.0,
                 score: 0.95,
             },
@@ -952,6 +1007,7 @@ mod tests {
         ));
         assert!(fuxian_candidate_allowed(
             FuxianCandidate {
+                movement: 8.0 / 9.0,
                 interval_from_root: 4.0 / 3.0,
                 score: 0.85,
             },
@@ -970,6 +1026,7 @@ mod tests {
 
         assert!(fuxian_candidate_allowed(
             FuxianCandidate {
+                movement: 8.0 / 9.0,
                 interval_from_root: 4.0 / 3.0,
                 score: 0.85,
             },
@@ -978,6 +1035,7 @@ mod tests {
         ));
         assert!(!fuxian_candidate_allowed(
             FuxianCandidate {
+                movement: 4.0 / 3.0,
                 interval_from_root: 2.0,
                 score: 0.95,
             },
@@ -986,6 +1044,7 @@ mod tests {
         ));
         assert!(!fuxian_candidate_allowed(
             FuxianCandidate {
+                movement: 2.0 / 3.0,
                 interval_from_root: 1.0,
                 score: 1.0,
             },
@@ -997,11 +1056,13 @@ mod tests {
     #[test]
     fn fuxian_gravity_exponentially_biases_toward_root() {
         let near_root = FuxianCandidate {
+            movement: 0.5,
             interval_from_root: 1.0,
             score: 1.0,
         };
         let far_from_root = FuxianCandidate {
-            interval_from_root: 2.0,
+            movement: 3.0 / 2.0,
+            interval_from_root: 3.0,
             score: 0.95,
         };
         let parent = 2.0;
