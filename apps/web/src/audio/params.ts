@@ -10,6 +10,7 @@ import {
   CloudFog,
   Flame,
   Layers,
+  Magnet,
   type LucideIcon,
   Orbit,
   Radio,
@@ -21,7 +22,7 @@ import {
 
 export type Timbre = 0 | 1 | 2 | 3;
 export type MistType = 0 | 1 | 2 | 3 | 4;
-export type SpawnMode = 0 | 1;
+export type SpawnMode = 0 | 1 | 2;
 export type Direction = 0 | 1;
 
 /** The full live engine state the UI mirrors. */
@@ -34,6 +35,7 @@ export interface MicroTubeState {
   mistType: MistType;
   harmonics: number;
   emergence: number;
+  gravity: number;
   spawnMode: SpawnMode;
   shepard: number;
   shepardBase: number;
@@ -53,6 +55,7 @@ export const DEFAULT_STATE: MicroTubeState = {
   mistType: 2, // Brown
   harmonics: 0.3,
   emergence: 0,
+  gravity: 0.5,
   spawnMode: 0, // Canon
   shepard: 0,
   shepardBase: 32.70319566257483,
@@ -70,6 +73,7 @@ export type SliderKey =
   | 'beatFreq'
   | 'harmonics'
   | 'emergence'
+  | 'gravity'
   | 'noiseLevel'
   | 'shepard'
   | 'shepardBase'
@@ -153,6 +157,17 @@ const EMERGENCE: SliderSpec = {
   toggle: true,
 };
 
+const GRAVITY: SliderSpec = {
+  key: 'gravity',
+  icon: Magnet,
+  min: 0,
+  max: 1,
+  step: 0.01,
+  coarse: 0.1,
+  unit: '',
+  format: pct,
+};
+
 const DRIFT_GAIN: SliderSpec = {
   key: 'shepard',
   icon: Waves,
@@ -181,6 +196,7 @@ export const SLIDERS: SliderSpec[] = [
   BEAT_FREQ,
   WARMTH,
   EMERGENCE,
+  GRAVITY,
   NOISE,
   DRIFT_GAIN,
   DRIFT_BASE,
@@ -212,7 +228,7 @@ export const SLIDER_GROUPS: SliderGroup[] = [
   {
     id: 'motion',
     icon: Orbit,
-    sliders: [EMERGENCE, DRIFT_GAIN, DRIFT_BASE],
+    sliders: [EMERGENCE, GRAVITY, DRIFT_GAIN, DRIFT_BASE],
   },
 ];
 

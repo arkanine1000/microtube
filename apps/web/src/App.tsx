@@ -372,6 +372,11 @@ export default function App() {
                       value={state.emergence}
                       onChange={(v) => setParam('emergence', v)}
                     />
+                    <ParameterSlider
+                      spec={SLIDER_BY_KEY.gravity}
+                      value={state.gravity}
+                      onChange={(v) => setParam('gravity', v)}
+                    />
                   </div>
                 )}
               </Panel>

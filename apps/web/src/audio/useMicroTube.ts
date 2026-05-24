@@ -146,6 +146,9 @@ const sequenceDefaults = (
   if (sequence.steps.some((step) => step.emergence !== undefined)) {
     defaults.emergence = DEFAULT_STATE.emergence;
   }
+  if (sequence.steps.some((step) => step.gravity !== undefined)) {
+    defaults.gravity = DEFAULT_STATE.gravity;
+  }
   if (sequence.steps.some((step) => step.shepard !== undefined)) {
     defaults.shepard = DEFAULT_STATE.shepard;
   }

@@ -13,6 +13,7 @@ export interface LanguageOption {
 }
 
 type Pair = readonly [string, string];
+type Trio = readonly [string, string, string];
 type Quad = readonly [string, string, string, string];
 type Quint = readonly [string, string, string, string, string];
 type PresetTuple = readonly [
@@ -129,7 +130,7 @@ export interface Copy {
     timbres: Quad;
     mists: Quint;
     directions: Pair;
-    spawnModes: Pair;
+    spawnModes: Trio;
   };
   sliders: Record<SliderKey, SliderText>;
   sliderGroups: Record<SliderGroupId, LabelCaption>;
@@ -238,7 +239,7 @@ export const COPY: Record<Locale, Copy> = {
       timbres: ['Organ', 'Flute', 'Bell', 'Saw'],
       mists: ['Pink', 'White', 'Brown', 'Blue', 'Velvet'],
       directions: ['Rising', 'Falling'],
-      spawnModes: ['Canon', 'Penrose'],
+      spawnModes: ['Canon', 'Penrose', 'Fuxian'],
     },
     sliders: {
       baseFreq: {
@@ -264,6 +265,12 @@ export const COPY: Record<Locale, Copy> = {
         hint: 'Generative canon / quasicrystal voices',
         decrease: 'decrease emergence',
         increase: 'increase emergence',
+      },
+      gravity: {
+        label: 'Gravity',
+        hint: 'Fuxian pull toward the root',
+        decrease: 'decrease gravity',
+        increase: 'increase gravity',
       },
       noiseLevel: {
         label: 'Mist',
@@ -466,7 +473,7 @@ export const COPY: Record<Locale, Copy> = {
       timbres: ['Orgulje', 'Flauta', 'Zvono', 'Pila'],
       mists: ['Ružičasta', 'Bijela', 'Smeđa', 'Plava', 'Baršun'],
       directions: ['Uzlazno', 'Silazno'],
-      spawnModes: ['Kanon', 'Penrose'],
+      spawnModes: ['Kanon', 'Penrose', 'Fuxian'],
     },
     sliders: {
       baseFreq: {
@@ -492,6 +499,12 @@ export const COPY: Record<Locale, Copy> = {
         hint: 'Generativni kanon / kvazikristalni glasovi',
         decrease: 'smanji emergenciju',
         increase: 'povećaj emergenciju',
+      },
+      gravity: {
+        label: 'Gravitacija',
+        hint: 'Fuxian privlačenje prema korijenu',
+        decrease: 'smanji gravitaciju',
+        increase: 'povećaj gravitaciju',
       },
       noiseLevel: {
         label: 'Maglica',
