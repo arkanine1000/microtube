@@ -1260,7 +1260,7 @@ svg {
 
 .sequence-titles {
   display: grid;
-  gap: 2px;
+  gap: 16px;
   min-width: 0;
 }
 
