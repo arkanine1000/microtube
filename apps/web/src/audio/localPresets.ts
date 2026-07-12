@@ -115,6 +115,15 @@ export function loadLocalPresets(): LocalPreset[] {
   }
 }
 
+export function loadLatestLocalPresetSnapshot(): PresetSnapshot | null {
+  const presets = loadLocalPresets();
+  if (presets.length === 0) return null;
+
+  return presets.reduce((latest, preset) =>
+    preset.updatedAt > latest.updatedAt ? preset : latest,
+  ).snapshot;
+}
+
 export function persistLocalPresets(presets: LocalPreset[]): boolean {
   if (typeof window === 'undefined') return false;
 
