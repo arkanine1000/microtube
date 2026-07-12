@@ -9,12 +9,9 @@ import {
   AudioWaveform,
   CloudFog,
   Flame,
-  Layers,
   Magnet,
   type LucideIcon,
-  Orbit,
   Radio,
-  RadioTower,
   Sparkles,
   Volume2,
   Waves,
@@ -212,37 +209,7 @@ export const SLIDERS: SliderSpec[] = [
   DRIFT_BASE,
 ];
 
-/**
- * Sliders split into themed groups — a long unbroken list of sliders reads
- * poorly, so the Shape tab renders these as labelled, icon-led sections.
- */
-export interface SliderGroup {
-  id: SliderGroupId;
-  icon: LucideIcon;
-  sliders: SliderSpec[];
-}
-
-export type SliderGroupId = 'carrier' | 'texture' | 'motion';
-
-export const SLIDER_GROUPS: SliderGroup[] = [
-  {
-    id: 'carrier',
-    icon: RadioTower,
-    sliders: [BASE_FREQ, BEAT_FREQ],
-  },
-  {
-    id: 'texture',
-    icon: Layers,
-    sliders: [WARMTH, NOISE],
-  },
-  {
-    id: 'motion',
-    icon: Orbit,
-    sliders: [EMERGENCE, GRAVITY, DRIFT_GAIN, DRIFT_BASE],
-  },
-];
-
-/** Master volume — rendered separately in the transport bar. */
+/** Master volume — rendered separately in the header. */
 export const VOLUME: SliderSpec = {
   key: 'volume',
   icon: Volume2,

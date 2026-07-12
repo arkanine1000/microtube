@@ -1,12 +1,4 @@
-import {
-  CloudFog,
-  Flame,
-  Headphones,
-  Orbit,
-  RadioTower,
-  Sparkles,
-  Waves,
-} from 'lucide-react';
+import { Headphones } from 'lucide-react';
 import { useState } from 'react';
 import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
@@ -23,17 +15,19 @@ import {
 } from './audio/params';
 import type { Preset } from './audio/sequences';
 import { useMicroTube } from './audio/useMicroTube';
+import { BandChips } from './components/BandChips';
 import { HeaderBar } from './components/HeaderBar';
 import { LanguageSelector } from './components/LanguageSelector';
-import { Panel } from './components/Panel';
+import { SectionBar } from './components/SectionBar';
 import { SlimSlider } from './components/SlimSlider';
-import { SequencesPanel } from './components/SequencesPanel';
-import { Segmented } from './components/Segmented';
-import { StripDashboard } from './components/StripDashboard';
+import { CarrierSection } from './components/sections/CarrierSection';
+import { DriftSection } from './components/sections/DriftSection';
+import { EmergenceSection } from './components/sections/EmergenceSection';
+import { MistSection } from './components/sections/MistSection';
+import { SequencesSection } from './components/sections/SequencesSection';
+import { ToneSection } from './components/sections/ToneSection';
 import { useLocale } from './i18n/LocaleProvider';
-import type { StudioTab } from './i18n/copy';
-
-const STUDIO_TABS: StudioTab[] = ['main', 'sequences'];
+import { SECTIONS, type SectionId } from './sections';
 
 /** The level a coupled function jumps to when auto-engaged from silence. */
 const AUTO_ON_VALUE = {
@@ -46,10 +40,17 @@ const SLIDER_BY_KEY = Object.fromEntries(
   SLIDERS.map((spec) => [spec.key, spec]),
 ) as Record<SliderKey, SliderSpec>;
 
+/**
+ * The active deck section, kept in module scope so it survives start-screen
+ * round trips (the studio unmounts entirely). Deliberately not persisted —
+ * a page reload starts back at the carrier.
+ */
+let lastSection: SectionId = 'carrier';
+
 export default function App() {
   const mt = useMicroTube();
   const { copy } = useLocale();
-  const [activeTab, setActiveTab] = useState<StudioTab>('main');
+  const [section, setSection] = useState<SectionId>(lastSection);
   const [localPresets, setLocalPresets] = useState(loadLocalPresets);
 
   if (mt.status !== 'running') {
@@ -92,6 +93,11 @@ export default function App() {
 
   const { state } = mt;
   const accent = EEG_BANDS[eegBandIndex(state.beatFreq)].color;
+
+  const selectSection = (id: SectionId) => {
+    lastSection = id;
+    setSection(id);
+  };
 
   const setParam = <K extends keyof MicroTubeState>(
     key: K,
@@ -137,6 +143,44 @@ export default function App() {
     });
   };
 
+  const sectionBody: Record<SectionId, () => JSX.Element> = {
+    carrier: () => <CarrierSection slider={paramSlider} />,
+    tone: () => (
+      <ToneSection
+        state={state}
+        slider={paramSlider}
+        onTimbre={(v: Timbre) => setParam('timbre', v)}
+      />
+    ),
+    mist: () => (
+      <MistSection
+        state={state}
+        slider={paramSlider}
+        onOption={(v: MistType) => setFeatureOption('mistType', v, 'noiseLevel')}
+        onDisable={() => disableFeature('noiseLevel')}
+      />
+    ),
+    emergence: () => (
+      <EmergenceSection
+        state={state}
+        slider={paramSlider}
+        onOption={(v: SpawnMode) => setFeatureOption('spawnMode', v, 'emergence')}
+        onDisable={() => disableFeature('emergence')}
+      />
+    ),
+    drift: () => (
+      <DriftSection
+        state={state}
+        slider={paramSlider}
+        onOption={(v: Direction) =>
+          setFeatureOption('shepardDirection', v, 'shepard')
+        }
+        onDisable={() => disableFeature('shepard')}
+      />
+    ),
+    sequences: () => <SequencesSection mt={mt} />,
+  };
+
   return (
     <div className="app">
       <div className="studio-shell" style={{ ['--accent' as string]: accent }}>
@@ -146,154 +190,27 @@ export default function App() {
           onPresetsChange={setLocalPresets}
         />
 
-        <StripDashboard beatFreq={state.beatFreq} onApplyPreset={applyPreset} />
+        <BandChips beatFreq={state.beatFreq} onApplyPreset={applyPreset} />
 
-        <nav className="studio-tabs" aria-label={copy.studioSectionsLabel}>
-          {STUDIO_TABS.map((tab) => (
-            <button
-              key={tab}
-              className={`studio-tab${activeTab === tab ? ' active' : ''}`}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              onContextMenu={(e) => e.preventDefault()}
-              aria-current={activeTab === tab ? 'page' : undefined}
+        <main className="deck-stage">
+          {SECTIONS.map(({ id, isOn }) => (
+            <section
+              key={id}
+              className={`deck-section ${id}-section${
+                id === section ? ' active' : ''
+              }${isOn && !isOn(state, mt.sequence.active) ? ' off' : ''}`}
             >
-              <span>{copy.tabs[tab].label}</span>
-              <small>{copy.tabs[tab].caption}</small>
-            </button>
+              {sectionBody[id]()}
+            </section>
           ))}
-        </nav>
-
-        <main className="studio-stage">
-          {activeTab === 'main' && (
-            <div className="tab-panel main-tab">
-              <Panel
-                id="carrier"
-                icon={RadioTower}
-                title={copy.panels.carrier}
-                className="slider-group carrier-panel"
-              >
-                <div className="slider-stack">
-                  {paramSlider('baseFreq')}
-                  {paramSlider('beatFreq')}
-                </div>
-              </Panel>
-
-              <Panel
-                id="tone"
-                icon={Flame}
-                title={copy.panels.tone}
-                className="tone-panel"
-              >
-                <Segmented
-                  caption={copy.modes.captions.timbre}
-                  options={copy.modes.timbres}
-                  value={state.timbre}
-                  onChange={(v) => setParam('timbre', v as Timbre)}
-                />
-                {paramSlider('harmonics')}
-              </Panel>
-
-              <Panel
-                id="mist"
-                icon={CloudFog}
-                title={copy.panels.mist}
-                className={`feature-panel mist-panel${
-                  state.noiseLevel > 0 ? '' : ' off'
-                }`}
-              >
-                <Segmented
-                  caption={copy.modes.captions.mist}
-                  options={copy.modes.mists}
-                  value={state.mistType}
-                  enabled={state.noiseLevel > 0}
-                  statusLabels={copy.modes.status}
-                  onChange={(v) =>
-                    setFeatureOption('mistType', v as MistType, 'noiseLevel')
-                  }
-                  onDisable={() => disableFeature('noiseLevel')}
-                />
-                {state.noiseLevel > 0 && (
-                  <div className="feature-controls">
-                    {paramSlider('noiseLevel')}
-                  </div>
-                )}
-              </Panel>
-
-              <Panel
-                id="emergence"
-                icon={Sparkles}
-                title={copy.panels.emergence}
-                className={`feature-panel emergence-panel${
-                  state.emergence > 0 ? '' : ' off'
-                }`}
-              >
-                <Segmented
-                  caption={copy.modes.captions.spawn}
-                  options={copy.modes.spawnModes}
-                  value={state.spawnMode}
-                  enabled={state.emergence > 0}
-                  statusLabels={copy.modes.status}
-                  onChange={(v) =>
-                    setFeatureOption('spawnMode', v as SpawnMode, 'emergence')
-                  }
-                  onDisable={() => disableFeature('emergence')}
-                />
-                {state.emergence > 0 && (
-                  <div className="feature-controls">
-                    {paramSlider('emergence')}
-                    {paramSlider('gravity')}
-                  </div>
-                )}
-              </Panel>
-
-              <Panel
-                id="drift"
-                icon={Waves}
-                title={copy.panels.drift}
-                className={`feature-panel drift-panel${
-                  state.shepard > 0 ? '' : ' off'
-                }`}
-              >
-                <Segmented
-                  caption={copy.modes.captions.direction}
-                  options={copy.modes.directions}
-                  value={state.shepardDirection}
-                  enabled={state.shepard > 0}
-                  statusLabels={copy.modes.status}
-                  onChange={(v) =>
-                    setFeatureOption(
-                      'shepardDirection',
-                      v as Direction,
-                      'shepard',
-                    )
-                  }
-                  onDisable={() => disableFeature('shepard')}
-                />
-                {state.shepard > 0 && (
-                  <div className="feature-controls drift-controls">
-                    {paramSlider('shepardBase')}
-                    {paramSlider('shepard')}
-                  </div>
-                )}
-              </Panel>
-            </div>
-          )}
-
-          {activeTab === 'sequences' && (
-            <div className="tab-panel sequences-tab">
-              <Panel
-                id="sequences"
-                icon={Orbit}
-                title={copy.tabs.sequences.label}
-                className="sequences-shell-panel"
-                defaultOpen
-              >
-                <SequencesPanel mt={mt} />
-              </Panel>
-            </div>
-          )}
         </main>
+
+        <SectionBar
+          active={section}
+          onSelect={selectSection}
+          state={state}
+          sequenceActive={mt.sequence.active}
+        />
 
         <footer className="studio-footer">
           <a

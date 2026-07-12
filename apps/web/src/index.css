@@ -113,10 +113,10 @@ svg {
 
 .studio-shell {
   position: relative;
-  min-height: calc(100dvh - 24px - var(--safe-t) - var(--safe-b));
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  height: calc(100dvh - 24px - var(--safe-t) - var(--safe-b));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
   padding: 10px;
   border: 1px solid rgba(206, 212, 228, 0.12);
   border-radius: 24px;
@@ -335,29 +335,23 @@ svg {
   transition: width 0.9s linear, background 0.6s var(--ease);
 }
 
-/* --- persistent strip ----------------------------------------------------- */
+/* --- band chips ------------------------------------------------------------ */
 
-.strip {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.preset-bands {
+.band-chips {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
 }
 
-.preset-band {
+.band-chip {
   -webkit-appearance: none;
   appearance: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
-  padding: 10px 3px 9px;
+  padding: 6px 2px 5px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: rgba(18, 23, 40, 0.46);
@@ -370,35 +364,36 @@ svg {
     transform 0.25s var(--ease);
 }
 
-.preset-band:hover {
+.band-chip:hover {
   opacity: 0.88;
   border-color: var(--line-bright);
 }
 
-.preset-band:active {
+.band-chip:active {
   transform: translateY(1px) scale(0.97);
 }
 
-.preset-band.in-band {
+.band-chip.in-band {
   opacity: 1;
   border-color: color-mix(in srgb, currentColor 40%, var(--line));
 }
 
-.preset-band.on {
+.band-chip.on {
   opacity: 1;
   border-color: currentColor;
   background: color-mix(in srgb, currentColor 17%, rgba(18, 23, 40, 0.74));
-  box-shadow: 0 0 26px color-mix(in srgb, currentColor 30%, transparent);
-  transform: translateY(-2px);
+  box-shadow: 0 0 22px color-mix(in srgb, currentColor 28%, transparent);
 }
 
-.pb-greek {
-  font-size: 20px;
-  line-height: 1;
+.bc-greek {
+  font-size: 17px;
+  line-height: 1.1;
   font-weight: 700;
 }
 
-.pb-name {
+/* Preset names appear once there is room for them (>=760px). */
+.bc-name {
+  display: none;
   max-width: 100%;
   color: var(--text);
   font-size: 10px;
@@ -408,213 +403,171 @@ svg {
   overflow-wrap: anywhere;
 }
 
-.pb-meta {
+.bc-hz {
   overflow: hidden;
   max-width: 100%;
   color: var(--text-faint);
-  font-size: 8px;
+  font-size: 8.5px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color 0.4s var(--ease);
 }
 
-.preset-band.on .pb-meta {
+.band-chip.on .bc-hz {
   color: color-mix(in srgb, currentColor 62%, var(--text-soft));
 }
 
-/* --- tabs ----------------------------------------------------------------- */
+/* --- deck & sections -------------------------------------------------------- */
 
-.studio-tabs {
-  position: sticky;
-  top: calc(var(--topbar-h) + 6px);
-  z-index: 5;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(7, 10, 20, 0.92);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(16px);
-}
-
-.studio-tab {
-  -webkit-appearance: none;
-  appearance: none;
-  min-width: 0;
-  min-height: 56px;
-  padding: 10px 8px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--text-dim);
-  text-align: center;
-  transition: border-color 0.25s var(--ease), background 0.25s var(--ease),
-    color 0.25s var(--ease);
-}
-
-.studio-tab span,
-.studio-tab small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.studio-tab span {
-  font-size: 15.5px;
-  font-weight: 780;
-  letter-spacing: 0.02em;
-}
-
-.studio-tab small {
-  margin-top: 3px;
-  font-size: 10px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.studio-tab:hover {
-  border-color: var(--line);
-  color: var(--text-soft);
-}
-
-.studio-tab.active {
-  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
-  color: var(--text);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent),
-      rgba(210, 145, 255, 0.1)),
-    rgba(18, 23, 40, 0.85);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.09),
-    0 0 26px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.studio-tab.active small {
-  color: color-mix(in srgb, var(--accent) 55%, var(--text-soft));
-}
-
-/* --- stage / panels ------------------------------------------------------- */
-
-.studio-stage,
-.tab-panel,
-.main-tab,
-.sequences-tab {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.tab-panel {
-  animation: panel-rise 0.36s var(--ease) both;
-}
-
-.panel {
+/* The stage shows exactly one section on mobile; all of them on desktop. */
+.deck-stage {
+  position: relative;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 14px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.038), transparent 44%),
     var(--surface);
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.05),
     0 18px 40px rgba(0, 0, 0, 0.26);
+  overflow: hidden;
 }
 
-.collapsible {
-  cursor: pointer;
+.deck-section {
+  display: none;
 }
 
-/* The title remains the keyboard/ARIA toggle; pointer taps can hit the panel. */
-.panel-title {
+.deck-section.active {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  height: 100%;
+  min-height: 0;
+  animation: section-enter 0.18s var(--ease) both;
+}
+
+.section-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--text-dim);
   font-size: 11.5px;
   font-weight: 780;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  text-align: left;
-  cursor: pointer;
-  transition: color 0.25s var(--ease);
 }
 
-.panel-title:hover {
-  color: var(--text-soft);
-}
-
-.panel-title svg {
+.section-head svg {
   flex: 0 0 auto;
   color: var(--accent);
   transition: color 0.6s var(--ease);
 }
 
-.panel-title span {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.panel-title small {
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: none;
-  color: var(--text-faint);
-}
-
-.panel-chevron {
-  flex: 0 0 auto;
+.deck-section.off .section-head svg {
   color: var(--text-dim);
-  transition: transform 0.34s var(--ease), color 0.25s var(--ease);
 }
 
-.collapsible.open .panel-chevron,
-.panel-title:hover .panel-chevron {
-  color: var(--accent);
+/* The sequences list is the one deck surface allowed to scroll internally. */
+.sequences-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 -4px;
+  padding: 0 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.collapsible.open .panel-chevron {
-  transform: rotate(180deg);
+/* --- section dock ------------------------------------------------------------ */
+
+.dock {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(7, 10, 20, 0.92);
+  box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.3);
 }
 
-/* Panel bodies are mounted only while open; use an open-only reveal instead
-   of animating height/grid tracks, which is expensive on mobile layouts. */
-.panel-body {
-  overflow: clip;
-  contain: layout paint;
-  cursor: default;
-}
-
-.panel-body-inner {
+.dock-tab {
+  -webkit-appearance: none;
+  appearance: none;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 0;
-  padding-top: 14px;
-  transform-origin: top center;
-  animation: panel-body-enter 0.2s var(--ease) both;
-  will-change: opacity, transform;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 7px 2px 5px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-dim);
+  touch-action: manipulation;
+  transition: border-color 0.25s var(--ease), background 0.25s var(--ease),
+    color 0.25s var(--ease);
+}
+
+.dock-tab:hover {
+  color: var(--text-soft);
+}
+
+.dock-tab.active {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 11%, rgba(18, 23, 40, 0.85));
+  color: var(--text);
+}
+
+.dock-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.dock-tab.active .dock-icon svg {
+  color: var(--accent);
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 42%, transparent));
+}
+
+/* Feature on/off at a glance, from any section. */
+.dock-dot {
+  position: absolute;
+  top: -2px;
+  right: -6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(132, 148, 184, 0.32);
+  transition: background 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+
+.dock-dot.on {
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+
+.dock-dot.pulse {
+  animation: dock-pulse 1.6s ease-in-out infinite;
+}
+
+.dock-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 740;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* --- buttons ---------------------------------------------------------------- */
 
 .btn,
-.seg,
-.studio-tab {
+.seg {
   -webkit-appearance: none;
   appearance: none;
 }
@@ -800,46 +753,13 @@ svg {
 
 /* --- sliders -------------------------------------------------------------- */
 
-.slider-group {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.038), transparent 36%),
-    var(--surface);
-}
-
-.slider-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.tone-panel .panel-body-inner {
-  gap: 14px;
-}
-
-.feature-panel {
-  transition: opacity 0.28s var(--ease), filter 0.28s var(--ease),
-    border-color 0.28s var(--ease), background 0.28s var(--ease);
-}
-
-.feature-panel.off {
-  opacity: 0.72;
-  filter: saturate(0.78);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.026), transparent 36%),
-    color-mix(in srgb, var(--surface) 82%, #050814);
-}
-
-.feature-panel.off .panel-title svg {
-  color: var(--text-dim);
-}
-
 .feature-controls {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
   padding-top: 2px;
-  animation: panel-body-enter 0.2s var(--ease) both;
+  animation: section-enter 0.2s var(--ease) both;
 }
 
 /* A slim single-row slider: the whole row is the track, the label rides on
@@ -1176,9 +1096,15 @@ svg {
 }
 
 .segmented {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  display: flex;
   gap: 6px;
+}
+
+.segmented .seg {
+  flex: 1 1 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .seg {
@@ -1219,12 +1145,6 @@ svg {
 }
 
 /* --- sequences ------------------------------------------------------------ */
-
-.sequences-shell-panel {
-  background:
-    linear-gradient(150deg, rgba(210, 145, 255, 0.09), transparent 52%),
-    var(--surface);
-}
 
 .sequences-panel {
   display: flex;
@@ -1486,6 +1406,7 @@ svg {
 /* --- footer --------------------------------------------------------------- */
 
 .studio-footer {
+  display: none;
   margin-top: auto;
   padding: 4px 6px 2px;
   text-align: center;
@@ -1785,50 +1706,16 @@ svg {
 
 /* --- responsive ----------------------------------------------------------- */
 
+/* Interim wide-screen treatment; the full desktop grid lands with the
+   landscape/desktop pass. */
 @media (min-width: 760px) {
-  .app {
-    padding:
-      calc(20px + var(--safe-t))
-      calc(20px + var(--safe-r))
-      calc(20px + var(--safe-b))
-      calc(20px + var(--safe-l));
+  .bc-name {
+    display: block;
   }
 
-  .studio-shell {
-    min-height: calc(100dvh - 40px - var(--safe-t) - var(--safe-b));
-    padding: 16px;
-    gap: 14px;
-  }
-
-  .studio-tabs {
-    max-width: 520px;
-    margin: 0 auto;
-  }
-
-  .tab-panel {
-    width: min(100%, 820px);
-    margin: 0 auto;
-  }
-
-  .main-tab {
-    display: grid;
-    align-items: start;
-  }
-
-  .sequences-tab {
-    width: min(100%, 820px);
-    margin: 0 auto;
-  }
-
-  .sequences-shell-panel {
-    grid-column: 1 / -1;
-  }
-
-  .slider-stack,
-  .drift-controls {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px 16px;
+  .band-chip {
+    gap: 3px;
+    padding: 10px 3px 9px;
   }
 }
 
@@ -1852,20 +1739,17 @@ svg {
     height: 36px;
   }
 
-  .studio-tab span {
-    font-size: 14px;
+  .deck-stage {
+    padding: 11px;
   }
 
-  .panel {
-    padding: 13px;
-  }
-
-  .preset-band {
-    padding: 9px 2px 8px;
-  }
-
-  .pb-name {
+  .dock-label {
     font-size: 9px;
+  }
+
+  .seg {
+    font-size: 11.5px;
+    padding-inline: 4px;
   }
 }
 
@@ -1906,10 +1790,10 @@ svg {
   }
 }
 
-@keyframes panel-rise {
+@keyframes section-enter {
   from {
     opacity: 0;
-    transform: translateY(9px);
+    transform: translateY(6px);
   }
 
   to {
@@ -1918,15 +1802,14 @@ svg {
   }
 }
 
-@keyframes panel-body-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
+@keyframes dock-pulse {
+  0%,
+  100% {
+    opacity: 1;
   }
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  50% {
+    opacity: 0.45;
   }
 }
 

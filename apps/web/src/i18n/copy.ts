@@ -1,10 +1,10 @@
-import type { EegBandId, SliderGroupId, SliderKey } from '../audio/params';
+import type { EegBandId, SliderKey } from '../audio/params';
 import type { SequenceId } from '../audio/sequences';
+import type { SectionId } from '../sections';
 
 export const LOCALES = ['en', 'hr'] as const;
 
 export type Locale = (typeof LOCALES)[number];
-export type StudioTab = 'main' | 'sequences';
 
 export interface LanguageOption {
   locale: Locale;
@@ -23,9 +23,10 @@ type PresetTuple = readonly [
   PresetText,
   PresetText,
 ];
-interface LabelCaption {
+interface SectionText {
   label: string;
-  caption: string;
+  /** Compact form for the bottom dock's tab label. */
+  short: string;
 }
 
 interface SliderText {
@@ -74,7 +75,6 @@ export interface Copy {
     timer: string;
     presets: string;
   };
-  tabs: Record<StudioTab, LabelCaption>;
   studioSectionsLabel: string;
   timer: {
     autoStop: string;
@@ -83,13 +83,7 @@ export interface Copy {
     minutesAbbrev: string;
     minutes: string;
   };
-  panels: {
-    carrier: string;
-    tone: string;
-    mist: string;
-    emergence: string;
-    drift: string;
-  };
+  sections: Record<SectionId, SectionText>;
   localPresets: {
     saveCurrent: string;
     empty: string;
@@ -136,7 +130,6 @@ export interface Copy {
     apply: string;
     cancel: string;
   };
-  sliderGroups: Record<SliderGroupId, LabelCaption>;
   bands: Record<EegBandId, BandText>;
   presets: PresetTuple;
   sequences: {
@@ -185,10 +178,6 @@ export const COPY: Record<Locale, Copy> = {
       timer: 'Auto-stop timer',
       presets: 'Presets',
     },
-    tabs: {
-      main: { label: 'Main', caption: 'controls' },
-      sequences: { label: 'Sequences', caption: 'timed' },
-    },
     studioSectionsLabel: 'Studio sections',
     timer: {
       autoStop: 'Auto-stop',
@@ -197,12 +186,13 @@ export const COPY: Record<Locale, Copy> = {
       minutesAbbrev: 'min',
       minutes: 'auto-stop minutes',
     },
-    panels: {
-      carrier: 'Carrier',
-      tone: 'Tone',
-      mist: 'Mist',
-      emergence: 'Emergence',
-      drift: 'Drift',
+    sections: {
+      carrier: { label: 'Carrier', short: 'Carrier' },
+      tone: { label: 'Tone', short: 'Tone' },
+      mist: { label: 'Mist', short: 'Mist' },
+      emergence: { label: 'Emergence', short: 'Emerge' },
+      drift: { label: 'Drift', short: 'Drift' },
+      sequences: { label: 'Sequences', short: 'Seqs' },
     },
     localPresets: {
       saveCurrent: 'Save current sound',
@@ -286,11 +276,6 @@ export const COPY: Record<Locale, Copy> = {
       editValue: 'enter exact value',
       apply: 'OK',
       cancel: 'Cancel',
-    },
-    sliderGroups: {
-      carrier: { label: 'Carrier', caption: 'the binaural pair' },
-      texture: { label: 'Texture', caption: 'tone & atmosphere' },
-      motion: { label: 'Motion', caption: 'generative movement' },
     },
     bands: {
       delta: { name: 'Delta', blurb: 'sleep' },
@@ -406,10 +391,6 @@ export const COPY: Record<Locale, Copy> = {
       timer: 'Auto-stop tajmer',
       presets: 'Preseti',
     },
-    tabs: {
-      main: { label: 'Glavno', caption: 'kontrole' },
-      sequences: { label: 'Sekvence', caption: 'vremenski' },
-    },
     studioSectionsLabel: 'Dijelovi studija',
     timer: {
       autoStop: 'Auto-stop',
@@ -418,12 +399,13 @@ export const COPY: Record<Locale, Copy> = {
       minutesAbbrev: 'min',
       minutes: 'minute auto-stop tajmera',
     },
-    panels: {
-      carrier: 'Nositelj',
-      tone: 'Ton',
-      mist: 'Maglica',
-      emergence: 'Emergencija',
-      drift: 'Klizanje',
+    sections: {
+      carrier: { label: 'Nositelj', short: 'Nositelj' },
+      tone: { label: 'Ton', short: 'Ton' },
+      mist: { label: 'Maglica', short: 'Maglica' },
+      emergence: { label: 'Emergencija', short: 'Emerg.' },
+      drift: { label: 'Klizanje', short: 'Kliz.' },
+      sequences: { label: 'Sekvence', short: 'Sekv.' },
     },
     localPresets: {
       saveCurrent: 'Spremi trenutni zvuk',
@@ -507,11 +489,6 @@ export const COPY: Record<Locale, Copy> = {
       editValue: 'unesi točnu vrijednost',
       apply: 'U redu',
       cancel: 'Odustani',
-    },
-    sliderGroups: {
-      carrier: { label: 'Nositelj', caption: 'binauralni par' },
-      texture: { label: 'Tekstura', caption: 'ton i atmosfera' },
-      motion: { label: 'Kretanje', caption: 'generativni pomak' },
     },
     bands: {
       delta: { name: 'Delta', blurb: 'san' },
