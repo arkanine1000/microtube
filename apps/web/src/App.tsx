@@ -19,6 +19,7 @@ import { HeaderBar } from './components/HeaderBar';
 import { LanguageSelector } from './components/LanguageSelector';
 import { SectionBar } from './components/SectionBar';
 import { SlimSlider } from './components/SlimSlider';
+import { WaveformVisualizer } from './components/WaveformVisualizer';
 import { DriftSection } from './components/sections/DriftSection';
 import { EmergenceSection } from './components/sections/EmergenceSection';
 import { MistSection } from './components/sections/MistSection';
@@ -219,6 +220,8 @@ export default function App() {
             </section>
           ))}
         </main>
+
+        <WaveformVisualizer state={state} accent={accent} />
 
         <SectionBar
           active={section}

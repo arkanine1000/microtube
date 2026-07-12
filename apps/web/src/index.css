@@ -116,7 +116,7 @@ svg {
   isolation: isolate;
   height: calc(100dvh - 24px - var(--safe-t) - var(--safe-b));
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 10px;
   padding: 10px;
   border: 1px solid rgba(206, 212, 228, 0.12);
@@ -511,6 +511,27 @@ svg {
   padding: 0 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* --- waveform ------------------------------------------------------------- */
+
+.waveform-strip {
+  height: 46px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.032), transparent 58%),
+    color-mix(in srgb, var(--accent) 6%, rgba(7, 10, 20, 0.88));
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.04),
+    0 10px 28px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.waveform-strip canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* --- section dock ------------------------------------------------------------ */
@@ -1760,6 +1781,10 @@ svg {
     display: none;
   }
 
+  .waveform-strip {
+    display: none;
+  }
+
   .deck-stage {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1867,6 +1892,10 @@ svg {
 
   .deck-stage {
     padding: 9px 12px;
+  }
+
+  .waveform-strip {
+    height: 34px;
   }
 
   .deck-section.active {
