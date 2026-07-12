@@ -132,16 +132,16 @@ svg {
   transition: --accent 0.6s var(--ease);
 }
 
-/* --- sticky transport bar ------------------------------------------------- */
+/* --- header ---------------------------------------------------------------- */
 
-.topbar {
+.header {
   position: sticky;
   top: 0;
   z-index: 6;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-height: var(--topbar-h);
   padding: 9px 11px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
@@ -154,7 +154,7 @@ svg {
   transition: border-color 0.6s var(--ease), background 0.6s var(--ease);
 }
 
-.topbar-play {
+.header-play {
   width: 48px;
   height: 48px;
   display: grid;
@@ -172,24 +172,24 @@ svg {
     filter 0.2s var(--ease), border-color 0.6s var(--ease), background 0.6s var(--ease);
 }
 
-.topbar-play svg {
+.header-play svg {
   margin-left: 1px;
   transition: margin 0.2s var(--ease);
 }
 
-.topbar-play[data-playing='true'] svg {
+.header-play[data-playing='true'] svg {
   margin-left: 0;
 }
 
-.topbar-play:hover {
+.header-play:hover {
   filter: brightness(1.08);
 }
 
-.topbar-play:active {
+.header-play:active {
   transform: scale(0.93);
 }
 
-.topbar-id {
+.header-id {
   appearance: none;
   display: block;
   min-width: 0;
@@ -200,72 +200,119 @@ svg {
   text-align: left;
 }
 
-.topbar-brand {
-  font-size: 19px;
+.header-brand {
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.06em;
   line-height: 1.1;
 }
 
-.topbar-brand span {
+.header-brand span {
   color: var(--accent);
   text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 50%, transparent);
   transition: color 0.6s var(--ease), text-shadow 0.6s var(--ease);
 }
 
-.topbar-status {
-  margin-top: 1px;
+.header-status {
+  margin-top: 2px;
+  overflow: hidden;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-faint);
   transition: color 0.4s var(--ease);
 }
 
-.topbar-status[data-playing='true'] {
+.header-status[data-playing='true'] {
   color: color-mix(in srgb, var(--accent) 70%, var(--text-dim));
 }
 
-.topbar-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  text-align: right;
-}
-
-.topbar-band {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 3px 9px;
-  border: 1px solid color-mix(in srgb, currentColor 36%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 14%, rgba(10, 14, 26, 0.7));
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  transition: color 0.5s var(--ease), border-color 0.5s var(--ease),
-    background 0.5s var(--ease);
-}
-
-.topbar-band-greek {
-  font-size: 16px;
+.header-band {
+  font-size: 11px;
   font-weight: 800;
-}
-
-.topbar-timer {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  /* Keep the lowercase greek band glyph (α, not Α) despite the caps line. */
+  text-transform: none;
   font-variant-numeric: tabular-nums;
+  transition: color 0.5s var(--ease);
 }
 
-/* Auto-stop session countdown — a hairline along the topbar's lower edge. */
-.topbar-progress {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Static on purpose — popovers anchor to the header itself (the nearest
+   positioned ancestor via position: sticky) so they never overflow the shell. */
+.header-pop-wrap {
+  display: contents;
+}
+
+.header-icon-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(14, 19, 34, 0.72);
+  color: var(--text-soft);
+  touch-action: manipulation;
+  transition: border-color 0.18s var(--ease), color 0.18s var(--ease),
+    background 0.18s var(--ease), transform 0.16s var(--ease);
+}
+
+.header-icon-btn:hover {
+  border-color: var(--line-bright);
+  color: var(--text);
+}
+
+.header-icon-btn:active {
+  transform: translateY(1px);
+}
+
+.header-icon-btn.open,
+.header-icon-btn.armed {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+  background: color-mix(in srgb, var(--accent) 11%, rgba(14, 19, 34, 0.8));
+  color: var(--accent);
+}
+
+.header-countdown {
+  font-size: 12px;
+  font-weight: 780;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Anchored dropdown for the header's volume / timer quick controls. */
+.popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 4px;
+  z-index: 12;
+  width: min(310px, calc(100vw - 56px));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: var(--radius);
+  padding: 13px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 48%),
+    rgba(7, 10, 20, 0.97);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px rgba(255, 255, 255, 0.05);
+  animation: popover-enter 0.16s var(--ease) both;
+}
+
+/* Auto-stop session countdown — a hairline along the header's lower edge. */
+.header-progress {
   position: absolute;
   left: 12px;
   right: 12px;
@@ -276,7 +323,7 @@ svg {
   overflow: hidden;
 }
 
-.topbar-progress-fill {
+.header-progress-fill {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(
@@ -563,21 +610,9 @@ svg {
   will-change: opacity, transform;
 }
 
-/* --- transport ------------------------------------------------------------ */
-
-.transport-panel {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 56%),
-    var(--surface);
-  transition: background 0.6s var(--ease);
-}
-
-.transport-vol {
-  min-width: 0;
-}
+/* --- buttons ---------------------------------------------------------------- */
 
 .btn,
-.nudge,
 .seg,
 .studio-tab {
   -webkit-appearance: none;
@@ -646,12 +681,6 @@ svg {
 }
 
 /* --- local presets -------------------------------------------------------- */
-
-.presets-panel {
-  background:
-    linear-gradient(150deg, rgba(250, 204, 92, 0.075), transparent 54%),
-    var(--surface);
-}
 
 .local-presets {
   display: flex;
@@ -1039,49 +1068,18 @@ svg {
   }
 }
 
-.nudge {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 32px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
-    var(--surface-strong);
-  color: var(--text-soft);
-  touch-action: manipulation;
-  transition: border-color 0.18s var(--ease), color 0.18s var(--ease),
-    transform 0.16s var(--ease), background 0.18s var(--ease);
-}
-
-.nudge:hover {
-  border-color: var(--line-bright);
-  color: var(--text);
-}
-
-.nudge:active {
-  transform: translateY(1px) scale(0.95);
-}
-
 /* --- timer ---------------------------------------------------------------- */
-
-.timer-controls,
-.timer-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
 .timer-block {
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding-top: 13px;
-  border-top: 1px solid var(--line);
+  gap: 12px;
 }
 
 .timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   justify-content: space-between;
 }
 
@@ -1110,21 +1108,6 @@ svg {
 
 .timer-readout.fired {
   color: var(--danger);
-}
-
-.timer-range {
-  min-width: 0;
-  flex: 1;
-  height: 4px;
-  accent-color: var(--accent);
-}
-
-.timer-minutes {
-  min-width: 56px;
-  color: var(--text-dim);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 /* --- modes / segmented ---------------------------------------------------- */
@@ -1417,6 +1400,23 @@ svg {
 
 .modal-content {
   padding-top: 14px;
+}
+
+/* Bottom-sheet variant — the header presets surface slides up from the
+   bottom edge and keeps the thumb close to its controls. */
+.modal-layer.sheet {
+  place-items: end center;
+  padding-bottom: 0;
+}
+
+.modal-layer.sheet .modal-card {
+  width: min(100%, 520px);
+  max-height: min(78dvh, 640px);
+  overflow-y: auto;
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding-bottom: calc(16px + var(--safe-b));
+  animation: sheet-rise 0.24s var(--ease) both;
 }
 
 .preset-form,
@@ -1838,21 +1838,18 @@ svg {
     border-radius: 20px;
   }
 
-  .topbar-brand {
-    font-size: 17px;
+  .header-brand {
+    font-size: 16px;
   }
 
-  .topbar-status {
-    font-size: 9.5px;
-    letter-spacing: 0.18em;
+  .header-status {
+    font-size: 9px;
+    letter-spacing: 0.1em;
   }
 
-  .topbar-band {
-    font-size: 11px;
-  }
-
-  .topbar-band-greek {
-    font-size: 14px;
+  .header-icon-btn {
+    min-width: 36px;
+    height: 36px;
   }
 
   .studio-tab span {
@@ -1884,6 +1881,30 @@ svg {
 }
 
 /* --- keyframes ------------------------------------------------------------ */
+
+@keyframes popover-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheet-rise {
+  from {
+    opacity: 0.4;
+    transform: translateY(26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 @keyframes panel-rise {
   from {

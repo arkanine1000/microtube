@@ -62,7 +62,7 @@ export interface Copy {
     headphones: string;
     errorPrefix: string;
   };
-  topbar: {
+  header: {
     play: string;
     pause: string;
     signalActive: string;
@@ -70,6 +70,9 @@ export interface Copy {
     timeRemaining: string;
     left: string;
     backToStart: string;
+    volume: string;
+    timer: string;
+    presets: string;
   };
   tabs: Record<StudioTab, LabelCaption>;
   studioSectionsLabel: string;
@@ -78,13 +81,9 @@ export interface Copy {
     off: string;
     stopped: string;
     minutesAbbrev: string;
-    decrease: string;
-    increase: string;
     minutes: string;
   };
   panels: {
-    transport: string;
-    presets: string;
     carrier: string;
     tone: string;
     mist: string;
@@ -174,7 +173,7 @@ export const COPY: Record<Locale, Copy> = {
         'Headphones recommended. The binaural effect lives in the gap between your ears.',
       errorPrefix: 'Engine failed to start:',
     },
-    topbar: {
+    header: {
       play: 'play',
       pause: 'pause',
       signalActive: 'signal active',
@@ -182,6 +181,9 @@ export const COPY: Record<Locale, Copy> = {
       timeRemaining: 'session time remaining',
       left: 'left',
       backToStart: 'return to start screen',
+      volume: 'Master volume',
+      timer: 'Auto-stop timer',
+      presets: 'Presets',
     },
     tabs: {
       main: { label: 'Main', caption: 'controls' },
@@ -193,13 +195,9 @@ export const COPY: Record<Locale, Copy> = {
       off: 'off',
       stopped: 'stopped',
       minutesAbbrev: 'min',
-      decrease: 'decrease auto-stop timer',
-      increase: 'increase auto-stop timer',
       minutes: 'auto-stop minutes',
     },
     panels: {
-      transport: 'Transport',
-      presets: 'Presets',
       carrier: 'Carrier',
       tone: 'Tone',
       mist: 'Mist',
@@ -396,7 +394,7 @@ export const COPY: Record<Locale, Copy> = {
         'Preporučene su slušalice. Binauralni učinak nastaje u razlici između lijevog i desnog uha.',
       errorPrefix: 'Zvučni pogon se nije pokrenuo:',
     },
-    topbar: {
+    header: {
       play: 'pokreni',
       pause: 'pauziraj',
       signalActive: 'signal aktivan',
@@ -404,6 +402,9 @@ export const COPY: Record<Locale, Copy> = {
       timeRemaining: 'preostalo vrijeme sesije',
       left: 'preostalo',
       backToStart: 'povratak na početni zaslon',
+      volume: 'Glavna glasnoća',
+      timer: 'Auto-stop tajmer',
+      presets: 'Preseti',
     },
     tabs: {
       main: { label: 'Glavno', caption: 'kontrole' },
@@ -415,13 +416,9 @@ export const COPY: Record<Locale, Copy> = {
       off: 'isključeno',
       stopped: 'zaustavljeno',
       minutesAbbrev: 'min',
-      decrease: 'smanji auto-stop tajmer',
-      increase: 'povećaj auto-stop tajmer',
       minutes: 'minute auto-stop tajmera',
     },
     panels: {
-      transport: 'Kontrole',
-      presets: 'Preseti',
       carrier: 'Nositelj',
       tone: 'Ton',
       mist: 'Maglica',

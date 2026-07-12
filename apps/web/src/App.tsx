@@ -1,12 +1,8 @@
 import {
-  Bookmark,
   CloudFog,
   Flame,
-  Gauge,
   Headphones,
-  Minus,
   Orbit,
-  Plus,
   RadioTower,
   Sparkles,
   Waves,
@@ -16,7 +12,6 @@ import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
   EEG_BANDS,
   SLIDERS,
-  VOLUME,
   eegBandIndex,
   type Direction,
   type MicroTubeState,
@@ -27,20 +22,14 @@ import {
   type Timbre,
 } from './audio/params';
 import type { Preset } from './audio/sequences';
-import {
-  TIMER_MAX_MINUTES,
-  TIMER_MIN_MINUTES,
-  TIMER_STEP_MINUTES,
-  useMicroTube,
-} from './audio/useMicroTube';
+import { useMicroTube } from './audio/useMicroTube';
+import { HeaderBar } from './components/HeaderBar';
 import { LanguageSelector } from './components/LanguageSelector';
-import { LocalPresetsPanel } from './components/LocalPresetsPanel';
 import { Panel } from './components/Panel';
 import { SlimSlider } from './components/SlimSlider';
 import { SequencesPanel } from './components/SequencesPanel';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
-import { TopBar } from './components/TopBar';
 import { useLocale } from './i18n/LocaleProvider';
 import type { StudioTab } from './i18n/copy';
 
@@ -56,17 +45,6 @@ const AUTO_ON_VALUE = {
 const SLIDER_BY_KEY = Object.fromEntries(
   SLIDERS.map((spec) => [spec.key, spec]),
 ) as Record<SliderKey, SliderSpec>;
-
-function formatClock(secs: number | null, offLabel: string): string {
-  if (secs === null) return offLabel;
-  const total = Math.max(0, Math.ceil(secs));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
-  const ss = String(s).padStart(2, '0');
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
 
 export default function App() {
   const mt = useMicroTube();
@@ -113,9 +91,6 @@ export default function App() {
   }
 
   const { state } = mt;
-  const timerLabel = mt.timer.fired
-    ? copy.timer.stopped
-    : formatClock(mt.timer.remainingSecs, copy.timer.off);
   const accent = EEG_BANDS[eegBandIndex(state.beatFreq)].color;
 
   const setParam = <K extends keyof MicroTubeState>(
@@ -127,7 +102,7 @@ export default function App() {
 
   const paramSlider = (key: SliderKey) => (
     <SlimSlider
-      spec={key === 'volume' ? VOLUME : SLIDER_BY_KEY[key]}
+      spec={SLIDER_BY_KEY[key]}
       label={copy.sliders[key].label}
       hint={copy.sliders[key].hint}
       value={state[key]}
@@ -165,12 +140,10 @@ export default function App() {
   return (
     <div className="app">
       <div className="studio-shell" style={{ ['--accent' as string]: accent }}>
-        <TopBar
-          playing={state.playing}
-          onToggle={mt.togglePlaying}
-          onBrandClick={mt.returnToStart}
-          beatFreq={state.beatFreq}
-          timer={mt.timer}
+        <HeaderBar
+          mt={mt}
+          presets={localPresets}
+          onPresetsChange={setLocalPresets}
         />
 
         <StripDashboard beatFreq={state.beatFreq} onApplyPreset={applyPreset} />
@@ -194,95 +167,6 @@ export default function App() {
         <main className="studio-stage">
           {activeTab === 'main' && (
             <div className="tab-panel main-tab">
-              <Panel
-                id="local-presets"
-                icon={Bookmark}
-                title={copy.panels.presets}
-                className="presets-panel"
-                defaultOpen={localPresets.length > 0}
-              >
-                <LocalPresetsPanel
-                  mt={mt}
-                  presets={localPresets}
-                  onPresetsChange={setLocalPresets}
-                />
-              </Panel>
-
-              <Panel
-                id="transport"
-                icon={Gauge}
-                title={copy.panels.transport}
-                className="transport-panel"
-              >
-                <div className="transport-vol">
-                  {paramSlider('volume')}
-                </div>
-                <div className="timer-block">
-                  <div className="timer-controls">
-                    <label className="timer-toggle">
-                      <input
-                        type="checkbox"
-                        checked={mt.timer.enabled}
-                        onChange={(e) =>
-                          mt.setTimerEnabled(e.currentTarget.checked)
-                        }
-                      />
-                      <span>{copy.timer.autoStop}</span>
-                    </label>
-                    <span
-                      className={`timer-readout${
-                        mt.timer.fired ? ' fired' : ''
-                      }`}
-                    >
-                      {timerLabel}
-                    </span>
-                  </div>
-                  <div className="timer-row">
-                    <button
-                      className="nudge"
-                      type="button"
-                      onClick={() =>
-                        mt.setTimerMinutes(
-                          mt.timer.minutes - TIMER_STEP_MINUTES,
-                        )
-                      }
-                      onContextMenu={(e) => e.preventDefault()}
-                      aria-label={copy.timer.decrease}
-                    >
-                      <Minus size={16} strokeWidth={2.6} />
-                    </button>
-                    <input
-                      className="timer-range"
-                      type="range"
-                      min={TIMER_MIN_MINUTES}
-                      max={TIMER_MAX_MINUTES}
-                      step={TIMER_STEP_MINUTES}
-                      value={mt.timer.minutes}
-                      onChange={(e) =>
-                        mt.setTimerMinutes(Number(e.currentTarget.value))
-                      }
-                      aria-label={copy.timer.minutes}
-                    />
-                    <button
-                      className="nudge"
-                      type="button"
-                      onClick={() =>
-                        mt.setTimerMinutes(
-                          mt.timer.minutes + TIMER_STEP_MINUTES,
-                        )
-                      }
-                      onContextMenu={(e) => e.preventDefault()}
-                      aria-label={copy.timer.increase}
-                    >
-                      <Plus size={16} strokeWidth={2.6} />
-                    </button>
-                    <span className="timer-minutes">
-                      {mt.timer.minutes} {copy.timer.minutesAbbrev}
-                    </span>
-                  </div>
-                </div>
-              </Panel>
-
               <Panel
                 id="carrier"
                 icon={RadioTower}
