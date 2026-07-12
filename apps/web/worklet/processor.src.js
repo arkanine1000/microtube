@@ -116,6 +116,7 @@ class MicrotubeProcessor extends AudioWorkletProcessor {
       case 'noiseLevel': e.set_noise_level(value); break;
       case 'harmonics': e.set_harmonics(value); break;
       case 'emergence': e.set_emergence(value); break;
+      case 'gravity': e.set_gravity(value); break;
       case 'shepard': e.set_shepard(value); break;
       case 'shepardBase': e.set_shepard_base_freq(value); break;
       case 'mistType': e.set_mist_type(value >>> 0); break;

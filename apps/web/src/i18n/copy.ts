@@ -1,10 +1,10 @@
-import type { EegBandId, SliderGroupId, SliderKey } from '../audio/params';
+import type { EegBandId, SliderKey } from '../audio/params';
 import type { SequenceId } from '../audio/sequences';
+import type { SectionId } from '../sections';
 
 export const LOCALES = ['en', 'hr'] as const;
 
 export type Locale = (typeof LOCALES)[number];
-export type StudioTab = 'main' | 'sequences';
 
 export interface LanguageOption {
   locale: Locale;
@@ -13,6 +13,7 @@ export interface LanguageOption {
 }
 
 type Pair = readonly [string, string];
+type Trio = readonly [string, string, string];
 type Quad = readonly [string, string, string, string];
 type Quint = readonly [string, string, string, string, string];
 type PresetTuple = readonly [
@@ -22,16 +23,15 @@ type PresetTuple = readonly [
   PresetText,
   PresetText,
 ];
-interface LabelCaption {
+interface SectionText {
   label: string;
-  caption: string;
+  /** Compact form for the bottom dock's tab label. */
+  short: string;
 }
 
 interface SliderText {
   label: string;
   hint: string;
-  decrease: string;
-  increase: string;
 }
 
 interface BandText {
@@ -60,38 +60,27 @@ export interface Copy {
     tagline: string;
     enter: string;
     loading: string;
-    headphones: string;
     errorPrefix: string;
   };
-  topbar: {
+  header: {
     play: string;
     pause: string;
-    signalActive: string;
-    signalPaused: string;
     timeRemaining: string;
     left: string;
     backToStart: string;
+    volume: string;
+    timer: string;
+    presets: string;
   };
-  tabs: Record<StudioTab, LabelCaption>;
   studioSectionsLabel: string;
   timer: {
     autoStop: string;
     off: string;
     stopped: string;
     minutesAbbrev: string;
-    decrease: string;
-    increase: string;
     minutes: string;
   };
-  panels: {
-    transport: string;
-    presets: string;
-    carrier: string;
-    tone: string;
-    mist: string;
-    emergence: string;
-    drift: string;
-  };
+  sections: Record<SectionId, SectionText>;
   localPresets: {
     saveCurrent: string;
     empty: string;
@@ -129,10 +118,15 @@ export interface Copy {
     timbres: Quad;
     mists: Quint;
     directions: Pair;
-    spawnModes: Pair;
+    spawnModes: Trio;
   };
   sliders: Record<SliderKey, SliderText>;
-  sliderGroups: Record<SliderGroupId, LabelCaption>;
+  slider: {
+    fine: string;
+    editValue: string;
+    apply: string;
+    cancel: string;
+  };
   bands: Record<EegBandId, BandText>;
   presets: PresetTuple;
   sequences: {
@@ -165,22 +159,17 @@ export const COPY: Record<Locale, Copy> = {
       tagline: 'Tune your mind to a frequency.',
       enter: 'Enter studio',
       loading: 'Spinning up engine...',
-      headphones:
-        'Headphones recommended. The binaural effect lives in the gap between your ears.',
       errorPrefix: 'Engine failed to start:',
     },
-    topbar: {
+    header: {
       play: 'play',
       pause: 'pause',
-      signalActive: 'signal active',
-      signalPaused: 'signal paused',
       timeRemaining: 'session time remaining',
       left: 'left',
       backToStart: 'return to start screen',
-    },
-    tabs: {
-      main: { label: 'Main', caption: 'controls' },
-      sequences: { label: 'Sequences', caption: 'timed' },
+      volume: 'Master volume',
+      timer: 'Auto-stop timer',
+      presets: 'Presets',
     },
     studioSectionsLabel: 'Studio sections',
     timer: {
@@ -188,18 +177,14 @@ export const COPY: Record<Locale, Copy> = {
       off: 'off',
       stopped: 'stopped',
       minutesAbbrev: 'min',
-      decrease: 'decrease auto-stop timer',
-      increase: 'increase auto-stop timer',
       minutes: 'auto-stop minutes',
     },
-    panels: {
-      transport: 'Transport',
-      presets: 'Presets',
-      carrier: 'Carrier',
-      tone: 'Tone',
-      mist: 'Mist',
-      emergence: 'Emergence',
-      drift: 'Drift',
+    sections: {
+      signal: { label: 'Signal', short: 'Signal' },
+      mist: { label: 'Mist', short: 'Mist' },
+      emergence: { label: 'Emergence', short: 'Emerge' },
+      drift: { label: 'Drift', short: 'Drift' },
+      sequences: { label: 'Sequences', short: 'Seqs' },
     },
     localPresets: {
       saveCurrent: 'Save current sound',
@@ -238,62 +223,51 @@ export const COPY: Record<Locale, Copy> = {
       timbres: ['Organ', 'Flute', 'Bell', 'Saw'],
       mists: ['Pink', 'White', 'Brown', 'Blue', 'Velvet'],
       directions: ['Rising', 'Falling'],
-      spawnModes: ['Canon', 'Penrose'],
+      spawnModes: ['Canon', 'Penrose', 'Fuxian'],
     },
     sliders: {
       baseFreq: {
         label: 'Base frequency',
         hint: 'Carrier pitch of the binaural pair',
-        decrease: 'decrease base frequency',
-        increase: 'increase base frequency',
       },
       beatFreq: {
         label: 'Beat frequency',
         hint: 'L/R offset - sets the EEG band',
-        decrease: 'decrease beat frequency',
-        increase: 'increase beat frequency',
       },
       harmonics: {
         label: 'Warmth',
         hint: 'Harmonic partials mixed into the carrier',
-        decrease: 'decrease warmth',
-        increase: 'increase warmth',
       },
       emergence: {
         label: 'Emergence',
         hint: 'Generative canon / quasicrystal voices',
-        decrease: 'decrease emergence',
-        increase: 'increase emergence',
+      },
+      gravity: {
+        label: 'Gravity',
+        hint: 'Fuxian pull toward the root',
       },
       noiseLevel: {
         label: 'Mist',
         hint: 'Ambient coloured-noise mist layer',
-        decrease: 'decrease mist',
-        increase: 'increase mist',
       },
       shepard: {
         label: 'Drift gain',
         hint: 'Shepard-Risset endless-glissando level',
-        decrease: 'decrease drift gain',
-        increase: 'increase drift gain',
       },
       shepardBase: {
         label: 'Drift base',
         hint: 'Lowest oscillator in the Shepard stack',
-        decrease: 'decrease drift base',
-        increase: 'increase drift base',
       },
       volume: {
         label: 'Master volume',
         hint: 'Overall output level',
-        decrease: 'decrease master volume',
-        increase: 'increase master volume',
       },
     },
-    sliderGroups: {
-      carrier: { label: 'Carrier', caption: 'the binaural pair' },
-      texture: { label: 'Texture', caption: 'tone & atmosphere' },
-      motion: { label: 'Motion', caption: 'generative movement' },
+    slider: {
+      fine: 'fine',
+      editValue: 'enter exact value',
+      apply: 'OK',
+      cancel: 'Cancel',
     },
     bands: {
       delta: { name: 'Delta', blurb: 'sleep' },
@@ -393,22 +367,17 @@ export const COPY: Record<Locale, Copy> = {
       tagline: 'Uskladi um s frekvencijom.',
       enter: 'Uđi u studio',
       loading: 'Pokrećem studio...',
-      headphones:
-        'Preporučene su slušalice. Binauralni učinak nastaje u razlici između lijevog i desnog uha.',
       errorPrefix: 'Zvučni pogon se nije pokrenuo:',
     },
-    topbar: {
+    header: {
       play: 'pokreni',
       pause: 'pauziraj',
-      signalActive: 'signal aktivan',
-      signalPaused: 'signal pauziran',
       timeRemaining: 'preostalo vrijeme sesije',
       left: 'preostalo',
       backToStart: 'povratak na početni zaslon',
-    },
-    tabs: {
-      main: { label: 'Glavno', caption: 'kontrole' },
-      sequences: { label: 'Sekvence', caption: 'vremenski' },
+      volume: 'Glavna glasnoća',
+      timer: 'Auto-stop tajmer',
+      presets: 'Preseti',
     },
     studioSectionsLabel: 'Dijelovi studija',
     timer: {
@@ -416,18 +385,14 @@ export const COPY: Record<Locale, Copy> = {
       off: 'isključeno',
       stopped: 'zaustavljeno',
       minutesAbbrev: 'min',
-      decrease: 'smanji auto-stop tajmer',
-      increase: 'povećaj auto-stop tajmer',
       minutes: 'minute auto-stop tajmera',
     },
-    panels: {
-      transport: 'Kontrole',
-      presets: 'Preseti',
-      carrier: 'Nositelj',
-      tone: 'Ton',
-      mist: 'Maglica',
-      emergence: 'Emergencija',
-      drift: 'Klizanje',
+    sections: {
+      signal: { label: 'Signal', short: 'Signal' },
+      mist: { label: 'Maglica', short: 'Maglica' },
+      emergence: { label: 'Emergencija', short: 'Emerg.' },
+      drift: { label: 'Klizanje', short: 'Kliz.' },
+      sequences: { label: 'Sekvence', short: 'Sekv.' },
     },
     localPresets: {
       saveCurrent: 'Spremi trenutni zvuk',
@@ -466,62 +431,51 @@ export const COPY: Record<Locale, Copy> = {
       timbres: ['Orgulje', 'Flauta', 'Zvono', 'Pila'],
       mists: ['Ružičasta', 'Bijela', 'Smeđa', 'Plava', 'Baršun'],
       directions: ['Uzlazno', 'Silazno'],
-      spawnModes: ['Kanon', 'Penrose'],
+      spawnModes: ['Kanon', 'Penrose', 'Fuxian'],
     },
     sliders: {
       baseFreq: {
         label: 'Osnovna frekvencija',
         hint: 'Nosiva visina binauralnog para',
-        decrease: 'smanji osnovnu frekvenciju',
-        increase: 'povećaj osnovnu frekvenciju',
       },
       beatFreq: {
         label: 'Beat frekvencija',
         hint: 'L/D pomak - određuje EEG pojas',
-        decrease: 'smanji beat frekvenciju',
-        increase: 'povećaj beat frekvenciju',
       },
       harmonics: {
         label: 'Toplina',
         hint: 'Harmonijski parcijali pomiješani s nosiocem',
-        decrease: 'smanji toplinu',
-        increase: 'povećaj toplinu',
       },
       emergence: {
         label: 'Emergencija',
         hint: 'Generativni kanon / kvazikristalni glasovi',
-        decrease: 'smanji emergenciju',
-        increase: 'povećaj emergenciju',
+      },
+      gravity: {
+        label: 'Gravitacija',
+        hint: 'Fuxian privlačenje prema korijenu',
       },
       noiseLevel: {
         label: 'Maglica',
         hint: 'Sloj ambijentalnog obojenog šuma',
-        decrease: 'smanji maglicu',
-        increase: 'povećaj maglicu',
       },
       shepard: {
         label: 'Jačina klizanja',
         hint: 'Razina Shepard-Risset beskonačnog glissanda',
-        decrease: 'smanji jačinu klizanja',
-        increase: 'povećaj jačinu klizanja',
       },
       shepardBase: {
         label: 'Baza klizanja',
         hint: 'Najniži oscilator u Shepardovu sloju',
-        decrease: 'smanji bazu klizanja',
-        increase: 'povećaj bazu klizanja',
       },
       volume: {
         label: 'Glavna glasnoća',
         hint: 'Ukupna izlazna razina',
-        decrease: 'smanji glavnu glasnoću',
-        increase: 'povećaj glavnu glasnoću',
       },
     },
-    sliderGroups: {
-      carrier: { label: 'Nositelj', caption: 'binauralni par' },
-      texture: { label: 'Tekstura', caption: 'ton i atmosfera' },
-      motion: { label: 'Kretanje', caption: 'generativni pomak' },
+    slider: {
+      fine: 'fino',
+      editValue: 'unesi točnu vrijednost',
+      apply: 'U redu',
+      cancel: 'Odustani',
     },
     bands: {
       delta: { name: 'Delta', blurb: 'san' },

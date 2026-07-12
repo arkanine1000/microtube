@@ -10,6 +10,11 @@ function mmss(secs: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * The timed-program list as compact rows: inline start/stop, name and live
+ * step readout, duration or remaining time, and a hairline progress bar
+ * along the row's lower edge while running.
+ */
 export function SequencesPanel({ mt }: { mt: MicroTube }) {
   const { copy } = useLocale();
 
@@ -19,7 +24,8 @@ export function SequencesPanel({ mt }: { mt: MicroTube }) {
       <div className="sequence-list" role="list">
         {SEQUENCES.map((sequence) => {
           const text = copy.sequences.cards[sequence.id];
-          const active = mt.sequence.activeId === sequence.id && mt.sequence.active;
+          const active =
+            mt.sequence.activeId === sequence.id && mt.sequence.active;
           const progress =
             active && mt.sequence.total > 0
               ? (mt.sequence.elapsed / mt.sequence.total) * 100
@@ -30,58 +36,52 @@ export function SequencesPanel({ mt }: { mt: MicroTube }) {
 
           return (
             <article
-              className={`sequence-card${active ? ' active' : ''}`}
+              className={`sequence-row${active ? ' active' : ''}`}
               key={sequence.id}
               role="listitem"
             >
-              <div className="sequence-card-head">
-                <div>
-                  <h2>{text.name}</h2>
-                  <p>{text.description}</p>
-                </div>
-                <span className="sequence-duration">
-                  {mmss(sequence.totalSecs)}
-                </span>
-              </div>
-              <div className="sequence-progress">
-                <div className="sequence-bar">
-                  <div
-                    className="sequence-bar-fill"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <div className="sequence-status">
-                  <span>
-                    {active
-                      ? `${copy.sequences.running} · ${
-                          copy.sequences.stepPrefix
-                        } ${mt.sequence.stepIndex + 1}/${sequence.steps.length}`
-                      : copy.sequences.idle}
-                  </span>
-                  <span>{active ? stepName : mmss(sequence.totalSecs)}</span>
-                </div>
-              </div>
               <button
-                className={`btn sequence-action${active ? '' : ' btn-primary'}`}
+                className={`sequence-toggle${active ? ' running' : ''}`}
                 type="button"
                 onClick={() =>
                   active
                     ? mt.stopSequence()
                     : mt.startSequence(sequence.id as SequenceId)
                 }
+                onContextMenu={(e) => e.preventDefault()}
+                aria-label={`${
+                  active ? copy.sequences.stop : copy.sequences.start
+                } · ${text.name}`}
               >
                 {active ? (
-                  <>
-                    <Square size={16} strokeWidth={2.4} />
-                    {copy.sequences.stop}
-                  </>
+                  <Square size={15} strokeWidth={2.4} fill="currentColor" />
                 ) : (
-                  <>
-                    <Play size={16} strokeWidth={2.4} />
-                    {copy.sequences.start}
-                  </>
+                  <Play size={15} strokeWidth={2.4} fill="currentColor" />
                 )}
               </button>
+              <div className="sequence-titles">
+                <span className="sequence-name">{text.name}</span>
+                <span className="sequence-desc">
+                  {active
+                    ? `${copy.sequences.stepPrefix} ${
+                        mt.sequence.stepIndex + 1
+                      }/${sequence.steps.length} · ${stepName}`
+                    : text.description}
+                </span>
+              </div>
+              <span className="sequence-meta">
+                {active
+                  ? mmss(mt.sequence.total - mt.sequence.elapsed)
+                  : mmss(sequence.totalSecs)}
+              </span>
+              {active && (
+                <div className="sequence-hairline" aria-hidden="true">
+                  <div
+                    className="sequence-hairline-fill"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              )}
             </article>
           );
         })}

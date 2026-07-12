@@ -24,6 +24,7 @@ pub struct Params {
     pub mist_type: MistType,
     pub harmonics: f32,
     pub emergence: f32,
+    pub gravity: f32,
     pub spawn_mode: SpawnMode,
     pub shepard: f32,
     pub shepard_base_freq: f32,
@@ -42,6 +43,7 @@ impl Default for Params {
             mist_type: MistType::Brown,
             harmonics: 0.3,
             emergence: 0.0,
+            gravity: 0.5,
             spawn_mode: SpawnMode::Canon,
             shepard: 0.0,
             shepard_base_freq: DEFAULT_BASE_FREQ_HZ as f32,
@@ -65,6 +67,7 @@ pub struct Engine {
     current_noise: f64,
     current_harmonics: f64,
     current_emergence: f64,
+    current_gravity: f64,
     current_shepard: f64,
     current_shepard_base: f64,
     current_harm_weights: [f64; 5],
@@ -96,6 +99,7 @@ impl Engine {
             current_noise: 0.0,
             current_harmonics: 0.3,
             current_emergence: 0.0,
+            current_gravity: 0.5,
             current_shepard: 0.0,
             current_shepard_base: DEFAULT_BASE_FREQ_HZ,
             current_harm_weights: Timbre::Organ.weights(),
@@ -169,6 +173,7 @@ impl Engine {
         self.current_noise += (t.noise_level as f64 - self.current_noise) * a;
         self.current_harmonics += (t.harmonics as f64 - self.current_harmonics) * a;
         self.current_emergence += (t.emergence as f64 - self.current_emergence) * a;
+        self.current_gravity += (t.gravity as f64 - self.current_gravity) * a;
         self.current_shepard += (t.shepard as f64 - self.current_shepard) * a;
         self.current_shepard_base += (t.shepard_base_freq as f64 - self.current_shepard_base) * a;
 
@@ -191,6 +196,7 @@ impl Engine {
             let (em_l, em_r) = self.emergence.process(
                 self.current_base,
                 self.current_emergence,
+                self.current_gravity,
                 &self.current_harm_weights,
                 self.current_harmonics,
             );

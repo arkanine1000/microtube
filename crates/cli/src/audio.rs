@@ -117,6 +117,7 @@ fn read_params(params: &AudioParams) -> Params {
         mist_type: params.get_mist_type(),
         harmonics: params.get_harmonics(),
         emergence: params.get_emergence(),
+        gravity: params.get_gravity(),
         spawn_mode: params.get_spawn_mode(),
         shepard: params.get_shepard(),
         shepard_base_freq: params.get_shepard_base_freq(),

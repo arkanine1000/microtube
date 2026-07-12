@@ -5,6 +5,7 @@
 // only ever read `state` and call the returned actions.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadLatestLocalPresetSnapshot } from './localPresets';
 import {
   clamp,
   DEFAULT_STATE,
@@ -146,6 +147,9 @@ const sequenceDefaults = (
   if (sequence.steps.some((step) => step.emergence !== undefined)) {
     defaults.emergence = DEFAULT_STATE.emergence;
   }
+  if (sequence.steps.some((step) => step.gravity !== undefined)) {
+    defaults.gravity = DEFAULT_STATE.gravity;
+  }
   if (sequence.steps.some((step) => step.shepard !== undefined)) {
     defaults.shepard = DEFAULT_STATE.shepard;
   }
@@ -166,9 +170,14 @@ const sequenceDefaults = (
 };
 
 export function useMicroTube(): MicroTube {
+  const initialState = (): MicroTubeState => ({
+    ...DEFAULT_STATE,
+    ...(loadLatestLocalPresetSnapshot() ?? {}),
+  });
+
   const [status, setStatus] = useState<EngineStatus>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [state, setState] = useState<MicroTubeState>(DEFAULT_STATE);
+  const [state, setState] = useState<MicroTubeState>(initialState);
   const [uptimeSecs, setUptimeSecs] = useState(0);
   const [timer, setTimer] = useState<TimerStatus>({
     enabled: true,
@@ -186,7 +195,7 @@ export function useMicroTube(): MicroTube {
 
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
-  const stateRef = useRef<MicroTubeState>(DEFAULT_STATE);
+  const stateRef = useRef<MicroTubeState>(state);
   const sessionStartRef = useRef<number>(0);
   const sequenceElapsedRef = useRef<number>(0);
   const sequenceLastTickRef = useRef<number | null>(null);
@@ -415,6 +424,12 @@ export function useMicroTube(): MicroTube {
     setStatus('loading');
     setError(null);
     try {
+      const latestPreset = loadLatestLocalPresetSnapshot();
+      if (latestPreset) {
+        stateRef.current = { ...stateRef.current, ...latestPreset };
+        setState(stateRef.current);
+      }
+
       const ctx = createPlaybackAudioContext();
       ctxRef.current = ctx;
 

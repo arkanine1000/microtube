@@ -109,6 +109,10 @@ impl WasmEngine {
         self.engine.targets_mut().emergence = v.clamp(0.0, 1.0);
     }
 
+    pub fn set_gravity(&mut self, v: f32) {
+        self.engine.targets_mut().gravity = v.clamp(0.0, 1.0);
+    }
+
     /// Convenience used by the blueprint — emergence on (1.0) or off (0.0).
     pub fn toggle_emergence(&mut self, on: bool) {
         self.engine.targets_mut().emergence = if on { 1.0 } else { 0.0 };

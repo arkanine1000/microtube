@@ -6,12 +6,15 @@ export function Modal({
   title,
   closeLabel,
   accent,
+  variant = 'card',
   onClose,
   children,
 }: {
   title: string;
   closeLabel: string;
   accent?: string;
+  /** 'sheet' slides up from the bottom edge instead of centering. */
+  variant?: 'card' | 'sheet';
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -36,7 +39,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="modal-layer"
+      className={`modal-layer${variant === 'sheet' ? ' sheet' : ''}`}
       style={accent ? { ['--accent' as string]: accent } : undefined}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

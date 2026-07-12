@@ -9,11 +9,9 @@ import {
   AudioWaveform,
   CloudFog,
   Flame,
-  Layers,
+  Magnet,
   type LucideIcon,
-  Orbit,
   Radio,
-  RadioTower,
   Sparkles,
   Volume2,
   Waves,
@@ -21,7 +19,7 @@ import {
 
 export type Timbre = 0 | 1 | 2 | 3;
 export type MistType = 0 | 1 | 2 | 3 | 4;
-export type SpawnMode = 0 | 1;
+export type SpawnMode = 0 | 1 | 2;
 export type Direction = 0 | 1;
 
 /** The full live engine state the UI mirrors. */
@@ -34,6 +32,7 @@ export interface MicroTubeState {
   mistType: MistType;
   harmonics: number;
   emergence: number;
+  gravity: number;
   spawnMode: SpawnMode;
   shepard: number;
   shepardBase: number;
@@ -53,6 +52,7 @@ export const DEFAULT_STATE: MicroTubeState = {
   mistType: 2, // Brown
   harmonics: 0.3,
   emergence: 0,
+  gravity: 0.5,
   spawnMode: 0, // Canon
   shepard: 0,
   shepardBase: 32.70319566257483,
@@ -70,6 +70,7 @@ export type SliderKey =
   | 'beatFreq'
   | 'harmonics'
   | 'emergence'
+  | 'gravity'
   | 'noiseLevel'
   | 'shepard'
   | 'shepardBase'
@@ -92,6 +93,11 @@ export interface SliderSpec {
    * its minimum is 0, and the UI recedes it while it sits there.
    */
   toggle?: boolean;
+  /**
+   * Multiplier between the stored value and the number a human types in the
+   * slider's exact-entry form — 100 for 0..1 parameters shown as percentages.
+   */
+  displayScale?: number;
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -127,6 +133,7 @@ const WARMTH: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
 };
 
 const NOISE: SliderSpec = {
@@ -138,6 +145,7 @@ const NOISE: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
   toggle: true,
 };
 
@@ -150,7 +158,20 @@ const EMERGENCE: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
   toggle: true,
+};
+
+const GRAVITY: SliderSpec = {
+  key: 'gravity',
+  icon: Magnet,
+  min: 0,
+  max: 1,
+  step: 0.01,
+  coarse: 0.1,
+  unit: '',
+  format: pct,
+  displayScale: 100,
 };
 
 const DRIFT_GAIN: SliderSpec = {
@@ -162,6 +183,7 @@ const DRIFT_GAIN: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
   toggle: true,
 };
 
@@ -181,42 +203,13 @@ export const SLIDERS: SliderSpec[] = [
   BEAT_FREQ,
   WARMTH,
   EMERGENCE,
+  GRAVITY,
   NOISE,
   DRIFT_GAIN,
   DRIFT_BASE,
 ];
 
-/**
- * Sliders split into themed groups — a long unbroken list of sliders reads
- * poorly, so the Shape tab renders these as labelled, icon-led sections.
- */
-export interface SliderGroup {
-  id: SliderGroupId;
-  icon: LucideIcon;
-  sliders: SliderSpec[];
-}
-
-export type SliderGroupId = 'carrier' | 'texture' | 'motion';
-
-export const SLIDER_GROUPS: SliderGroup[] = [
-  {
-    id: 'carrier',
-    icon: RadioTower,
-    sliders: [BASE_FREQ, BEAT_FREQ],
-  },
-  {
-    id: 'texture',
-    icon: Layers,
-    sliders: [WARMTH, NOISE],
-  },
-  {
-    id: 'motion',
-    icon: Orbit,
-    sliders: [EMERGENCE, DRIFT_GAIN, DRIFT_BASE],
-  },
-];
-
-/** Master volume — rendered separately in the transport bar. */
+/** Master volume — rendered separately in the header. */
 export const VOLUME: SliderSpec = {
   key: 'volume',
   icon: Volume2,
@@ -226,6 +219,7 @@ export const VOLUME: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
 };
 
 export interface EegBand {

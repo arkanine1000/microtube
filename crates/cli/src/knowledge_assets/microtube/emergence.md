@@ -15,7 +15,8 @@ family tree instead of a pile of unrelated notes.
 
 Each voice has:
 
-- A frequency ratio.
+- An interval from the root.
+- A trajectory from its parent.
 - A generation number.
 - A stereo pan position.
 - A binaural spatial position.
@@ -46,6 +47,19 @@ pairs choose one of three intervals:
 
 The pattern never settles into a simple loop, but it also never becomes pure
 noise.
+
+## Fuxian mode
+
+Fuxian mode uses the same consonance pool, but it listens to the recent motion
+of the strongest living voice before choosing the next interval.
+
+If the parent made a leap larger than a minor third, the next voice must answer
+with a step in the opposite direction. If the parent is already sitting on a
+perfect fifth or octave, Fuxian avoids spawning the same perfect interval again.
+
+Gravity controls how strongly Fuxian pulls the next choice back toward the
+root. Low gravity leaves more room for wandering. High gravity makes the line
+resolve toward 1:1 more often.
 
 ## What the Emergence view shows
 

@@ -35,14 +35,16 @@ const HRTF_FAR_CUTOFF_HZ: f64 = 2_400.0;
 /// a perfect match scores `peak_score`, partial matches drop linearly within
 /// a 0.1 log-distance neighborhood.
 pub const CONSONANCE_RATIOS: &[(f64, f64)] = &[
-    (1.0, 1.0),        // Unison
-    (2.0, 0.95),       // Octave
-    (3.0 / 2.0, 0.9),  // Fifth
-    (4.0 / 3.0, 0.85), // Fourth
-    (5.0 / 4.0, 0.8),  // Major third
-    (6.0 / 5.0, 0.75), // Minor third
-    (PHI, 0.7),        // Golden (special)
-    (PHI * PHI, 0.65), // Golden squared
+    (1.0, 1.0),          // Unison
+    (2.0, 0.95),         // Octave
+    (3.0 / 2.0, 0.9),    // Fifth
+    (4.0 / 3.0, 0.85),   // Fourth
+    (5.0 / 4.0, 0.8),    // Major third
+    (6.0 / 5.0, 0.75),   // Minor third
+    (9.0 / 8.0, 0.68),   // Major second
+    (16.0 / 15.0, 0.62), // Minor second
+    (PHI, 0.7),          // Golden (special)
+    (PHI * PHI, 0.65),   // Golden squared
 ];
 
 /// Score how consonant a frequency ratio is (0.0 = dissonant, 1.0 = perfect).
@@ -100,21 +102,29 @@ const SPAWN_RATIOS: &[f64] = &[
 /// A single emergent voice in the system.
 #[derive(Clone)]
 pub struct Voice {
-    pub freq_ratio: f64, // Ratio to base frequency
-    pub amplitude: f64,  // Current amplitude (0.0 - 1.0)
-    pub phase: f64,      // Phase accumulator
-    pub age: f64,        // Seconds since birth
-    pub lifetime: f64,   // Total expected lifetime
-    pub generation: u8,  // How many ancestors spawned this voice
-    pub pan: f64,        // -1.0 (left) to 1.0 (right)
+    pub interval_from_root: f64, // Ratio to base frequency
+    pub trajectory: f64,         // Child/parent interval ratio; >1 rises, <1 falls
+    pub amplitude: f64,          // Current amplitude (0.0 - 1.0)
+    pub phase: f64,              // Phase accumulator
+    pub age: f64,                // Seconds since birth
+    pub lifetime: f64,           // Total expected lifetime
+    pub generation: u8,          // How many ancestors spawned this voice
+    pub pan: f64,                // -1.0 (left) to 1.0 (right)
     spatial: HrtfState,
     alive: bool,
 }
 
 impl Voice {
-    fn new(freq_ratio: f64, lifetime: f64, generation: u8, pan: f64) -> Self {
+    fn new(
+        interval_from_root: f64,
+        trajectory: f64,
+        lifetime: f64,
+        generation: u8,
+        pan: f64,
+    ) -> Self {
         Self {
-            freq_ratio,
+            interval_from_root,
+            trajectory,
             amplitude: 0.0, // Starts silent, fades in
             phase: 0.0,
             age: 0.0,
@@ -124,6 +134,10 @@ impl Voice {
             spatial: HrtfState::default(),
             alive: true,
         }
+    }
+
+    fn root() -> Self {
+        Self::new(1.0, 1.0, 8.0, 0, 0.0)
     }
 
     /// Envelope: smooth attack/sustain/release
@@ -237,10 +251,13 @@ fn one_pole_alpha(cutoff_hz: f64, sample_rate: f64) -> f64 {
 /// `Canon` follows the original repeating ratio table (a Bach-style fugue).
 /// `Penrose` reads ratios from a Fibonacci-word walk — the 1D quasicrystal
 /// that traces a Conway worm through a Penrose P3 tiling.
+/// `Fuxian` filters a consonance pool through counterpoint-style constraints.
+#[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpawnMode {
-    Canon,
-    Penrose,
+    Canon = 0,
+    Penrose = 1,
+    Fuxian = 2,
 }
 
 impl SpawnMode {
@@ -248,19 +265,22 @@ impl SpawnMode {
         match self {
             Self::Canon => "canon",
             Self::Penrose => "penrose",
+            Self::Fuxian => "fuxian",
         }
     }
 
     pub fn toggled(self) -> Self {
         match self {
             Self::Canon => Self::Penrose,
-            Self::Penrose => Self::Canon,
+            Self::Penrose => Self::Fuxian,
+            Self::Fuxian => Self::Canon,
         }
     }
 
     pub fn from_u32(value: u32) -> Self {
         match value {
             1 => Self::Penrose,
+            2 => Self::Fuxian,
             _ => Self::Canon,
         }
     }
@@ -319,6 +339,33 @@ pub struct EmergenceEngine {
     penrose_walk: PenroseWalk,
 }
 
+#[derive(Clone, Copy)]
+struct ParentInfo {
+    interval_from_root: f64,
+    trajectory: f64,
+    generation: u8,
+}
+
+#[derive(Clone, Copy)]
+struct FuxianCandidate {
+    movement: f64,
+    interval_from_root: f64,
+    score: f64,
+}
+
+const EMPTY_FUXIAN_CANDIDATE: FuxianCandidate = FuxianCandidate {
+    movement: 0.0,
+    interval_from_root: 0.0,
+    score: 0.0,
+};
+
+const FUXIAN_POOL_CAPACITY: usize = 32;
+const MINOR_THIRD: f64 = 6.0 / 5.0;
+const MAJOR_SECOND: f64 = 9.0 / 8.0;
+const MINOR_SECOND: f64 = 16.0 / 15.0;
+const FUXIAN_GRAVITY_STRENGTH: f64 = 6.0;
+const RATIO_EPSILON: f64 = 1.0e-9;
+
 impl EmergenceEngine {
     pub fn new(sample_rate: f64) -> Self {
         let mut engine = Self {
@@ -336,7 +383,7 @@ impl EmergenceEngine {
             penrose_walk: PenroseWalk::new(),
         };
         // Seed with a root voice
-        engine.voices.push(Voice::new(1.0, 8.0, 0, 0.0));
+        engine.voices.push(Voice::root());
         engine
     }
 
@@ -348,7 +395,7 @@ impl EmergenceEngine {
         self.canon_position = 0;
         self.canon_offset = 1.0;
         self.penrose_walk = PenroseWalk::new();
-        self.voices.push(Voice::new(1.0, 8.0, 0, 0.0));
+        self.voices.push(Voice::root());
     }
 
     pub fn set_spawn_mode(&mut self, mode: SpawnMode) {
@@ -371,6 +418,7 @@ impl EmergenceEngine {
         &mut self,
         base_freq: f64,
         intensity: f64,
+        gravity: f64,
         harm_weights: &[f64; 5],
         harm_intensity: f64,
     ) -> (f64, f64) {
@@ -382,7 +430,7 @@ impl EmergenceEngine {
         let adjusted_interval = self.spawn_interval / (0.5 + intensity * 1.5);
         if self.spawn_timer >= adjusted_interval {
             self.spawn_timer = 0.0;
-            self.try_spawn(intensity);
+            self.try_spawn(intensity, gravity);
         }
 
         // Generate audio from all living voices
@@ -404,7 +452,7 @@ impl EmergenceEngine {
             }
 
             // Phase accumulator for this voice
-            let freq = base_freq * voice.freq_ratio;
+            let freq = base_freq * voice.interval_from_root;
             voice.phase += freq / self.sample_rate;
             voice.phase -= voice.phase.floor();
 
@@ -449,7 +497,7 @@ impl EmergenceEngine {
         (sum_l, sum_r)
     }
 
-    fn try_spawn(&mut self, intensity: f64) {
+    fn try_spawn(&mut self, intensity: f64, gravity: f64) {
         if self.voices.len() >= MAX_VOICES {
             // Kill the oldest voice to make room (conservation)
             if let Some(oldest) = self.voices.iter_mut().min_by(|a, b| {
@@ -464,36 +512,71 @@ impl EmergenceEngine {
 
         if self.voices.is_empty() {
             // Always maintain a root
-            self.voices.push(Voice::new(1.0, 8.0, 0, 0.0));
+            self.voices.push(Voice::root());
             return;
         }
 
         self.epoch += 1;
 
-        let (parent_ratio, parent_gen) = self
+        let parent = self
             .voices
             .iter()
             .filter(|voice| voice.is_alive())
             .max_by(|a, b| a.amplitude.total_cmp(&b.amplitude))
-            .map(|voice| (voice.freq_ratio, voice.generation))
-            .unwrap_or((1.0, 0));
+            .map(|voice| ParentInfo {
+                interval_from_root: voice.interval_from_root,
+                trajectory: voice.trajectory,
+                generation: voice.generation,
+            })
+            .unwrap_or(ParentInfo {
+                interval_from_root: 1.0,
+                trajectory: 1.0,
+                generation: 0,
+            });
 
-        // Choose the interval according to the active spawn mode.
-        let base_ratio = match self.spawn_mode {
+        // Choose the interval according to the active spawn mode. Canon and
+        // Penrose produce parent-relative moves; Fuxian chooses the child's
+        // root interval directly from a constrained counterpoint pool.
+        let final_ratio = match self.spawn_mode {
             SpawnMode::Canon => {
                 let idx = self.canon_pattern[self.canon_position % self.canon_pattern.len()];
                 self.canon_position += 1;
-                SPAWN_RATIOS[idx % SPAWN_RATIOS.len()]
+                let base_ratio = SPAWN_RATIOS[idx % SPAWN_RATIOS.len()];
+                self.canon_child_ratio(parent.interval_from_root, base_ratio, intensity)
             }
             SpawnMode::Penrose => {
                 // Each spawn advances the Conway worm by one rhomb; the
                 // (previous, current) tile pair selects the harmonic move.
                 let (prev, curr) = self.penrose_walk.step();
                 self.canon_position += 1;
-                penrose::pair_ratio(prev, curr)
+                let base_ratio = penrose::pair_ratio(prev, curr);
+                self.canon_child_ratio(parent.interval_from_root, base_ratio, intensity)
             }
+            SpawnMode::Fuxian => self.fuxian_child_ratio(parent, gravity),
         };
 
+        // Lifetime varies with the interval from parent to child: longer for
+        // consonant relationships, shorter for dissonant ones.
+        let realized_interval = final_ratio / parent.interval_from_root;
+        let consonance = self.consonance_score(realized_interval);
+        let base_lifetime = 4.0 + consonance * 8.0; // 4-12 seconds
+        let lifetime = base_lifetime * (0.8 + self.xorshift() * 0.4);
+
+        let generation = parent.generation.saturating_add(1).min(7);
+
+        // Pan: spread voices across the stereo field
+        let pan = (self.xorshift() * 2.0 - 1.0) * 0.7; // -0.7 to 0.7
+
+        self.voices.push(Voice::new(
+            final_ratio,
+            realized_interval,
+            lifetime,
+            generation,
+            pan,
+        ));
+    }
+
+    fn canon_child_ratio(&mut self, parent_ratio: f64, base_ratio: f64, intensity: f64) -> f64 {
         // Every 8 spawns, shift the canon offset (like a fugue answer).
         // Penrose mode reuses the same transposition cadence so the walk
         // sweeps across registers without losing its quasicrystal cadence.
@@ -506,22 +589,74 @@ impl EmergenceEngine {
         // audible parent-child branches rather than labels only.
         let mutation = 1.0 + (self.xorshift() - 0.5) * 0.02 * intensity;
         let interval = base_ratio * self.canon_offset * mutation;
-        let final_ratio = fold_voice_ratio(parent_ratio * interval);
+        fold_voice_ratio(parent_ratio * interval)
+    }
 
-        // Lifetime varies with the interval from parent to child: longer for
-        // consonant relationships, shorter for dissonant ones.
-        let realized_interval = final_ratio / parent_ratio;
-        let consonance = self.consonance_score(realized_interval);
-        let base_lifetime = 4.0 + consonance * 8.0; // 4-12 seconds
-        let lifetime = base_lifetime * (0.8 + self.xorshift() * 0.4);
+    fn fuxian_child_ratio(&mut self, parent: ParentInfo, gravity: f64) -> f64 {
+        let mut pool = [EMPTY_FUXIAN_CANDIDATE; FUXIAN_POOL_CAPACITY];
+        let len = build_fuxian_pool(&mut pool, parent.interval_from_root);
+        let parent_motion = safe_ln(parent.trajectory).unwrap_or(0.0);
+        let require_step = parent_motion.abs() > MINOR_THIRD.ln();
 
-        let generation = parent_gen.saturating_add(1).min(7);
+        if let Some(selected) =
+            self.weighted_fuxian_selection(&pool[..len], parent, gravity, require_step)
+        {
+            return selected;
+        }
 
-        // Pan: spread voices across the stereo field
-        let pan = (self.xorshift() * 2.0 - 1.0) * 0.7; // -0.7 to 0.7
+        if require_step {
+            let mut recovery = [EMPTY_FUXIAN_CANDIDATE; 2];
+            let len =
+                build_step_recovery_pool(&mut recovery, parent.interval_from_root, parent_motion);
+            if let Some(selected) =
+                self.weighted_fuxian_selection(&recovery[..len], parent, gravity, false)
+            {
+                return selected;
+            }
+        }
 
-        self.voices
-            .push(Voice::new(final_ratio, lifetime, generation, pan));
+        1.0
+    }
+
+    fn weighted_fuxian_selection(
+        &mut self,
+        candidates: &[FuxianCandidate],
+        parent: ParentInfo,
+        gravity: f64,
+        require_step: bool,
+    ) -> Option<f64> {
+        let gravity = gravity.clamp(0.0, 1.0);
+        let mut total = 0.0;
+
+        for &candidate in candidates {
+            if !fuxian_candidate_allowed(candidate, parent, require_step) {
+                continue;
+            }
+            total += fuxian_weight(candidate, parent.interval_from_root, gravity);
+        }
+
+        if total <= f64::EPSILON {
+            return None;
+        }
+
+        let mut ticket = self.xorshift() * total;
+        for &candidate in candidates {
+            if !fuxian_candidate_allowed(candidate, parent, require_step) {
+                continue;
+            }
+            let weight = fuxian_weight(candidate, parent.interval_from_root, gravity);
+            if ticket <= weight {
+                return Some(candidate.interval_from_root);
+            }
+            ticket -= weight;
+        }
+
+        candidates
+            .iter()
+            .rev()
+            .copied()
+            .find(|&candidate| fuxian_candidate_allowed(candidate, parent, require_step))
+            .map(|candidate| candidate.interval_from_root)
     }
 
     /// Score how consonant a frequency ratio is (0.0 = dissonant, 1.0 = perfect).
@@ -537,7 +672,7 @@ impl EmergenceEngine {
             .iter()
             .filter(|v| v.is_alive())
             .map(|v| VoiceInfo {
-                freq_ratio: v.freq_ratio as f32,
+                freq_ratio: v.interval_from_root as f32,
                 amplitude: v.amplitude as f32,
                 age_normalized: (v.age / v.lifetime).clamp(0.0, 1.0) as f32,
                 generation: v.generation,
@@ -563,6 +698,161 @@ impl EmergenceEngine {
             recent_tiles,
             walk_position: self.penrose_walk.position(),
         }
+    }
+}
+
+fn build_fuxian_pool(
+    pool: &mut [FuxianCandidate; FUXIAN_POOL_CAPACITY],
+    parent_interval_from_root: f64,
+) -> usize {
+    let mut len = 0;
+    for &(ratio, score) in CONSONANCE_RATIOS {
+        push_fuxian_candidate(pool, &mut len, parent_interval_from_root, ratio, score);
+        if !ratio_close(ratio, 1.0) {
+            push_fuxian_candidate(
+                pool,
+                &mut len,
+                parent_interval_from_root,
+                1.0 / ratio,
+                score,
+            );
+        }
+    }
+    len
+}
+
+fn build_step_recovery_pool(
+    pool: &mut [FuxianCandidate; 2],
+    parent_interval_from_root: f64,
+    parent_motion: f64,
+) -> usize {
+    let mut len = 0;
+    let steps = if parent_motion.is_sign_positive() {
+        [1.0 / MAJOR_SECOND, 1.0 / MINOR_SECOND]
+    } else {
+        [MAJOR_SECOND, MINOR_SECOND]
+    };
+
+    for step in steps {
+        let interval_from_root = fold_voice_ratio(parent_interval_from_root * step);
+        pool[len] = FuxianCandidate {
+            movement: step,
+            interval_from_root,
+            score: consonance_score(step),
+        };
+        len += 1;
+    }
+
+    len
+}
+
+fn push_fuxian_candidate(
+    pool: &mut [FuxianCandidate; FUXIAN_POOL_CAPACITY],
+    len: &mut usize,
+    parent_interval_from_root: f64,
+    movement: f64,
+    score: f64,
+) {
+    if *len >= pool.len() || !movement.is_finite() || movement <= 0.0 {
+        return;
+    }
+    if ratio_close(movement, 1.0) {
+        return;
+    }
+    let interval_from_root = fold_voice_ratio(parent_interval_from_root * movement);
+    if ratio_close(interval_from_root, parent_interval_from_root) {
+        return;
+    }
+    if pool[..*len]
+        .iter()
+        .any(|candidate| ratio_close(candidate.interval_from_root, interval_from_root))
+    {
+        return;
+    }
+    pool[*len] = FuxianCandidate {
+        movement,
+        interval_from_root,
+        score,
+    };
+    *len += 1;
+}
+
+fn fuxian_candidate_allowed(
+    candidate: FuxianCandidate,
+    parent: ParentInfo,
+    require_step: bool,
+) -> bool {
+    if candidate.interval_from_root <= 0.0 || !candidate.interval_from_root.is_finite() {
+        return false;
+    }
+    if ratio_close(candidate.interval_from_root, parent.interval_from_root) {
+        return false;
+    }
+    if fuxian_parallel(candidate.interval_from_root, parent.interval_from_root) {
+        return false;
+    }
+    if require_step {
+        return fuxian_opposite_step(candidate.interval_from_root, parent);
+    }
+    true
+}
+
+fn fuxian_parallel(candidate_interval_from_root: f64, parent_interval_from_root: f64) -> bool {
+    if is_perfect_fifth(parent_interval_from_root) {
+        return is_perfect_fifth(candidate_interval_from_root);
+    }
+    if is_octave(parent_interval_from_root) {
+        return is_octave(candidate_interval_from_root);
+    }
+    false
+}
+
+fn fuxian_opposite_step(candidate_interval_from_root: f64, parent: ParentInfo) -> bool {
+    let parent_motion = match safe_ln(parent.trajectory) {
+        Some(value) if value.abs() > MINOR_THIRD.ln() => value,
+        _ => return true,
+    };
+    let child_motion = match safe_ln(candidate_interval_from_root / parent.interval_from_root) {
+        Some(value) => value,
+        None => return false,
+    };
+
+    child_motion.signum() != parent_motion.signum()
+        && child_motion.abs() > RATIO_EPSILON
+        && child_motion.abs() <= MAJOR_SECOND.ln() + RATIO_EPSILON
+}
+
+fn fuxian_weight(candidate: FuxianCandidate, parent_interval_from_root: f64, gravity: f64) -> f64 {
+    let Some(parent_distance) = safe_ln(parent_interval_from_root) else {
+        return 0.0;
+    };
+    let Some(candidate_distance) = safe_ln(candidate.interval_from_root) else {
+        return 0.0;
+    };
+    let pull = parent_distance.abs() - candidate_distance.abs();
+    let gravity_bias = (pull * gravity * FUXIAN_GRAVITY_STRENGTH).exp();
+    (0.05 + candidate.score.max(0.0)) * gravity_bias
+}
+
+fn is_perfect_fifth(ratio: f64) -> bool {
+    ratio_close(ratio, 3.0 / 2.0) || ratio_close(ratio, 2.0 / 3.0)
+}
+
+fn is_octave(ratio: f64) -> bool {
+    ratio_close(ratio, 2.0) || ratio_close(ratio, 0.5)
+}
+
+fn ratio_close(a: f64, b: f64) -> bool {
+    safe_ln(a / b)
+        .map(|distance| distance.abs() <= RATIO_EPSILON)
+        .unwrap_or(false)
+}
+
+fn safe_ln(value: f64) -> Option<f64> {
+    if value.is_finite() && value > 0.0 {
+        Some(value.ln())
+    } else {
+        None
     }
 }
 
@@ -618,7 +908,8 @@ mod tests {
         let mut engine = EmergenceEngine::new(100.0);
         engine.voices.clear();
         engine.voices.push(Voice {
-            freq_ratio: 2.0,
+            interval_from_root: 2.0,
+            trajectory: 1.0,
             amplitude: 1.0,
             phase: 0.0,
             age: 1.0,
@@ -630,17 +921,18 @@ mod tests {
         });
         engine.canon_pattern = vec![7]; // 3:2 above the parent
 
-        engine.try_spawn(0.0);
+        engine.try_spawn(0.0, 0.5);
 
         let spawned = engine.voices.last().expect("voice should spawn");
-        assert_close(spawned.freq_ratio, 3.0);
+        assert_close(spawned.interval_from_root, 3.0);
+        assert_close(spawned.trajectory, 3.0 / 2.0);
         assert_eq!(spawned.generation, 3);
     }
 
     #[test]
     fn reset_returns_engine_to_single_root_voice() {
         let mut engine = EmergenceEngine::new(100.0);
-        engine.try_spawn(0.0);
+        engine.try_spawn(0.0, 0.5);
         assert!(engine.voices.len() > 1);
 
         engine.reset();
@@ -648,8 +940,140 @@ mod tests {
         assert_eq!(engine.epoch, 0);
         assert_eq!(engine.canon_position, 0);
         assert_eq!(engine.voices.len(), 1);
-        assert_close(engine.voices[0].freq_ratio, 1.0);
+        assert_close(engine.voices[0].interval_from_root, 1.0);
+        assert_close(engine.voices[0].trajectory, 1.0);
         assert_eq!(engine.snapshot().voices.len(), 1);
+    }
+
+    #[test]
+    fn fuxian_spawn_moves_from_the_parent_instead_of_duplication() {
+        let mut engine = EmergenceEngine::new(100.0);
+        engine.set_spawn_mode(SpawnMode::Fuxian);
+
+        engine.try_spawn(0.0, 0.5);
+
+        let spawned = engine.voices.last().expect("voice should spawn");
+        assert_ne!(spawned.interval_from_root, 1.0);
+        assert_ne!(spawned.trajectory, 1.0);
+        assert_eq!(spawned.generation, 1);
+    }
+
+    #[test]
+    fn fuxian_pool_builds_parent_relative_candidates() {
+        let mut pool = [EMPTY_FUXIAN_CANDIDATE; FUXIAN_POOL_CAPACITY];
+        let len = build_fuxian_pool(&mut pool, 3.0 / 2.0);
+
+        assert!(pool[..len].iter().any(|candidate| {
+            ratio_close(candidate.movement, 9.0 / 8.0)
+                && ratio_close(candidate.interval_from_root, 27.0 / 16.0)
+        }));
+        assert!(
+            pool[..len]
+                .iter()
+                .all(|candidate| !ratio_close(candidate.interval_from_root, 3.0 / 2.0))
+        );
+    }
+
+    #[test]
+    fn fuxian_parallel_filter_rejects_repeated_fifths_and_octaves() {
+        let fifth_parent = ParentInfo {
+            interval_from_root: 3.0 / 2.0,
+            trajectory: 1.0,
+            generation: 1,
+        };
+        let octave_parent = ParentInfo {
+            interval_from_root: 2.0,
+            trajectory: 1.0,
+            generation: 1,
+        };
+
+        assert!(!fuxian_candidate_allowed(
+            FuxianCandidate {
+                movement: 1.0,
+                interval_from_root: 3.0 / 2.0,
+                score: 0.9,
+            },
+            fifth_parent,
+            false,
+        ));
+        assert!(!fuxian_candidate_allowed(
+            FuxianCandidate {
+                movement: 1.0,
+                interval_from_root: 2.0,
+                score: 0.95,
+            },
+            octave_parent,
+            false,
+        ));
+        assert!(fuxian_candidate_allowed(
+            FuxianCandidate {
+                movement: 8.0 / 9.0,
+                interval_from_root: 4.0 / 3.0,
+                score: 0.85,
+            },
+            fifth_parent,
+            false,
+        ));
+    }
+
+    #[test]
+    fn fuxian_leap_rule_requires_opposite_stepwise_motion() {
+        let parent = ParentInfo {
+            interval_from_root: 3.0 / 2.0,
+            trajectory: 3.0 / 2.0,
+            generation: 1,
+        };
+
+        assert!(fuxian_candidate_allowed(
+            FuxianCandidate {
+                movement: 8.0 / 9.0,
+                interval_from_root: 4.0 / 3.0,
+                score: 0.85,
+            },
+            parent,
+            true,
+        ));
+        assert!(!fuxian_candidate_allowed(
+            FuxianCandidate {
+                movement: 4.0 / 3.0,
+                interval_from_root: 2.0,
+                score: 0.95,
+            },
+            parent,
+            true,
+        ));
+        assert!(!fuxian_candidate_allowed(
+            FuxianCandidate {
+                movement: 2.0 / 3.0,
+                interval_from_root: 1.0,
+                score: 1.0,
+            },
+            parent,
+            true,
+        ));
+    }
+
+    #[test]
+    fn fuxian_gravity_exponentially_biases_toward_root() {
+        let near_root = FuxianCandidate {
+            movement: 0.5,
+            interval_from_root: 1.0,
+            score: 1.0,
+        };
+        let far_from_root = FuxianCandidate {
+            movement: 3.0 / 2.0,
+            interval_from_root: 3.0,
+            score: 0.95,
+        };
+        let parent = 2.0;
+
+        let neutral_near = fuxian_weight(near_root, parent, 0.0);
+        let neutral_far = fuxian_weight(far_from_root, parent, 0.0);
+        let weighted_near = fuxian_weight(near_root, parent, 1.0);
+        let weighted_far = fuxian_weight(far_from_root, parent, 1.0);
+
+        assert!(neutral_near > neutral_far);
+        assert!(weighted_near / weighted_far > neutral_near / neutral_far);
     }
 
     #[test]

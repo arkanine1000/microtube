@@ -725,6 +725,13 @@ fn draw_param_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
             color: SEMANTIC.life,
         },
         MeterSpec {
+            param: ActiveParam::Gravity,
+            label: "grav",
+            value: format!("{:>3.0}%", app.params.get_gravity() * 100.0),
+            ratio: app.params.get_gravity(),
+            color: SEMANTIC.life,
+        },
+        MeterSpec {
             param: ActiveParam::Shepard,
             label: "drift",
             value: format!(
@@ -784,16 +791,17 @@ fn draw_session_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
     let em_status = if emergence > 0.01 {
         if let Ok(snap) = app.emergence_snapshot.try_lock() {
             format!(
-                "{} voices · gen {} · {}",
+                "{} voices · gen {} · {} · g{:02.0}",
                 snap.voices.len(),
                 snap.generation_count,
-                mode_label
+                mode_label,
+                app.params.get_gravity() * 100.0
             )
         } else {
-            format!("active · {mode_label}")
+            format!("active · {mode_label} · g{:02.0}", app.params.get_gravity() * 100.0)
         }
     } else {
-        format!("quiet · {mode_label}")
+        format!("quiet · {mode_label} · g{:02.0}", app.params.get_gravity() * 100.0)
     };
     let mist = format!(
         "{} · {}",
@@ -1643,6 +1651,19 @@ fn draw_help_lore(f: &mut Frame, area: Rect, accent: Color) {
         )),
         Line::from(Span::styled(
             "partials.",
+            Style::default().fg(INK_1),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Fuxian mode follows voice-leading",
+            Style::default().fg(INK_1),
+        )),
+        Line::from(Span::styled(
+            "rules; gravity pulls choices back",
+            Style::default().fg(INK_1),
+        )),
+        Line::from(Span::styled(
+            "toward the root.",
             Style::default().fg(INK_1),
         )),
         Line::from(""),

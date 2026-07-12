@@ -98,15 +98,17 @@ memory. Parameter changes flow from React state to the worklet over the
 
 ## Source Layout
 
-- `src/App.tsx`: top-level studio UI and tab layout.
+- `src/App.tsx`: top-level studio UI, mobile section dock, and desktop section
+  grid.
 - `src/audio/useMicroTube.ts`: Web Audio session lifecycle, worklet messaging,
   timer, Media Session integration, and sequence execution.
 - `src/audio/params.ts`: parameter metadata, EEG bands, enum values, and slider
-  specs.
+  specs, including the Fuxian gravity control.
 - `src/audio/sequences.ts`: web presets and executable timed sequences.
 - `src/audio/localPresets.ts`: localStorage persistence and validation.
 - `src/i18n/`: typed English and Croatian copy.
-- `src/components/`: reusable UI panels and controls.
+- `src/components/`: reusable UI controls, section surfaces, and the mobile
+  waveform visualizer.
 - `worklet/processor.src.js`: source for the generated audio worklet.
 - `scripts/build-worklet.mjs`: worklet bundling step.
 - `public/`: static PWA metadata, icons, service worker, and generated worklet
@@ -154,7 +156,14 @@ The UI copy lives in `src/i18n/copy.ts` and is provided through
   destroy the binaural separation.
 - The app does not require COOP/COEP headers because it does not use
   `SharedArrayBuffer`; parameters move over `MessagePort`.
+- Emergence spawn mode values mirror Rust exactly: Canon `0`, Penrose `1`, and
+  Fuxian `2`. The web `gravity` slider defaults to `0.5` and is preserved in
+  local presets.
+- Local presets store sound-shaping fields, not transport state. On studio
+  startup, the most recently updated local preset loads by default when one
+  exists.
 - If a production service worker from a previous preview sticks around during
   local development, unregister it from the browser devtools Application panel.
-- Visualizations are currently terminal-only. The web app focuses on audio,
-  control ergonomics, local presets, sequences, and PWA installation.
+- Web visualization is intentionally lightweight: a mobile-only canvas waveform
+  strip is driven from current UI/audio parameters rather than an analyser node.
+  Full visual modes remain terminal-only.

@@ -28,6 +28,9 @@ Warmth controls how much harmonic color is added to the carrier.
 
 Emergence controls the little ecosystem of extra voices.
 
+Gravity controls how strongly Fuxian emergence pulls new voices back toward
+the root after motion away from it.
+
 Drift controls the loudness of the endless rising or falling Shepard-Risset
 layer. Drift Base controls the bottom frequency of that moving stack.
 
@@ -44,7 +47,7 @@ pauses while playback is paused.
 - `n` toggles mist on or off.
 - `m` cycles the mist texture.
 - `e` toggles emergence.
-- `g` switches the emergence spawn mode between Canon and Penrose.
+- `g` cycles the emergence spawn mode: Canon, Penrose, Fuxian.
 - `r` toggles drift.
 - `R` reverses drift direction.
 - `v` and `V` cycle the visual modes.
