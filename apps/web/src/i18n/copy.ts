@@ -187,8 +187,7 @@ export const COPY: Record<Locale, Copy> = {
       minutes: 'auto-stop minutes',
     },
     sections: {
-      carrier: { label: 'Carrier', short: 'Carrier' },
-      tone: { label: 'Tone', short: 'Tone' },
+      signal: { label: 'Signal', short: 'Signal' },
       mist: { label: 'Mist', short: 'Mist' },
       emergence: { label: 'Emergence', short: 'Emerge' },
       drift: { label: 'Drift', short: 'Drift' },
@@ -400,8 +399,7 @@ export const COPY: Record<Locale, Copy> = {
       minutes: 'minute auto-stop tajmera',
     },
     sections: {
-      carrier: { label: 'Nositelj', short: 'Nositelj' },
-      tone: { label: 'Ton', short: 'Ton' },
+      signal: { label: 'Signal', short: 'Signal' },
       mist: { label: 'Maglica', short: 'Maglica' },
       emergence: { label: 'Emergencija', short: 'Emerg.' },
       drift: { label: 'Klizanje', short: 'Kliz.' },

@@ -1,10 +1,10 @@
-import { Flame } from 'lucide-react';
+import { AudioWaveform } from 'lucide-react';
 import type { MicroTubeState, Timbre } from '../../audio/params';
 import { useLocale } from '../../i18n/LocaleProvider';
 import { Segmented } from '../Segmented';
 import { SectionHead, type SliderRender } from './shared';
 
-export function ToneSection({
+export function SignalSection({
   state,
   slider,
   onTimbre,
@@ -16,7 +16,9 @@ export function ToneSection({
   const { copy } = useLocale();
   return (
     <>
-      <SectionHead icon={Flame} title={copy.sections.tone.label} />
+      <SectionHead icon={AudioWaveform} title={copy.sections.signal.label} />
+      {slider('baseFreq')}
+      {slider('beatFreq')}
       <Segmented
         caption={copy.modes.captions.timbre}
         options={copy.modes.timbres}

@@ -20,12 +20,11 @@ import { HeaderBar } from './components/HeaderBar';
 import { LanguageSelector } from './components/LanguageSelector';
 import { SectionBar } from './components/SectionBar';
 import { SlimSlider } from './components/SlimSlider';
-import { CarrierSection } from './components/sections/CarrierSection';
 import { DriftSection } from './components/sections/DriftSection';
 import { EmergenceSection } from './components/sections/EmergenceSection';
 import { MistSection } from './components/sections/MistSection';
 import { SequencesSection } from './components/sections/SequencesSection';
-import { ToneSection } from './components/sections/ToneSection';
+import { SignalSection } from './components/sections/SignalSection';
 import { useLocale } from './i18n/LocaleProvider';
 import { SECTIONS, type SectionId } from './sections';
 
@@ -43,9 +42,9 @@ const SLIDER_BY_KEY = Object.fromEntries(
 /**
  * The active deck section, kept in module scope so it survives start-screen
  * round trips (the studio unmounts entirely). Deliberately not persisted —
- * a page reload starts back at the carrier.
+ * a page reload starts back at the signal controls.
  */
-let lastSection: SectionId = 'carrier';
+let lastSection: SectionId = 'signal';
 
 export default function App() {
   const mt = useMicroTube();
@@ -144,9 +143,8 @@ export default function App() {
   };
 
   const sectionBody: Record<SectionId, () => JSX.Element> = {
-    carrier: () => <CarrierSection slider={paramSlider} />,
-    tone: () => (
-      <ToneSection
+    signal: () => (
+      <SignalSection
         state={state}
         slider={paramSlider}
         onTimbre={(v: Timbre) => setParam('timbre', v)}

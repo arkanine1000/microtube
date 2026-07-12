@@ -1,8 +1,7 @@
 import {
+  AudioWaveform,
   CloudFog,
-  Flame,
   Orbit,
-  RadioTower,
   Sparkles,
   Waves,
   type LucideIcon,
@@ -10,8 +9,7 @@ import {
 import type { MicroTubeState } from './audio/params';
 
 export type SectionId =
-  | 'carrier'
-  | 'tone'
+  | 'signal'
   | 'mist'
   | 'emergence'
   | 'drift'
@@ -29,8 +27,7 @@ export interface SectionDef {
 
 /** Deck sections in dock order. */
 export const SECTIONS: SectionDef[] = [
-  { id: 'carrier', icon: RadioTower },
-  { id: 'tone', icon: Flame },
+  { id: 'signal', icon: AudioWaveform },
   { id: 'mist', icon: CloudFog, isOn: (s) => s.noiseLevel > 0 },
   { id: 'emergence', icon: Sparkles, isOn: (s) => s.emergence > 0 },
   { id: 'drift', icon: Waves, isOn: (s) => s.shepard > 0 },
