@@ -1,4 +1,3 @@
-import { Headphones } from 'lucide-react';
 import { useState } from 'react';
 import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
@@ -76,10 +75,6 @@ export default function App() {
           >
             {mt.status === 'loading' ? copy.start.loading : copy.start.enter}
           </button>
-          <div className="start-headphones">
-            <Headphones size={15} strokeWidth={2.1} />
-            {copy.start.headphones}
-          </div>
           {mt.status === 'error' && (
             <p className="error">
               {copy.start.errorPrefix} {mt.error}

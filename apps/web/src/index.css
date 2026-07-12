@@ -1689,7 +1689,6 @@ svg {
 .start-tagline,
 .start-blurb,
 .btn-enter,
-.start-headphones,
 .error {
   position: relative;
   z-index: 1;
@@ -1729,27 +1728,6 @@ svg {
   padding: 16px 30px;
   font-size: 16px;
   animation: cta-pulse 3.6s ease-in-out infinite;
-}
-
-.start-headphones {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 332px;
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(12, 16, 28, 0.62);
-  color: var(--text-dim);
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: center;
-  flex-direction: column;
-}
-
-.start-headphones svg {
-  flex: 0 0 auto;
-  color: var(--accent);
 }
 
 .error {

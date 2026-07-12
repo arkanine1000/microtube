@@ -60,7 +60,6 @@ export interface Copy {
     tagline: string;
     enter: string;
     loading: string;
-    headphones: string;
     errorPrefix: string;
   };
   header: {
@@ -160,8 +159,6 @@ export const COPY: Record<Locale, Copy> = {
       tagline: 'Tune your mind to a frequency.',
       enter: 'Enter studio',
       loading: 'Spinning up engine...',
-      headphones:
-        'Headphones recommended. The binaural effect lives in the gap between your ears.',
       errorPrefix: 'Engine failed to start:',
     },
     header: {
@@ -370,8 +367,6 @@ export const COPY: Record<Locale, Copy> = {
       tagline: 'Uskladi um s frekvencijom.',
       enter: 'Uđi u studio',
       loading: 'Pokrećem studio...',
-      headphones:
-        'Preporučene su slušalice. Binauralni učinak nastaje u razlici između lijevog i desnog uha.',
       errorPrefix: 'Zvučni pogon se nije pokrenuo:',
     },
     header: {
