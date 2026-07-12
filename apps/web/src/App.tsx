@@ -3,6 +3,7 @@ import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
   EEG_BANDS,
   SLIDERS,
+  VOLUME,
   eegBandIndex,
   type Direction,
   type MicroTubeState,
@@ -36,7 +37,7 @@ const AUTO_ON_VALUE = {
 } as const;
 
 const SLIDER_BY_KEY = Object.fromEntries(
-  SLIDERS.map((spec) => [spec.key, spec]),
+  [...SLIDERS, VOLUME].map((spec) => [spec.key, spec]),
 ) as Record<SliderKey, SliderSpec>;
 
 /**

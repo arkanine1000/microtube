@@ -3,12 +3,10 @@ import {
   Pause,
   Play,
   Timer,
-  Volume2,
-  VolumeX,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { LocalPreset } from '../audio/localPresets';
-import { EEG_BANDS, VOLUME, clamp, eegBandIndex } from '../audio/params';
+import { EEG_BANDS, clamp, eegBandIndex } from '../audio/params';
 import {
   TIMER_MAX_MINUTES,
   TIMER_MIN_MINUTES,
@@ -20,7 +18,7 @@ import { Popover } from './Popover';
 import { PresetSheet } from './PresetSheet';
 import { SlimSlider } from './SlimSlider';
 
-type HeaderPop = 'volume' | 'timer' | null;
+type HeaderPop = 'timer' | null;
 
 function mmss(secs: number): string {
   const total = Math.max(0, Math.ceil(secs));
@@ -33,9 +31,9 @@ function mmss(secs: number): string {
 
 /**
  * The slim fixed header: the single play/pause control, brand + live band
- * readout, and quick access to the three "set rarely" controls — master
- * volume, the auto-stop timer, and saved presets. When auto-stop is armed a
- * hairline progress bar counts the session down along the lower edge.
+ * readout, and quick access to the auto-stop timer and saved presets. When
+ * auto-stop is armed a hairline progress bar counts the session down along the
+ * lower edge.
  */
 export function HeaderBar({
   mt,
@@ -49,9 +47,7 @@ export function HeaderBar({
   const { copy } = useLocale();
   const [pop, setPop] = useState<HeaderPop>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const volWrapRef = useRef<HTMLDivElement>(null);
   const timerWrapRef = useRef<HTMLDivElement>(null);
-  const volBtnRef = useRef<HTMLButtonElement>(null);
   const timerBtnRef = useRef<HTMLButtonElement>(null);
 
   const { state, timer } = mt;
@@ -68,7 +64,9 @@ export function HeaderBar({
 
   const closePop = (which: Exclude<HeaderPop, null>) => {
     setPop(null);
-    (which === 'volume' ? volBtnRef : timerBtnRef).current?.focus();
+    if (which === 'timer') {
+      timerBtnRef.current?.focus();
+    }
   };
 
   const timerLabel = timer.fired
@@ -120,40 +118,6 @@ export function HeaderBar({
       </button>
 
       <div className="header-actions">
-        <div className="header-pop-wrap" ref={volWrapRef}>
-          <button
-            ref={volBtnRef}
-            className={`header-icon-btn${pop === 'volume' ? ' open' : ''}`}
-            type="button"
-            onClick={() => toggle('volume')}
-            onContextMenu={(e) => e.preventDefault()}
-            aria-label={copy.header.volume}
-            aria-haspopup="dialog"
-            aria-expanded={pop === 'volume'}
-          >
-            {state.volume === 0 ? (
-              <VolumeX size={18} strokeWidth={2.2} />
-            ) : (
-              <Volume2 size={18} strokeWidth={2.2} />
-            )}
-          </button>
-          {pop === 'volume' && (
-            <Popover
-              label={copy.header.volume}
-              wrapRef={volWrapRef}
-              onClose={() => closePop('volume')}
-            >
-              <SlimSlider
-                spec={VOLUME}
-                label={copy.sliders.volume.label}
-                hint={copy.sliders.volume.hint}
-                value={state.volume}
-                onChange={(v) => mt.setParam('volume', v)}
-              />
-            </Popover>
-          )}
-        </div>
-
         <div className="header-pop-wrap" ref={timerWrapRef}>
           <button
             ref={timerBtnRef}

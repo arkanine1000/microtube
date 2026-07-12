@@ -17,6 +17,7 @@ export function SignalSection({
   return (
     <>
       <SectionHead icon={AudioWaveform} title={copy.sections.signal.label} />
+      {slider('volume')}
       {slider('baseFreq')}
       {slider('beatFreq')}
       <Segmented

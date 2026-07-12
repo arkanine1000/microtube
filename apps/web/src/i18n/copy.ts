@@ -68,7 +68,6 @@ export interface Copy {
     timeRemaining: string;
     left: string;
     backToStart: string;
-    volume: string;
     timer: string;
     presets: string;
   };
@@ -167,7 +166,6 @@ export const COPY: Record<Locale, Copy> = {
       timeRemaining: 'session time remaining',
       left: 'left',
       backToStart: 'return to start screen',
-      volume: 'Master volume',
       timer: 'Auto-stop timer',
       presets: 'Presets',
     },
@@ -375,7 +373,6 @@ export const COPY: Record<Locale, Copy> = {
       timeRemaining: 'preostalo vrijeme sesije',
       left: 'preostalo',
       backToStart: 'povratak na početni zaslon',
-      volume: 'Glavna glasnoća',
       timer: 'Auto-stop tajmer',
       presets: 'Preseti',
     },

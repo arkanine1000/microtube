@@ -324,7 +324,7 @@ svg {
   white-space: nowrap;
 }
 
-/* Anchored dropdown for the header's volume / timer quick controls. */
+/* Anchored dropdown for the header's timer quick control. */
 .popover {
   position: absolute;
   top: calc(100% + 4px);
