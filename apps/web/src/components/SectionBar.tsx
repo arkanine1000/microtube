@@ -40,7 +40,7 @@ export function SectionBar({
             aria-label={label}
           >
             <span className="dock-icon">
-              <Icon size={18} strokeWidth={2.2} />
+              <Icon size={20} strokeWidth={2.2} />
               {isOn && (
                 <span
                   className={`dock-dot${on ? ' on' : ''}${

@@ -112,12 +112,10 @@ export function HeaderBar({
         <div className="header-brand">
           micro<span>tube</span>
         </div>
-        <div className="header-status" data-playing={state.playing}>
+        <div className="header-status">
           <span className="header-band" style={{ color: band.color }}>
             {band.greek} {state.beatFreq.toFixed(1)} Hz
           </span>
-          {' · '}
-          {state.playing ? copy.header.signalActive : copy.header.signalPaused}
         </div>
       </button>
 

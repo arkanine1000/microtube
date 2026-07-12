@@ -66,8 +66,6 @@ export interface Copy {
   header: {
     play: string;
     pause: string;
-    signalActive: string;
-    signalPaused: string;
     timeRemaining: string;
     left: string;
     backToStart: string;
@@ -169,8 +167,6 @@ export const COPY: Record<Locale, Copy> = {
     header: {
       play: 'play',
       pause: 'pause',
-      signalActive: 'signal active',
-      signalPaused: 'signal paused',
       timeRemaining: 'session time remaining',
       left: 'left',
       backToStart: 'return to start screen',
@@ -381,8 +377,6 @@ export const COPY: Record<Locale, Copy> = {
     header: {
       play: 'pokreni',
       pause: 'pauziraj',
-      signalActive: 'signal aktivan',
-      signalPaused: 'signal pauziran',
       timeRemaining: 'preostalo vrijeme sesije',
       left: 'preostalo',
       backToStart: 'povratak na početni zaslon',
