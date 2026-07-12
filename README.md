@@ -66,8 +66,8 @@ separation.
 - The same Rust engine compiled with `wasm-pack` and hosted in an
   `AudioWorklet`.
 - Touch-first controls with start-screen language selection, sticky transport,
-  local presets, collapsible sound-shaping panels, and `Main` / `Sequences`
-  tabs.
+  local presets, a mobile section dock, desktop section grid, quick sequence
+  controls, and a mobile waveform strip.
 - Installable PWA metadata with a deliberately network-only service worker.
 - English and Croatian localization.
 
