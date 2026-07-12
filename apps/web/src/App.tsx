@@ -133,6 +133,28 @@ export default function App() {
     mt.setParam(gainKey, 0);
   };
 
+  const toggleEffect = (id: SectionId) => {
+    switch (id) {
+      case 'mist':
+        mt.setParam(
+          'noiseLevel',
+          state.noiseLevel > 0 ? 0 : AUTO_ON_VALUE.noiseLevel,
+        );
+        break;
+      case 'emergence':
+        mt.setParam(
+          'emergence',
+          state.emergence > 0 ? 0 : AUTO_ON_VALUE.emergence,
+        );
+        break;
+      case 'drift':
+        mt.setParam('shepard', state.shepard > 0 ? 0 : AUTO_ON_VALUE.shepard);
+        break;
+      default:
+        break;
+    }
+  };
+
   const applyPreset = (preset: Preset) => {
     mt.applySnapshot({
       ...snapshotFromState(mt.state),
@@ -206,6 +228,7 @@ export default function App() {
         <SectionBar
           active={section}
           onSelect={selectSection}
+          onQuickToggle={toggleEffect}
           state={state}
           sequenceActive={mt.sequence.active}
         />
