@@ -1726,9 +1726,15 @@ svg {
 
 /* --- responsive ----------------------------------------------------------- */
 
-/* Interim wide-screen treatment; the full desktop grid lands with the
-   landscape/desktop pass. */
-@media (min-width: 760px) {
+/* Desktop: the dock disappears and every section is visible at once as a
+   two-column console. Gated on height so short coarse-pointer landscape
+   phones keep the thumb-deck instead. */
+@media (min-width: 760px) and (min-height: 481px) {
+  .studio-shell {
+    height: auto;
+    min-height: calc(100dvh - 24px - var(--safe-t) - var(--safe-b));
+  }
+
   .bc-name {
     display: block;
   }
@@ -1736,6 +1742,144 @@ svg {
   .band-chip {
     gap: 3px;
     padding: 10px 3px 9px;
+  }
+
+  .dock {
+    display: none;
+  }
+
+  .deck-stage {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-content: start;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .deck-section,
+  .deck-section.active {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    height: auto;
+    min-height: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.038), transparent 44%),
+      var(--surface);
+    box-shadow:
+      inset 0 1px rgba(255, 255, 255, 0.05),
+      0 18px 40px rgba(0, 0, 0, 0.26);
+    animation: none;
+  }
+
+  .deck-section.off {
+    opacity: 0.78;
+    filter: saturate(0.82);
+  }
+
+  .deck-section.off:hover,
+  .deck-section.off:focus-within {
+    opacity: 1;
+    filter: none;
+  }
+
+  .sequences-section {
+    grid-column: 1 / -1;
+  }
+
+  .sequences-scroll {
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .sequence-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .studio-footer {
+    display: block;
+  }
+}
+
+/* Landscape phones: same thumb-deck, compressed vertically. */
+@media (orientation: landscape) and (max-height: 480px) and (pointer: coarse) {
+  :root {
+    --slider-h: 44px;
+  }
+
+  .studio-shell {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .header {
+    min-height: 46px;
+    padding: 4px 9px;
+  }
+
+  .header-play {
+    width: 38px;
+    height: 38px;
+  }
+
+  .header-icon-btn {
+    min-width: 34px;
+    height: 34px;
+  }
+
+  .header-brand {
+    font-size: 15px;
+  }
+
+  .band-chip {
+    flex-direction: row;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 2px;
+  }
+
+  .bc-greek {
+    font-size: 14px;
+  }
+
+  .deck-stage {
+    padding: 9px 12px;
+  }
+
+  .deck-section.active {
+    gap: 8px;
+  }
+
+  .section-head {
+    display: none;
+  }
+
+  .seg {
+    min-height: 34px;
+    padding: 5px 6px;
+    font-size: 12px;
+  }
+
+  .dock {
+    padding: 3px;
+  }
+
+  .dock-tab {
+    flex-direction: row;
+    gap: 6px;
+    min-height: 38px;
+    padding: 4px 6px;
   }
 }
 
