@@ -20,6 +20,7 @@ export function MistSection({
     <>
       <SectionHead icon={CloudFog} title={copy.sections.mist.label} />
       <Segmented
+        className="mist-options"
         caption={copy.modes.captions.mist}
         options={copy.modes.mists}
         value={state.mistType}

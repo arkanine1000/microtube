@@ -14,6 +14,7 @@ export function Segmented({
   enabled,
   statusLabels,
   onDisable,
+  className,
 }: {
   caption: string;
   options: readonly string[];
@@ -25,9 +26,14 @@ export function Segmented({
     off: string;
   };
   onDisable?: () => void;
+  className?: string;
 }) {
   return (
-    <div className={`toggle-block${enabled === false ? ' off' : ''}`}>
+    <div
+      className={`toggle-block${enabled === false ? ' off' : ''}${
+        className ? ` ${className}` : ''
+      }`}
+    >
       <div className="toggle-caption">
         <span className="toggle-name">{caption}</span>
         {enabled !== undefined && statusLabels && (

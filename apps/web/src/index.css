@@ -1199,6 +1199,19 @@ svg {
     0 0 18px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+@media (max-width: 759px), (max-height: 480px) and (pointer: coarse) {
+  .mist-options .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mist-options .seg {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+}
+
 /* --- sequences ------------------------------------------------------------ */
 
 .sequences-panel {
