@@ -36,7 +36,7 @@ import {
 import { LanguageSelector } from './components/LanguageSelector';
 import { LocalPresetsPanel } from './components/LocalPresetsPanel';
 import { Panel } from './components/Panel';
-import { ParameterSlider } from './components/ParameterSlider';
+import { SlimSlider } from './components/SlimSlider';
 import { SequencesPanel } from './components/SequencesPanel';
 import { Segmented } from './components/Segmented';
 import { StripDashboard } from './components/StripDashboard';
@@ -125,6 +125,16 @@ export default function App() {
     mt.setParam(key, value);
   };
 
+  const paramSlider = (key: SliderKey) => (
+    <SlimSlider
+      spec={key === 'volume' ? VOLUME : SLIDER_BY_KEY[key]}
+      label={copy.sliders[key].label}
+      hint={copy.sliders[key].hint}
+      value={state[key]}
+      onChange={(v) => setParam(key, v)}
+    />
+  );
+
   const setFeatureOption = <
     OptionKey extends 'mistType' | 'spawnMode' | 'shepardDirection',
     GainKey extends keyof typeof AUTO_ON_VALUE,
@@ -205,11 +215,7 @@ export default function App() {
                 className="transport-panel"
               >
                 <div className="transport-vol">
-                  <ParameterSlider
-                    spec={VOLUME}
-                    value={state.volume}
-                    onChange={(v) => setParam('volume', v)}
-                  />
+                  {paramSlider('volume')}
                 </div>
                 <div className="timer-block">
                   <div className="timer-controls">
@@ -284,16 +290,8 @@ export default function App() {
                 className="slider-group carrier-panel"
               >
                 <div className="slider-stack">
-                  <ParameterSlider
-                    spec={SLIDER_BY_KEY.baseFreq}
-                    value={state.baseFreq}
-                    onChange={(v) => setParam('baseFreq', v)}
-                  />
-                  <ParameterSlider
-                    spec={SLIDER_BY_KEY.beatFreq}
-                    value={state.beatFreq}
-                    onChange={(v) => setParam('beatFreq', v)}
-                  />
+                  {paramSlider('baseFreq')}
+                  {paramSlider('beatFreq')}
                 </div>
               </Panel>
 
@@ -309,11 +307,7 @@ export default function App() {
                   value={state.timbre}
                   onChange={(v) => setParam('timbre', v as Timbre)}
                 />
-                <ParameterSlider
-                  spec={SLIDER_BY_KEY.harmonics}
-                  value={state.harmonics}
-                  onChange={(v) => setParam('harmonics', v)}
-                />
+                {paramSlider('harmonics')}
               </Panel>
 
               <Panel
@@ -337,11 +331,7 @@ export default function App() {
                 />
                 {state.noiseLevel > 0 && (
                   <div className="feature-controls">
-                    <ParameterSlider
-                      spec={SLIDER_BY_KEY.noiseLevel}
-                      value={state.noiseLevel}
-                      onChange={(v) => setParam('noiseLevel', v)}
-                    />
+                    {paramSlider('noiseLevel')}
                   </div>
                 )}
               </Panel>
@@ -367,16 +357,8 @@ export default function App() {
                 />
                 {state.emergence > 0 && (
                   <div className="feature-controls">
-                    <ParameterSlider
-                      spec={SLIDER_BY_KEY.emergence}
-                      value={state.emergence}
-                      onChange={(v) => setParam('emergence', v)}
-                    />
-                    <ParameterSlider
-                      spec={SLIDER_BY_KEY.gravity}
-                      value={state.gravity}
-                      onChange={(v) => setParam('gravity', v)}
-                    />
+                    {paramSlider('emergence')}
+                    {paramSlider('gravity')}
                   </div>
                 )}
               </Panel>
@@ -406,16 +388,8 @@ export default function App() {
                 />
                 {state.shepard > 0 && (
                   <div className="feature-controls drift-controls">
-                    <ParameterSlider
-                      spec={SLIDER_BY_KEY.shepardBase}
-                      value={state.shepardBase}
-                      onChange={(v) => setParam('shepardBase', v)}
-                    />
-                    <ParameterSlider
-                      spec={SLIDER_BY_KEY.shepard}
-                      value={state.shepard}
-                      onChange={(v) => setParam('shepard', v)}
-                    />
+                    {paramSlider('shepardBase')}
+                    {paramSlider('shepard')}
                   </div>
                 )}
               </Panel>

@@ -96,6 +96,11 @@ export interface SliderSpec {
    * its minimum is 0, and the UI recedes it while it sits there.
    */
   toggle?: boolean;
+  /**
+   * Multiplier between the stored value and the number a human types in the
+   * slider's exact-entry form — 100 for 0..1 parameters shown as percentages.
+   */
+  displayScale?: number;
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -131,6 +136,7 @@ const WARMTH: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
 };
 
 const NOISE: SliderSpec = {
@@ -142,6 +148,7 @@ const NOISE: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
   toggle: true,
 };
 
@@ -154,6 +161,7 @@ const EMERGENCE: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
   toggle: true,
 };
 
@@ -166,6 +174,7 @@ const GRAVITY: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
 };
 
 const DRIFT_GAIN: SliderSpec = {
@@ -177,6 +186,7 @@ const DRIFT_GAIN: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
   toggle: true,
 };
 
@@ -242,6 +252,7 @@ export const VOLUME: SliderSpec = {
   coarse: 0.1,
   unit: '',
   format: pct,
+  displayScale: 100,
 };
 
 export interface EegBand {

@@ -37,6 +37,7 @@
   --radius-sm: 12px;
   --control-h: 50px;
   --topbar-h: 66px;
+  --slider-h: 56px;
   --ease: cubic-bezier(0.33, 1, 0.68, 1);
 
   /* safe-area shorthands — folded into layout padding */
@@ -779,11 +780,11 @@ svg {
 .slider-stack {
   display: flex;
   flex-direction: column;
-  gap: 17px;
+  gap: 12px;
 }
 
 .tone-panel .panel-body-inner {
-  gap: 17px;
+  gap: 14px;
 }
 
 .feature-panel {
@@ -806,91 +807,236 @@ svg {
 .feature-controls {
   display: flex;
   flex-direction: column;
-  gap: 17px;
+  gap: 12px;
   min-width: 0;
   padding-top: 2px;
   animation: panel-body-enter 0.2s var(--ease) both;
 }
 
-.slider {
+/* A slim single-row slider: the whole row is the track, the label rides on
+   top of the fill, and the value chip doubles as the exact-entry trigger. */
+.sslider {
+  position: relative;
   min-width: 0;
+  height: var(--slider-h);
   transition: opacity 0.4s var(--ease);
 }
 
 /* A toggleable function sitting at zero recedes — it should not compete for
    attention until the user engages it. Hover/focus restores it as a hint. */
-.slider.off {
+.sslider.off {
   opacity: 0.46;
 }
 
-.slider.off:hover,
-.slider.off:focus-within {
+.sslider.off:hover,
+.sslider.off:focus-within {
   opacity: 0.9;
 }
 
-.slider-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 9px;
+.sslider-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent),
+    rgba(16, 21, 36, 0.88);
+  cursor: pointer;
+  touch-action: none;
+  transition: border-color 0.6s var(--ease);
 }
 
-.slider-icon {
+.sslider-track:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, white);
+  outline-offset: 2px;
+}
+
+.sslider-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-right: 2px solid color-mix(in srgb, var(--accent) 92%, white);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    color-mix(in srgb, var(--accent) 46%, transparent)
+  );
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 24%, transparent);
+  transition: width 0.13s var(--ease), background 0.6s var(--ease);
+}
+
+.sslider-head {
+  position: absolute;
+  inset: 0 auto 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100% - 104px);
+  pointer-events: none;
+}
+
+.sslider-icon {
   display: grid;
   place-items: center;
-  width: 35px;
-  height: 35px;
+  color: var(--text-dim);
+  transition: color 0.4s var(--ease);
+}
+
+.sslider-icon.active {
+  color: var(--accent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 45%, transparent));
+}
+
+.sslider-label {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 740;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(3, 6, 14, 0.8);
+}
+
+.sslider-fine {
+  position: absolute;
+  top: 50%;
+  right: 96px;
+  transform: translateY(-50%);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: rgba(8, 12, 24, 0.85);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 760;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sslider-value {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(18, 23, 40, 0.7);
-  color: var(--text-dim);
-  transition: color 0.4s var(--ease), border-color 0.4s var(--ease),
-    background 0.4s var(--ease), box-shadow 0.4s var(--ease);
-}
-
-.slider-icon.active {
+  min-height: 36px;
+  padding: 0 10px;
+  background: rgba(9, 13, 26, 0.78);
   color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
-  background: color-mix(in srgb, var(--accent) 13%, rgba(18, 23, 40, 0.7));
-  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-.slider-titles {
-  min-width: 0;
-}
-
-.slider-label {
-  display: block;
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: color 0.4s var(--ease), border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
 }
 
-.slider-hint {
-  display: block;
-  margin-top: 1px;
+.sslider-value:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, rgba(9, 13, 26, 0.85));
+}
+
+.sslider-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: var(--radius-sm);
+  padding: 0 8px 0 12px;
+  background: rgba(14, 19, 34, 0.96);
+}
+
+.sslider-edit.invalid {
+  border-color: var(--danger);
+  animation: sslider-shake 0.28s var(--ease);
+}
+
+.sslider-edit-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
   overflow: hidden;
-  color: var(--text-dim);
-  font-size: 12px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.slider-value {
-  font-size: 14.5px;
-  font-weight: 760;
-  color: var(--accent);
+.sslider-edit-input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  width: 64px;
+  min-width: 48px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 9px;
+  background: rgba(8, 12, 24, 0.8);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
   font-variant-numeric: tabular-nums;
   text-align: right;
-  white-space: nowrap;
-  transition: color 0.4s var(--ease);
 }
 
-.slider-row {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 46px;
-  align-items: center;
-  gap: 8px;
+.sslider-edit-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  outline: none;
+}
+
+.sslider-edit-unit {
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sslider-edit-ok,
+.sslider-edit-cancel {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  min-height: 34px;
+  padding: 0 11px;
+  background: var(--surface-strong);
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 740;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: border-color 0.18s var(--ease), color 0.18s var(--ease);
+}
+
+.sslider-edit-ok {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  color: var(--accent);
+}
+
+.sslider-edit-ok:hover,
+.sslider-edit-cancel:hover {
+  border-color: var(--line-bright);
+  color: var(--text);
+}
+
+@keyframes sslider-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
 }
 
 .nudge {
@@ -916,47 +1062,6 @@ svg {
 
 .nudge:active {
   transform: translateY(1px) scale(0.95);
-}
-
-.track {
-  position: relative;
-  height: 32px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
-  border-radius: var(--radius-sm);
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent),
-    rgba(16, 21, 36, 0.88);
-  cursor: pointer;
-  touch-action: none;
-  transition: border-color 0.6s var(--ease);
-}
-
-.track-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--accent) 26%, transparent),
-    color-mix(in srgb, var(--accent) 88%, transparent),
-    color-mix(in srgb, var(--accent) 96%, white)
-  );
-  box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 28%, transparent);
-  transition: width 0.13s var(--ease), background 0.6s var(--ease);
-}
-
-.track-knob {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  width: 4px;
-  margin-left: -2px;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow:
-    0 0 14px rgba(255, 255, 255, 0.7),
-    0 0 4px color-mix(in srgb, var(--accent) 60%, transparent);
-  transition: left 0.13s var(--ease);
 }
 
 /* --- timer ---------------------------------------------------------------- */

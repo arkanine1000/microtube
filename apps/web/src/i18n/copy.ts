@@ -31,8 +31,6 @@ interface LabelCaption {
 interface SliderText {
   label: string;
   hint: string;
-  decrease: string;
-  increase: string;
 }
 
 interface BandText {
@@ -133,6 +131,12 @@ export interface Copy {
     spawnModes: Trio;
   };
   sliders: Record<SliderKey, SliderText>;
+  slider: {
+    fine: string;
+    editValue: string;
+    apply: string;
+    cancel: string;
+  };
   sliderGroups: Record<SliderGroupId, LabelCaption>;
   bands: Record<EegBandId, BandText>;
   presets: PresetTuple;
@@ -245,57 +249,45 @@ export const COPY: Record<Locale, Copy> = {
       baseFreq: {
         label: 'Base frequency',
         hint: 'Carrier pitch of the binaural pair',
-        decrease: 'decrease base frequency',
-        increase: 'increase base frequency',
       },
       beatFreq: {
         label: 'Beat frequency',
         hint: 'L/R offset - sets the EEG band',
-        decrease: 'decrease beat frequency',
-        increase: 'increase beat frequency',
       },
       harmonics: {
         label: 'Warmth',
         hint: 'Harmonic partials mixed into the carrier',
-        decrease: 'decrease warmth',
-        increase: 'increase warmth',
       },
       emergence: {
         label: 'Emergence',
         hint: 'Generative canon / quasicrystal voices',
-        decrease: 'decrease emergence',
-        increase: 'increase emergence',
       },
       gravity: {
         label: 'Gravity',
         hint: 'Fuxian pull toward the root',
-        decrease: 'decrease gravity',
-        increase: 'increase gravity',
       },
       noiseLevel: {
         label: 'Mist',
         hint: 'Ambient coloured-noise mist layer',
-        decrease: 'decrease mist',
-        increase: 'increase mist',
       },
       shepard: {
         label: 'Drift gain',
         hint: 'Shepard-Risset endless-glissando level',
-        decrease: 'decrease drift gain',
-        increase: 'increase drift gain',
       },
       shepardBase: {
         label: 'Drift base',
         hint: 'Lowest oscillator in the Shepard stack',
-        decrease: 'decrease drift base',
-        increase: 'increase drift base',
       },
       volume: {
         label: 'Master volume',
         hint: 'Overall output level',
-        decrease: 'decrease master volume',
-        increase: 'increase master volume',
       },
+    },
+    slider: {
+      fine: 'fine',
+      editValue: 'enter exact value',
+      apply: 'OK',
+      cancel: 'Cancel',
     },
     sliderGroups: {
       carrier: { label: 'Carrier', caption: 'the binaural pair' },
@@ -479,57 +471,45 @@ export const COPY: Record<Locale, Copy> = {
       baseFreq: {
         label: 'Osnovna frekvencija',
         hint: 'Nosiva visina binauralnog para',
-        decrease: 'smanji osnovnu frekvenciju',
-        increase: 'povećaj osnovnu frekvenciju',
       },
       beatFreq: {
         label: 'Beat frekvencija',
         hint: 'L/D pomak - određuje EEG pojas',
-        decrease: 'smanji beat frekvenciju',
-        increase: 'povećaj beat frekvenciju',
       },
       harmonics: {
         label: 'Toplina',
         hint: 'Harmonijski parcijali pomiješani s nosiocem',
-        decrease: 'smanji toplinu',
-        increase: 'povećaj toplinu',
       },
       emergence: {
         label: 'Emergencija',
         hint: 'Generativni kanon / kvazikristalni glasovi',
-        decrease: 'smanji emergenciju',
-        increase: 'povećaj emergenciju',
       },
       gravity: {
         label: 'Gravitacija',
         hint: 'Fuxian privlačenje prema korijenu',
-        decrease: 'smanji gravitaciju',
-        increase: 'povećaj gravitaciju',
       },
       noiseLevel: {
         label: 'Maglica',
         hint: 'Sloj ambijentalnog obojenog šuma',
-        decrease: 'smanji maglicu',
-        increase: 'povećaj maglicu',
       },
       shepard: {
         label: 'Jačina klizanja',
         hint: 'Razina Shepard-Risset beskonačnog glissanda',
-        decrease: 'smanji jačinu klizanja',
-        increase: 'povećaj jačinu klizanja',
       },
       shepardBase: {
         label: 'Baza klizanja',
         hint: 'Najniži oscilator u Shepardovu sloju',
-        decrease: 'smanji bazu klizanja',
-        increase: 'povećaj bazu klizanja',
       },
       volume: {
         label: 'Glavna glasnoća',
         hint: 'Ukupna izlazna razina',
-        decrease: 'smanji glavnu glasnoću',
-        increase: 'povećaj glavnu glasnoću',
       },
+    },
+    slider: {
+      fine: 'fino',
+      editValue: 'unesi točnu vrijednost',
+      apply: 'U redu',
+      cancel: 'Odustani',
     },
     sliderGroups: {
       carrier: { label: 'Nositelj', caption: 'binauralni par' },
