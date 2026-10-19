@@ -12,6 +12,7 @@
 pub mod emergence;
 pub mod engine;
 pub mod penrose;
+pub mod sea_organ;
 pub mod shepard;
 pub mod synth;
 

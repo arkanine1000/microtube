@@ -14,6 +14,7 @@
 use std::f64::consts::{PI, TAU};
 
 use crate::penrose::{self, PenroseWalk, Tile};
+use crate::sea_organ::{self, SeaOrganState};
 
 /// Golden ratio - the fundamental proportion of emergence
 const PHI: f64 = 1.618033988749895;
@@ -111,6 +112,7 @@ pub struct Voice {
     pub generation: u8,          // How many ancestors spawned this voice
     pub pan: f64,                // -1.0 (left) to 1.0 (right)
     spatial: HrtfState,
+    pipe: Option<PipeVoice>, // Sea Organ pipe driven by the sea, not the bell envelope
     alive: bool,
 }
 
@@ -132,12 +134,26 @@ impl Voice {
             generation,
             pan,
             spatial: HrtfState::default(),
+            pipe: None,
             alive: true,
         }
     }
 
     fn root() -> Self {
         Self::new(1.0, 1.0, 8.0, 0, 0.0)
+    }
+
+    /// A Sea Organ pipe at its fixed place on the wall.
+    fn pipe(index: usize, noise_seed: u32) -> Self {
+        let mut voice = Self::new(
+            sea_organ::pipe_ratio(index),
+            1.0,
+            PIPE_MAX_LIFETIME + PIPE_RELEASE_SECONDS * 2.0,
+            (index / sea_organ::PIPES_PER_SEGMENT) as u8,
+            sea_organ::pipe_pan(index),
+        );
+        voice.pipe = Some(PipeVoice::new(index as u8, noise_seed));
+        voice
     }
 
     /// Envelope: smooth attack/sustain/release
@@ -246,18 +262,130 @@ fn one_pole_alpha(cutoff_hz: f64, sample_rate: f64) -> f64 {
     (omega / (omega + sample_rate.max(1.0))).clamp(0.0, 1.0)
 }
 
+/// Sea Organ pipe voices: speaking threshold and drive come from the sea;
+/// timbre is a stopped flue pipe (odd partials) with band-passed breath.
+const PIPE_MAX_LIFETIME: f64 = 20.0; // Safety cap for one continuous breath, then release
+const PIPE_RELEASE_SECONDS: f64 = 0.25; // Silence after unlatching before the voice dies
+const PIPE_SMOOTHING_SECONDS: f64 = 0.01;
+const PIPE_PITCH_RISE_MIN: f64 = 0.005; // Sharpening at the edge of speech
+const PIPE_PITCH_RISE_SPAN: f64 = 0.02; // Extra sharpening at full drive
+const PIPE_ONSET_SCOOP: f64 = 0.02; // Starts this much flat...
+const PIPE_SCOOP_SECONDS: f64 = 0.08; // ...and glides up over this long
+const PIPE_CHIFF_SECONDS: f64 = 0.04;
+const PIPE_PARTIAL3_MIN: f64 = 0.15;
+const PIPE_PARTIAL3_SPAN: f64 = 0.35;
+const PIPE_PARTIAL5_SPAN: f64 = 0.125;
+const PIPE_CHIFF_PARTIAL3: f64 = 0.5;
+const PIPE_CHIFF_BREATH: f64 = 2.0;
+const PIPE_BREATH_GAIN: f64 = 0.12; // RMS of breath at full drive, tone peak = 1
+const PIPE_BREATH_Q: f64 = 8.0;
+/// Below this emergence level the sea organ fades out, so turning emergence
+/// off never cuts a sounding pipe.
+const PIPE_FADE_INTENSITY: f64 = 0.15;
+
+#[derive(Clone, Copy)]
+struct PipeVoice {
+    index: u8,
+    held: bool,
+    target: f64,
+    breath_target: f64,
+    drive_target: f64,
+    breath: f64,
+    drive: f64,
+    onset_age: f64,
+    released_for: f64,
+    noise: BreathNoise,
+}
+
+impl PipeVoice {
+    fn new(index: u8, noise_seed: u32) -> Self {
+        Self {
+            index,
+            held: true,
+            target: 0.0,
+            breath_target: 0.0,
+            drive_target: 0.0,
+            breath: 0.0,
+            drive: 0.0,
+            onset_age: 0.0,
+            released_for: 0.0,
+            noise: BreathNoise::new(noise_seed),
+        }
+    }
+}
+
+/// White noise through a unity-peak TPT state-variable band-pass,
+/// normalised so the output RMS matches the input regardless of centre.
+#[derive(Clone, Copy)]
+struct BreathNoise {
+    rng: u32,
+    ic1: f64,
+    ic2: f64,
+    a1: f64,
+    a2: f64,
+    a3: f64,
+    gain: f64,
+}
+
+impl BreathNoise {
+    fn new(seed: u32) -> Self {
+        Self {
+            rng: seed | 1,
+            ic1: 0.0,
+            ic2: 0.0,
+            a1: 0.0,
+            a2: 0.0,
+            a3: 0.0,
+            gain: 0.0,
+        }
+    }
+
+    fn tune(&mut self, freq: f64, sample_rate: f64) {
+        let freq = freq.clamp(20.0, sample_rate * 0.45);
+        let g = (PI * freq / sample_rate).tan();
+        let k = 1.0 / PIPE_BREATH_Q;
+        self.a1 = 1.0 / (1.0 + g * (g + k));
+        self.a2 = g * self.a1;
+        self.a3 = g * self.a2;
+        // Uniform noise has variance 1/3; a unity-peak resonance passes
+        // π f / (2Q) Hz of the fs/2 band.
+        self.gain = k * (3.0 * PIPE_BREATH_Q * sample_rate / (PI * freq)).sqrt();
+    }
+
+    fn sample(&mut self) -> f64 {
+        self.rng ^= self.rng << 13;
+        self.rng ^= self.rng >> 17;
+        self.rng ^= self.rng << 5;
+        let white = (self.rng as f64 / u32::MAX as f64) * 2.0 - 1.0;
+        let v3 = white - self.ic2;
+        let v1 = self.a1 * self.ic1 + self.a2 * v3;
+        let v2 = self.ic2 + self.a2 * self.ic1 + self.a3 * v3;
+        self.ic1 = 2.0 * v1 - self.ic1;
+        self.ic2 = 2.0 * v2 - self.ic2;
+        v1 * self.gain
+    }
+}
+
+fn smoothstep(x: f64) -> f64 {
+    let x = x.clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
+}
+
 /// How spawn ratios are chosen.
 ///
 /// `Canon` follows the original repeating ratio table (a Bach-style fugue).
 /// `Penrose` reads ratios from a Fibonacci-word walk — the 1D quasicrystal
 /// that traces a Conway worm through a Penrose P3 tiling.
 /// `Fuxian` filters a consonance pool through counterpoint-style constraints.
+/// `SeaOrgan` replaces the spawn timer with a simulated sea driving the 35
+/// tuned pipes of the Zadar Sea Organ; gravity sets the wave period.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SpawnMode {
     Canon = 0,
     Penrose = 1,
     Fuxian = 2,
+    SeaOrgan = 3,
 }
 
 impl SpawnMode {
@@ -266,6 +394,7 @@ impl SpawnMode {
             Self::Canon => "canon",
             Self::Penrose => "penrose",
             Self::Fuxian => "fuxian",
+            Self::SeaOrgan => "sea_organ",
         }
     }
 
@@ -273,7 +402,8 @@ impl SpawnMode {
         match self {
             Self::Canon => Self::Penrose,
             Self::Penrose => Self::Fuxian,
-            Self::Fuxian => Self::Canon,
+            Self::Fuxian => Self::SeaOrgan,
+            Self::SeaOrgan => Self::Canon,
         }
     }
 
@@ -281,6 +411,7 @@ impl SpawnMode {
         match value {
             1 => Self::Penrose,
             2 => Self::Fuxian,
+            3 => Self::SeaOrgan,
             _ => Self::Canon,
         }
     }
@@ -337,6 +468,8 @@ pub struct EmergenceEngine {
     canon_offset: f64, // Pitch offset for canon repetition
     spawn_mode: SpawnMode,
     penrose_walk: PenroseWalk,
+    sea: SeaOrganState,
+    sea_counter: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -381,6 +514,8 @@ impl EmergenceEngine {
             canon_offset: 1.0,
             spawn_mode: SpawnMode::Canon,
             penrose_walk: PenroseWalk::new(),
+            sea: SeaOrganState::new(),
+            sea_counter: 0,
         };
         // Seed with a root voice
         engine.voices.push(Voice::root());
@@ -395,10 +530,21 @@ impl EmergenceEngine {
         self.canon_position = 0;
         self.canon_offset = 1.0;
         self.penrose_walk = PenroseWalk::new();
-        self.voices.push(Voice::root());
+        self.sea.reset();
+        self.sea_counter = 0;
+        // A calm sea is silent: the Sea Organ has no root drone.
+        if self.spawn_mode != SpawnMode::SeaOrgan {
+            self.voices.push(Voice::root());
+        }
     }
 
     pub fn set_spawn_mode(&mut self, mode: SpawnMode) {
+        // Entering Sea Organ drops voices that have not started sounding
+        // (such as the seed root), so a preset that starts at sea starts in
+        // silence; anything audible finishes its own envelope.
+        if mode == SpawnMode::SeaOrgan && self.spawn_mode != mode {
+            self.voices.retain(|voice| voice.amplitude >= 0.001);
+        }
         self.spawn_mode = mode;
     }
 
@@ -426,12 +572,29 @@ impl EmergenceEngine {
         self.time += dt;
         self.spawn_timer += dt;
 
-        // Spawn logic - check if it's time for a new voice
-        let adjusted_interval = self.spawn_interval / (0.5 + intensity * 1.5);
-        if self.spawn_timer >= adjusted_interval {
-            self.spawn_timer = 0.0;
-            self.try_spawn(intensity, gravity);
+        let sea_mode = self.spawn_mode == SpawnMode::SeaOrgan;
+        if sea_mode {
+            // The sea, not a timer, decides when pipes speak.
+            self.sea_counter += 1;
+            if self.sea_counter >= sea_organ::CONTROL_INTERVAL {
+                self.sea_counter = 0;
+                let control_dt = sea_organ::CONTROL_INTERVAL as f64 * dt;
+                self.sea.tick(
+                    control_dt,
+                    sea_organ::wave_height(intensity),
+                    sea_organ::peak_period(gravity),
+                );
+                self.update_pipes(base_freq, intensity);
+            }
+        } else {
+            // Spawn logic - check if it's time for a new voice
+            let adjusted_interval = self.spawn_interval / (0.5 + intensity * 1.5);
+            if self.spawn_timer >= adjusted_interval {
+                self.spawn_timer = 0.0;
+                self.try_spawn(intensity, gravity);
+            }
         }
+        let pipe_smoothing = 1.0 - (-dt / PIPE_SMOOTHING_SECONDS).exp();
 
         // Generate audio from all living voices
         let mut sum_l = 0.0;
@@ -444,6 +607,32 @@ impl EmergenceEngine {
             }
 
             voice.age += dt;
+
+            if let Some(pipe) = voice.pipe.as_mut() {
+                let sample = pipe_sample(
+                    pipe,
+                    &mut voice.amplitude,
+                    &mut voice.phase,
+                    base_freq * voice.interval_from_root,
+                    // Past the safety cap the pipe breathes out like any release.
+                    sea_mode && voice.age < PIPE_MAX_LIFETIME,
+                    pipe_smoothing,
+                    dt,
+                    self.sample_rate,
+                );
+                if pipe.released_for > PIPE_RELEASE_SECONDS {
+                    voice.alive = false;
+                }
+                let (voice_l, voice_r) =
+                    voice
+                        .spatial
+                        .process(sample * 0.15, voice.pan, self.sample_rate);
+                sum_l += voice_l;
+                sum_r += voice_r;
+                total_energy += voice.amplitude;
+                continue;
+            }
+
             let env = voice.envelope();
             voice.amplitude = env * intensity;
 
@@ -495,6 +684,65 @@ impl EmergenceEngine {
         self.voices.retain(|v| v.is_alive());
 
         (sum_l, sum_r)
+    }
+
+    /// Control-rate Sea Organ update: start pipes whose segment just crossed
+    /// their threshold and retarget every pipe voice from the sea.
+    fn update_pipes(&mut self, base_freq: f64, intensity: f64) {
+        for index in 0..sea_organ::PIPES {
+            if self.sea.pipe_onset(index) {
+                self.start_pipe(index);
+            }
+        }
+
+        let fade = (intensity / PIPE_FADE_INTENSITY).min(1.0);
+        for voice in &mut self.voices {
+            let Some(pipe) = voice.pipe.as_mut() else {
+                continue;
+            };
+            let index = pipe.index as usize;
+            let drive = self.sea.pipe_drive(index);
+            let gain = sea_organ::pipe_distance_gain(index) * fade;
+            pipe.held = self.sea.pipe_latched(index);
+            pipe.drive_target = drive;
+            pipe.target = smoothstep(drive) * gain;
+            pipe.breath_target = drive.sqrt() * gain;
+            pipe.noise
+                .tune(base_freq * voice.interval_from_root, self.sample_rate);
+        }
+    }
+
+    fn start_pipe(&mut self, index: usize) {
+        if let Some(voice) = self
+            .voices
+            .iter_mut()
+            .find(|voice| voice.pipe.is_some_and(|pipe| pipe.index as usize == index))
+        {
+            // Still breathing out from the last wave: speak again.
+            if let Some(pipe) = voice.pipe.as_mut() {
+                pipe.onset_age = 0.0;
+                pipe.released_for = 0.0;
+            }
+            voice.age = 0.0;
+            voice.alive = true;
+            return;
+        }
+
+        if self.voices.len() >= MAX_VOICES {
+            // The sea keeps the loudest pipes.
+            if let Some(quietest) = self
+                .voices
+                .iter_mut()
+                .min_by(|a, b| a.amplitude.total_cmp(&b.amplitude))
+            {
+                quietest.alive = false;
+            }
+            self.voices.retain(|v| v.alive);
+        }
+
+        self.epoch += 1;
+        let noise_seed = (self.xorshift() * u32::MAX as f64) as u32;
+        self.voices.push(Voice::pipe(index, noise_seed));
     }
 
     fn try_spawn(&mut self, intensity: f64, gravity: f64) {
@@ -553,6 +801,8 @@ impl EmergenceEngine {
                 self.canon_child_ratio(parent.interval_from_root, base_ratio, intensity)
             }
             SpawnMode::Fuxian => self.fuxian_child_ratio(parent, gravity),
+            // Sea Organ pipes start from the sea in `update_pipes`.
+            SpawnMode::SeaOrgan => return,
         };
 
         // Lifetime varies with the interval from parent to child: longer for
@@ -699,6 +949,59 @@ impl EmergenceEngine {
             walk_position: self.penrose_walk.position(),
         }
     }
+}
+
+/// Render one sample of a Sea Organ pipe and advance its state.
+#[allow(clippy::too_many_arguments)]
+fn pipe_sample(
+    pipe: &mut PipeVoice,
+    amplitude: &mut f64,
+    phase: &mut f64,
+    freq: f64,
+    driven: bool,
+    smoothing: f64,
+    dt: f64,
+    sample_rate: f64,
+) -> f64 {
+    if !driven {
+        // Left Sea Organ mode or held too long: let the pipe breathe out.
+        pipe.held = false;
+        pipe.target = 0.0;
+        pipe.breath_target = 0.0;
+    }
+    if pipe.held {
+        pipe.released_for = 0.0;
+    } else {
+        pipe.released_for += dt;
+    }
+    pipe.onset_age += dt;
+    *amplitude += (pipe.target - *amplitude) * smoothing;
+    pipe.breath += (pipe.breath_target - pipe.breath) * smoothing;
+    pipe.drive += (pipe.drive_target - pipe.drive) * smoothing;
+
+    if *amplitude < 0.001 && pipe.breath < 0.001 {
+        return 0.0;
+    }
+
+    // Pitch rises slightly with pressure and scoops up into each onset.
+    let scoop = PIPE_ONSET_SCOOP * (1.0 - pipe.onset_age / PIPE_SCOOP_SECONDS).max(0.0);
+    let bend = 1.0 + PIPE_PITCH_RISE_MIN + PIPE_PITCH_RISE_SPAN * pipe.drive - scoop;
+    *phase += freq * bend / sample_rate;
+    *phase -= phase.floor();
+
+    // Stopped pipe: odd partials, brightening with drive and on the chiff.
+    let chiff = (1.0 - pipe.onset_age / PIPE_CHIFF_SECONDS).max(0.0);
+    let w3 = PIPE_PARTIAL3_MIN + PIPE_PARTIAL3_SPAN * pipe.drive + PIPE_CHIFF_PARTIAL3 * chiff;
+    let w5 = PIPE_PARTIAL5_SPAN * pipe.drive;
+    let p = TAU * *phase;
+    let tone = (p.sin() + w3 * (3.0 * p).sin() + w5 * (5.0 * p).sin()) / (1.0 + w3 + w5);
+
+    let breath = pipe.noise.sample()
+        * PIPE_BREATH_GAIN
+        * pipe.breath
+        * (1.0 + PIPE_CHIFF_BREATH * chiff);
+
+    tone * *amplitude + breath
 }
 
 fn build_fuxian_pool(
@@ -917,6 +1220,7 @@ mod tests {
             generation: 2,
             pan: 0.0,
             spatial: HrtfState::default(),
+            pipe: None,
             alive: true,
         });
         engine.canon_pattern = vec![7]; // 3:2 above the parent
@@ -1082,6 +1386,114 @@ mod tests {
         assert_close(fold_voice_ratio(6.0), 3.0);
         assert_close(fold_voice_ratio(0.125), 0.25);
         assert_close(fold_voice_ratio(0.1875), 0.375);
+    }
+
+    #[test]
+    fn spawn_mode_round_trips_and_cycles_through_sea_organ() {
+        assert_eq!(SpawnMode::from_u32(3), SpawnMode::SeaOrgan);
+        assert_eq!(SpawnMode::from_u32(SpawnMode::SeaOrgan as u32), SpawnMode::SeaOrgan);
+        assert_eq!(SpawnMode::Fuxian.toggled(), SpawnMode::SeaOrgan);
+        assert_eq!(SpawnMode::SeaOrgan.toggled(), SpawnMode::Canon);
+        assert_eq!(SpawnMode::SeaOrgan.label(), "sea_organ");
+    }
+
+    fn sea_engine(sample_rate: f64) -> EmergenceEngine {
+        let mut engine = EmergenceEngine::new(sample_rate);
+        engine.set_spawn_mode(SpawnMode::SeaOrgan);
+        engine
+    }
+
+    #[test]
+    fn sea_organ_starts_and_resets_without_a_root_voice() {
+        let mut engine = sea_engine(8_000.0);
+        assert!(engine.voices.is_empty());
+
+        engine.voices.push(Voice::pipe(17, 1));
+        engine.reset();
+        assert!(engine.voices.is_empty());
+    }
+
+    #[test]
+    fn calm_sea_organ_stays_silent() {
+        let mut engine = sea_engine(8_000.0);
+        let weights = [0.0; 5];
+        for _ in 0..(8_000 * 60) {
+            let (left, right) = engine.process(146.83, 0.1, 0.5, &weights, 0.0);
+            assert_eq!((left, right), (0.0, 0.0));
+        }
+        assert!(engine.voices.is_empty());
+        assert_eq!(engine.epoch, 0);
+    }
+
+    #[test]
+    fn stormy_sea_organ_stays_bounded_within_the_voice_cap() {
+        let mut engine = sea_engine(48_000.0);
+        let weights = [0.0; 5];
+        let mut peak = 0.0_f64;
+        let mut most_voices = 0;
+        for _ in 0..(48_000 * 60) {
+            let (left, right) = engine.process(146.83, 1.0, 1.0, &weights, 0.0);
+            assert!(left.is_finite() && right.is_finite());
+            peak = peak.max(left.abs()).max(right.abs());
+            most_voices = most_voices.max(engine.voices.len());
+        }
+        assert!(engine.epoch > 0, "the storm should sound pipes");
+        assert!(most_voices <= MAX_VOICES);
+        assert!(engine.voices.iter().all(|voice| voice.pipe.is_some()));
+        assert!(peak > 0.01 && peak < 1.0, "peak {peak}");
+    }
+
+    #[test]
+    fn leaving_sea_organ_lets_pipes_breathe_out() {
+        let mut engine = sea_engine(8_000.0);
+        engine.voices.push(Voice::pipe(17, 1));
+        engine.set_spawn_mode(SpawnMode::Canon);
+        let weights = [0.0; 5];
+        for _ in 0..(8_000 / 2) {
+            engine.process(146.83, 0.5, 0.5, &weights, 0.0);
+        }
+        assert!(engine.voices.iter().all(|voice| voice.pipe.is_none()));
+    }
+
+    #[test]
+    fn pipe_held_past_the_cap_fades_before_it_dies() {
+        let mut engine = sea_engine(8_000.0);
+        let mut voice = Voice::pipe(17, 1);
+        voice.age = PIPE_MAX_LIFETIME;
+        voice.amplitude = 0.5;
+        engine.voices.push(voice);
+        let weights = [0.0; 5];
+        let mut last = 0.5;
+        while let Some(voice) = engine.voices.first() {
+            assert!(voice.amplitude <= last + 1.0e-12, "release must not jump");
+            last = voice.amplitude;
+            engine.process(146.83, 0.05, 0.5, &weights, 0.0);
+        }
+        assert!(last < 0.01, "voice died at amplitude {last}");
+    }
+
+    #[test]
+    fn entering_sea_organ_keeps_sounding_voices() {
+        let mut engine = EmergenceEngine::new(8_000.0);
+        engine.voices[0].amplitude = 0.4;
+        engine.set_spawn_mode(SpawnMode::SeaOrgan);
+        assert_eq!(engine.voices.len(), 1);
+    }
+
+    #[test]
+    fn breath_noise_rms_is_independent_of_pitch() {
+        for freq in [65.41, 246.94] {
+            let mut noise = BreathNoise::new(7);
+            noise.tune(freq, 48_000.0);
+            let n = 480_000;
+            let mut sum_sq = 0.0;
+            for _ in 0..n {
+                let s = noise.sample();
+                sum_sq += s * s;
+            }
+            let rms = (sum_sq / n as f64).sqrt();
+            assert!((rms - 1.0).abs() < 0.2, "freq {freq} rms {rms}");
+        }
     }
 
     #[test]
