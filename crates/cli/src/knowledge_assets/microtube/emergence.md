@@ -61,6 +61,24 @@ Gravity controls how strongly Fuxian pulls the next choice back toward the
 root. Low gravity leaves more room for wandering. High gravity makes the line
 resolve toward 1:1 more often.
 
+## Sea Organ mode
+
+Sea Organ mode follows the Zadar Sea Organ, a stepped seawall where waves push
+air through 35 tuned pipes. There is no spawn timer. A simulated sea drives
+seven water-column resonators, one per segment of the real instrument, and a
+pipe speaks when its segment's water rises past its threshold.
+
+The tuning is fixed, as it is on the wall. Odd segments sound a G-major chord
+(D, G, d, g, b) and even segments a C chord with an added sixth (C, D, c, e, a),
+measured against the base frequency as d. A base near 147 Hz puts the organ in
+its real register.
+
+Emergence sets the wave height. Low in its range the sea is calm and the
+organ falls almost silent. Gravity sets the wave period: low gravity is a short
+maestral chop that favours the middle segments, high gravity a long jugo swell
+that wakes the deep first segment. Pipes breathe, sharpen slightly as the water
+pushes harder, and sit at fixed places along the wall around you.
+
 ## What the Emergence view shows
 
 The Emergence view is a constellation. Nodes are voices. Lines connect voices

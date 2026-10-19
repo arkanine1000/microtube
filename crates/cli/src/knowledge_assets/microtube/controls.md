@@ -29,7 +29,8 @@ Warmth controls how much harmonic color is added to the carrier.
 Emergence controls the little ecosystem of extra voices.
 
 Gravity controls how strongly Fuxian emergence pulls new voices back toward
-the root after motion away from it.
+the root after motion away from it. In Sea Organ mode it sets the wave period
+instead, from a short maestral chop to a long jugo swell.
 
 Drift controls the loudness of the endless rising or falling Shepard-Risset
 layer. Drift Base controls the bottom frequency of that moving stack.
@@ -47,7 +48,7 @@ pauses while playback is paused.
 - `n` toggles mist on or off.
 - `m` cycles the mist texture.
 - `e` toggles emergence.
-- `g` cycles the emergence spawn mode: Canon, Penrose, Fuxian.
+- `g` cycles the emergence spawn mode: Canon, Penrose, Fuxian, Sea Organ.
 - `r` toggles drift.
 - `R` reverses drift direction.
 - `v` and `V` cycle the visual modes.

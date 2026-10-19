@@ -7,7 +7,8 @@ beat in the space between them.
 
 Around that carrier, the instrument can add harmonic color, colored-noise mist,
 endless Shepard-Risset drift, and generative voices that follow canon patterns
-or a Penrose/Fibonacci walk, or use Fuxian counterpoint rules for voice leading.
+or a Penrose/Fibonacci walk, use Fuxian counterpoint rules for voice leading, or
+let a simulated sea play the 35 pipes of the Zadar Sea Organ.
 The same engine drives a keyboard-first terminal studio and a touch-friendly web
 studio running in an `AudioWorklet`.
 
@@ -31,8 +32,8 @@ separation.
 - Shepard-Risset drift layers seven octave-spaced oscillators under a
   raised-cosine bell, creating pitch motion that can rise or fall indefinitely.
 - Emergence adds up to 12 generative voices with consonance-weighted lifetimes,
-  lightweight spatialization, bounded total energy, and Canon, Penrose, or
-  Fuxian spawn modes.
+  lightweight spatialization, bounded total energy, and Canon, Penrose, Fuxian,
+  or Sea Organ spawn modes.
 - Soft limiting keeps dense combinations of carrier, mist, harmonics, drift, and
   emergence under control.
 
@@ -49,6 +50,11 @@ separation.
   producing an ordered but non-repeating voice stream.
 - Fuxian mode chooses from the consonance pool with leap recovery, no repeated
   fifth/octave parallels, and a gravity control that pulls lines back to root.
+- Sea Organ mode replaces the spawn timer with a random-phase sea driving seven
+  water-column resonators, after the Zadar Sea Organ's published hydraulics.
+  Pipes in alternating G-major and C6 segments speak when their segment's
+  water rises past a threshold. Emergence sets wave height; gravity sets wave
+  period, from a short maestral chop to a long jugo swell.
 
 **Terminal studio**
 
