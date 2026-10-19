@@ -19,7 +19,10 @@ import {
 
 export type Timbre = 0 | 1 | 2 | 3;
 export type MistType = 0 | 1 | 2 | 3 | 4;
-export type SpawnMode = 0 | 1 | 2;
+export type SpawnMode = 0 | 1 | 2 | 3;
+
+/** Spawn mode whose gravity control sets the simulated sea's wave period. */
+export const SEA_ORGAN_SPAWN_MODE: SpawnMode = 3;
 export type Direction = 0 | 1;
 
 /** The full live engine state the UI mirrors. */
@@ -172,6 +175,16 @@ const GRAVITY: SliderSpec = {
   unit: '',
   format: pct,
   displayScale: 100,
+};
+
+/**
+ * Gravity as the Sea Organ reads it: peak wave period, 2.5 s (short maestral
+ * chop) to 4.5 s (jugo swell). Mirrors `sea_organ::peak_period` in Rust.
+ */
+export const SEA_WAVE_PERIOD: SliderSpec = {
+  ...GRAVITY,
+  icon: Waves,
+  format: (v) => `${(2.5 + 2 * v).toFixed(1)} s`,
 };
 
 const DRIFT_GAIN: SliderSpec = {

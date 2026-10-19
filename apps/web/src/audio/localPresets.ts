@@ -29,7 +29,7 @@ type UnknownRecord = Record<string, unknown>;
 
 const TIMBRES = [0, 1, 2, 3] as const;
 const MIST_TYPES = [0, 1, 2, 3, 4] as const;
-const SPAWN_MODES = [0, 1, 2] as const;
+const SPAWN_MODES = [0, 1, 2, 3] as const;
 const DIRECTIONS = [0, 1] as const;
 
 export function snapshotFromState(state: MicroTubeState): PresetSnapshot {

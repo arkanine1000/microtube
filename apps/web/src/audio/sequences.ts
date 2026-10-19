@@ -104,7 +104,7 @@ const ORCH_OR_STEPS = [
 
 // timbre: Organ 0 / Flute 1 / Bell 2 / Saw 3
 // mist:   Pink 0 / White 1 / Brown 2 / Blue 3 / Velvet 4
-// dir:    Rising 0 / Falling 1     spawn: Canon 0 / Penrose 1 / Fuxian 2
+// dir:    Rising 0 / Falling 1     spawn: Canon 0 / Penrose 1 / Fuxian 2 / Sea Organ 3
 const JOURNEY_STEPS = [
   { beatFreq: 40, baseFreq: 432, durationSecs: 21, volume: 0.4, noiseLevel: 0.1, harmonics: 0.85, emergence: 0.55, gravity: 0.5, shepard: 0, timbre: 2, mistType: 4, shepardDirection: 0, spawnMode: 1 },
   { beatFreq: 22, baseFreq: 384, durationSecs: 34, volume: 0.5, noiseLevel: 0.15, harmonics: 0.7, emergence: 0.6, gravity: 0.5, shepard: 0.1, timbre: 2, mistType: 4, shepardDirection: 0, spawnMode: 0 },

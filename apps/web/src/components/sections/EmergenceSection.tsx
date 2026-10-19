@@ -20,6 +20,7 @@ export function EmergenceSection({
     <>
       <SectionHead icon={Sparkles} title={copy.sections.emergence.label} />
       <Segmented
+        className="spawn-options"
         caption={copy.modes.captions.spawn}
         options={copy.modes.spawnModes}
         value={state.spawnMode}

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { loadLocalPresets, snapshotFromState } from './audio/localPresets';
 import {
   EEG_BANDS,
+  SEA_ORGAN_SPAWN_MODE,
+  SEA_WAVE_PERIOD,
   SLIDERS,
   VOLUME,
   eegBandIndex,
@@ -102,15 +104,20 @@ export default function App() {
     mt.setParam(key, value);
   };
 
-  const paramSlider = (key: SliderKey) => (
-    <SlimSlider
-      spec={SLIDER_BY_KEY[key]}
-      label={copy.sliders[key].label}
-      hint={copy.sliders[key].hint}
-      value={state[key]}
-      onChange={(v) => setParam(key, v)}
-    />
-  );
+  const paramSlider = (key: SliderKey) => {
+    // In Sea Organ mode gravity sets the simulated sea's wave period.
+    const seaWave = key === 'gravity' && state.spawnMode === SEA_ORGAN_SPAWN_MODE;
+    const text = seaWave ? copy.modes.seaWave : copy.sliders[key];
+    return (
+      <SlimSlider
+        spec={seaWave ? SEA_WAVE_PERIOD : SLIDER_BY_KEY[key]}
+        label={text.label}
+        hint={text.hint}
+        value={state[key]}
+        onChange={(v) => setParam(key, v)}
+      />
+    );
+  };
 
   const setFeatureOption = <
     OptionKey extends 'mistType' | 'spawnMode' | 'shepardDirection',

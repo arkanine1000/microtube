@@ -13,7 +13,6 @@ export interface LanguageOption {
 }
 
 type Pair = readonly [string, string];
-type Trio = readonly [string, string, string];
 type Quad = readonly [string, string, string, string];
 type Quint = readonly [string, string, string, string, string];
 type PresetTuple = readonly [
@@ -117,7 +116,9 @@ export interface Copy {
     timbres: Quad;
     mists: Quint;
     directions: Pair;
-    spawnModes: Trio;
+    spawnModes: Quad;
+    /** Gravity slider text while the Sea Organ spawn mode is active. */
+    seaWave: SliderText;
   };
   sliders: Record<SliderKey, SliderText>;
   slider: {
@@ -221,7 +222,11 @@ export const COPY: Record<Locale, Copy> = {
       timbres: ['Organ', 'Flute', 'Bell', 'Saw'],
       mists: ['Pink', 'White', 'Brown', 'Blue', 'Velvet'],
       directions: ['Rising', 'Falling'],
-      spawnModes: ['Canon', 'Penrose', 'Fuxian'],
+      spawnModes: ['Canon', 'Penrose', 'Fuxian', 'Sea Organ'],
+      seaWave: {
+        label: 'Wave period',
+        hint: 'Sea Organ swell, maestral chop to jugo',
+      },
     },
     sliders: {
       baseFreq: {
@@ -238,7 +243,7 @@ export const COPY: Record<Locale, Copy> = {
       },
       emergence: {
         label: 'Emergence',
-        hint: 'Generative canon / quasicrystal voices',
+        hint: 'Generative canon / quasicrystal / sea voices',
       },
       gravity: {
         label: 'Gravity',
@@ -428,7 +433,11 @@ export const COPY: Record<Locale, Copy> = {
       timbres: ['Orgulje', 'Flauta', 'Zvono', 'Pila'],
       mists: ['Ružičasta', 'Bijela', 'Smeđa', 'Plava', 'Baršun'],
       directions: ['Uzlazno', 'Silazno'],
-      spawnModes: ['Kanon', 'Penrose', 'Fuxian'],
+      spawnModes: ['Kanon', 'Penrose', 'Fuxian', 'Morske orgulje'],
+      seaWave: {
+        label: 'Period valova',
+        hint: 'Val morskih orgulja, od maestrala do juga',
+      },
     },
     sliders: {
       baseFreq: {
@@ -445,7 +454,7 @@ export const COPY: Record<Locale, Copy> = {
       },
       emergence: {
         label: 'Emergencija',
-        hint: 'Generativni kanon / kvazikristalni glasovi',
+        hint: 'Generativni kanon / kvazikristalni / morski glasovi',
       },
       gravity: {
         label: 'Gravitacija',
