@@ -6,6 +6,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 
 use crate::app::{ActiveParam, App, AppMode, Tab, VizMode};
+use crate::emergence::SpawnMode;
+use crate::sea_organ;
 use crate::knowledge;
 use crate::presets::{PRESETS, SEQUENCES, freq_band_name, freq_color};
 use crate::shepard::{MAX_BASE_FREQ_HZ, MIN_BASE_FREQ_HZ};
@@ -40,6 +42,25 @@ struct MeterSpec {
     value: String,
     ratio: f32,
     color: Color,
+}
+
+/// Gravity meter value: Fuxian pull, or the sea's peak period in Sea Organ mode.
+fn gravity_value(app: &App) -> String {
+    let gravity = app.params.get_gravity();
+    if app.params.get_spawn_mode() == SpawnMode::SeaOrgan {
+        format!("{:>3.1}s", sea_organ::peak_period(gravity as f64))
+    } else {
+        format!("{:>3.0}%", gravity * 100.0)
+    }
+}
+
+fn gravity_status(app: &App) -> String {
+    let gravity = app.params.get_gravity();
+    if app.params.get_spawn_mode() == SpawnMode::SeaOrgan {
+        format!("Tp {:.1}s", sea_organ::peak_period(gravity as f64))
+    } else {
+        format!("g{:02.0}", gravity * 100.0)
+    }
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
@@ -726,8 +747,12 @@ fn draw_param_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
         },
         MeterSpec {
             param: ActiveParam::Gravity,
-            label: "grav",
-            value: format!("{:>3.0}%", app.params.get_gravity() * 100.0),
+            label: if app.params.get_spawn_mode() == SpawnMode::SeaOrgan {
+                "wave"
+            } else {
+                "grav"
+            },
+            value: gravity_value(app),
             ratio: app.params.get_gravity(),
             color: SEMANTIC.life,
         },
@@ -788,20 +813,21 @@ fn draw_session_section(f: &mut Frame, area: Rect, app: &App, accent: Color) {
         .unwrap_or_else(|| "off".to_string());
     let emergence = app.params.get_emergence();
     let mode_label = app.params.get_spawn_mode().label();
+    let gravity_status = gravity_status(app);
     let em_status = if emergence > 0.01 {
         if let Ok(snap) = app.emergence_snapshot.try_lock() {
             format!(
-                "{} voices · gen {} · {} · g{:02.0}",
+                "{} voices · gen {} · {} · {}",
                 snap.voices.len(),
                 snap.generation_count,
                 mode_label,
-                app.params.get_gravity() * 100.0
+                gravity_status
             )
         } else {
-            format!("active · {mode_label} · g{:02.0}", app.params.get_gravity() * 100.0)
+            format!("active · {mode_label} · {gravity_status}")
         }
     } else {
-        format!("quiet · {mode_label} · g{:02.0}", app.params.get_gravity() * 100.0)
+        format!("quiet · {mode_label} · {gravity_status}")
     };
     let mist = format!(
         "{} · {}",
@@ -1677,6 +1703,19 @@ fn draw_help_lore(f: &mut Frame, area: Rect, accent: Color) {
         )),
         Line::from(Span::styled(
             "pick 3:2, 5:4, 4:3 intervals.",
+            Style::default().fg(INK_1),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Sea Organ mode lets a simulated sea",
+            Style::default().fg(INK_1),
+        )),
+        Line::from(Span::styled(
+            "play Zadar's 35 pipes; emergence sets",
+            Style::default().fg(INK_1),
+        )),
+        Line::from(Span::styled(
+            "wave height, gravity the wave period.",
             Style::default().fg(INK_1),
         )),
         Line::from(""),

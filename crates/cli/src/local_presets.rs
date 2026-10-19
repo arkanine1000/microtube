@@ -251,6 +251,7 @@ fn parse_spawn_mode(value: &str) -> io::Result<SpawnMode> {
         "canon" | "Canon" => Ok(SpawnMode::Canon),
         "penrose" | "Penrose" => Ok(SpawnMode::Penrose),
         "fuxian" | "Fuxian" => Ok(SpawnMode::Fuxian),
+        "sea_organ" | "SeaOrgan" => Ok(SpawnMode::SeaOrgan),
         _ => Err(invalid_data(format!("unknown spawn mode {value:?}"))),
     }
 }
@@ -313,6 +314,19 @@ mod tests {
         assert!(json.contains("\"shepard_direction\":\"rising\""));
         assert!(json.contains("\"timbre\":\"Bell\""));
         assert!(json.contains("\"viz_mode\":\"Emergence\""));
+        assert_eq!(stored.into_local().expect("parse stored preset"), preset);
+    }
+
+    #[test]
+    fn sea_organ_spawn_mode_round_trips() {
+        let preset = LocalPreset {
+            spawn_mode: SpawnMode::SeaOrgan,
+            ..sample_preset()
+        };
+        let stored = StoredPreset::from(&preset);
+        let json = serde_json::to_string(&stored).expect("serialize preset");
+
+        assert!(json.contains("\"spawn_mode\":\"sea_organ\""));
         assert_eq!(stored.into_local().expect("parse stored preset"), preset);
     }
 

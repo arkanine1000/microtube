@@ -12,7 +12,7 @@ mod visualization;
 // The DSP engine now lives in the shared `microtube-core` crate. Re-export
 // its modules at the crate root so existing `crate::emergence` /
 // `crate::shepard` / `crate::penrose` paths keep resolving unchanged.
-pub use microtube_core::{emergence, penrose, shepard};
+pub use microtube_core::{emergence, penrose, sea_organ, shepard};
 
 use std::io;
 use std::sync::atomic::Ordering;

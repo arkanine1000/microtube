@@ -50,7 +50,7 @@ pub struct AudioParams {
     pub mist_type: AtomicU32,
     pub harmonics: AtomicU32,
     pub emergence: AtomicU32, // Emergence intensity 0.0-1.0
-    pub gravity: AtomicU32,   // Fuxian gravity 0.0-1.0
+    pub gravity: AtomicU32,   // Fuxian gravity / Sea Organ wave period 0.0-1.0
     pub spawn_mode: AtomicU32,
     pub shepard: AtomicU32, // Shepard intensity 0.0-1.0
     pub shepard_base_freq: AtomicU32,
@@ -1303,6 +1303,10 @@ mod tests {
         assert_eq!(app.params.get_spawn_mode(), SpawnMode::Penrose);
         app.toggle_spawn_mode();
         assert_eq!(app.params.get_spawn_mode(), SpawnMode::Fuxian);
+        app.toggle_spawn_mode();
+        assert_eq!(app.params.get_spawn_mode(), SpawnMode::SeaOrgan);
+        app.toggle_spawn_mode();
+        assert_eq!(app.params.get_spawn_mode(), SpawnMode::Canon);
         assert_eq!(app.viz_mode, VizMode::Spectrum);
     }
 
