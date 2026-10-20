@@ -80,6 +80,8 @@ that wakes the deep first segment. Pipes swell in and out with the water, sharpe
 slightly as it pushes harder, and sit at fixed places along the wall around
 you. In heavy seas the hardest-pushed pipes overblow: they glide up a twelfth
 into a flute-like upper register, so storms layer high voices over the chord.
+While a pipe hovers between registers both sound at once, and its slightly
+mistuned twelfth beats against the lower note: a quick, uneven flutter.
 The pipes stay clean tones; for the sound of the sea itself, add mist.
 
 ## What the Emergence view shows

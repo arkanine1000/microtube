@@ -93,10 +93,19 @@ const SPEAK_RANGE: f64 = 0.66;
 /// Overblowing: a stopped pipe driven hard jumps to its 3rd harmonic (a
 /// twelfth up). Krvavica's jugo air pressures (kPa) sit well above normal
 /// flue-pipe wind, so storms should overblow; maestral seas rarely do. The
-/// threshold scales each pipe's speaking threshold, keeping the grading, and
-/// drops back below OVERBLOW_OFF_RATIO of it (register hysteresis).
-const OVERBLOW_RATIO: f64 = 3.0;
-const OVERBLOW_OFF_RATIO: f64 = 0.85;
+/// threshold scales each pipe's speaking threshold, keeping the grading.
+const OVERBLOW_RATIO: f64 = 2.7;
+/// Around the threshold both registers sound at once (the quasi-periodic
+/// regime of flue pipes); the upper one takes over between these fractions
+/// of it. Inside this band the two registers beat: the pipe's flutter.
+const OVERBLOW_ONSET: f64 = 0.85;
+const OVERBLOW_FULL: f64 = 1.3;
+/// The overblown resonance is never exactly 3× the fundamental. Each pipe is
+/// fixed between these fractions sharp or flat, so in the shared band its
+/// twelfth beats against the fundamental's 3rd harmonic at a few hertz.
+/// Inferred: no Zadar measurement exists; tune by ear.
+const OVERBLOW_DETUNE_MIN: f64 = 0.006;
+const OVERBLOW_DETUNE_SPAN: f64 = 0.006;
 
 /// Fixed seed so a given session always meets the same sea.
 const SEA_SEED: u64 = 0x5EA0_7A0A_2005_0415;
@@ -143,6 +152,23 @@ pub fn pipe_distance_gain(pipe: usize) -> f64 {
     (LISTENER_DISTANCE / r).powf(DISTANCE_ROLLOFF)
 }
 
+/// Fractional mistuning of a pipe's overblown register from exactly 3×,
+/// fixed per pipe; the sign alternates through a seeded hash.
+pub fn pipe_overblow_detune(pipe: usize) -> f64 {
+    let mut h = (pipe as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h ^= h >> 31;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 29;
+    let unit = (h >> 11) as f64 / (1u64 << 53) as f64;
+    let sign = if h & 1 == 0 { 1.0 } else { -1.0 };
+    sign * (OVERBLOW_DETUNE_MIN + OVERBLOW_DETUNE_SPAN * unit)
+}
+
+pub fn smoothstep(x: f64) -> f64 {
+    let x = x.clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
+}
+
 /// Normalised JONSWAP shape at r = f / fp.
 fn jonswap_shape(r: f64) -> f64 {
     let sigma = if r <= 1.0 {
@@ -174,7 +200,6 @@ struct Pipe {
     threshold: f64,
     latched: bool,
     onset: bool,
-    overblown: bool,
 }
 
 /// Fixed-size state for the sea and its 35 pipes. No allocation after `new`.
@@ -289,15 +314,6 @@ impl SeaOrganState {
                 state.latched = false;
             }
             state.onset = state.latched && !was_latched;
-
-            let overblow = state.threshold * OVERBLOW_RATIO;
-            if !state.latched {
-                state.overblown = false;
-            } else if level >= overblow {
-                state.overblown = true;
-            } else if level < overblow * OVERBLOW_OFF_RATIO {
-                state.overblown = false;
-            }
         }
     }
 
@@ -310,9 +326,17 @@ impl SeaOrganState {
         self.pipes[pipe].latched
     }
 
-    /// True while a pipe is overblown into its upper register.
-    pub fn pipe_overblown(&self, pipe: usize) -> bool {
-        self.pipes[pipe].overblown
+    /// How far a pipe has moved into its upper register: 0 below the
+    /// overblowing band, 1 above it, both registers sounding in between.
+    pub fn pipe_register(&self, pipe: usize) -> f64 {
+        let state = &self.pipes[pipe];
+        if !state.latched {
+            return 0.0;
+        }
+        let overblow = state.threshold * OVERBLOW_RATIO;
+        let level = self.segment_level(pipe / PIPES_PER_SEGMENT);
+        let start = overblow * OVERBLOW_ONSET;
+        smoothstep((level - start) / (overblow * OVERBLOW_FULL - start))
     }
 
     /// True on the tick a pipe starts speaking.
@@ -378,8 +402,9 @@ mod tests {
                 if sea.pipe_latched(pipe) {
                     speaking += 1.0;
                 }
-                if sea.pipe_overblown(pipe) {
-                    assert!(sea.pipe_latched(pipe));
+                let register = sea.pipe_register(pipe);
+                assert!(register == 0.0 || sea.pipe_latched(pipe));
+                if register > 0.5 {
                     overblown += 1.0;
                 }
             }
@@ -394,6 +419,17 @@ mod tests {
         eprintln!("overblown share: maestral {maestral:.3}, jugo {jugo:.3}");
         assert!(maestral < 0.05, "maestral {maestral}");
         assert!(jugo > 0.2, "jugo {jugo}");
+    }
+
+    #[test]
+    fn overblow_detune_is_fixed_small_and_mixed_in_sign() {
+        let detunes: Vec<f64> = (0..PIPES).map(pipe_overblow_detune).collect();
+        assert_eq!(detunes, (0..PIPES).map(pipe_overblow_detune).collect::<Vec<_>>());
+        for &d in &detunes {
+            assert!(d.abs() >= OVERBLOW_DETUNE_MIN && d.abs() <= OVERBLOW_DETUNE_MIN + OVERBLOW_DETUNE_SPAN);
+        }
+        let sharp = detunes.iter().filter(|&&d| d > 0.0).count();
+        assert!(sharp > 5 && sharp < PIPES - 5, "sharp {sharp}");
     }
 
     #[test]

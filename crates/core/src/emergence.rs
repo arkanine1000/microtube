@@ -14,7 +14,7 @@
 use std::f64::consts::{PI, TAU};
 
 use crate::penrose::{self, PenroseWalk, Tile};
-use crate::sea_organ::{self, SeaOrganState};
+use crate::sea_organ::{self, SeaOrganState, smoothstep};
 
 /// Golden ratio - the fundamental proportion of emergence
 const PHI: f64 = 1.618033988749895;
@@ -277,8 +277,8 @@ const PIPE_PARTIAL3_MIN: f64 = 0.15;
 const PIPE_PARTIAL3_SPAN: f64 = 0.35;
 const PIPE_PARTIAL5_SPAN: f64 = 0.125;
 const PIPE_PARTIAL7_SPAN: f64 = 0.06;
-/// Overblown register: the 3rd harmonic takes over, with a little of its own
-/// 3rd (the 9th) for presence. Sea pressure never holds steady, so the pipe
+/// Overblown register: the pipe's twelfth (its own slightly mistuned
+/// resonance) takes over, with a little of its own 3rd for presence. Sea pressure never holds steady, so the pipe
 /// keeps a share of its fundamental, which also keeps the storm's low body.
 const PIPE_OVERBLOW_MIX: f64 = 0.7;
 const PIPE_OVERBLOWN_PARTIAL9: f64 = 0.15;
@@ -297,6 +297,9 @@ struct PipeVoice {
     drive: f64,
     register_target: f64,
     register: f64,
+    /// Overblown register runs on its own phase, near but not at 3×.
+    upper_ratio: f64,
+    upper_phase: f64,
     released_for: f64,
 }
 
@@ -310,14 +313,11 @@ impl PipeVoice {
             drive: 0.0,
             register_target: 0.0,
             register: 0.0,
+            upper_ratio: 3.0 * (1.0 + sea_organ::pipe_overblow_detune(index as usize)),
+            upper_phase: 0.0,
             released_for: 0.0,
         }
     }
-}
-
-fn smoothstep(x: f64) -> f64 {
-    let x = x.clamp(0.0, 1.0);
-    x * x * (3.0 - 2.0 * x)
 }
 
 /// How spawn ratios are chosen.
@@ -663,11 +663,7 @@ impl EmergenceEngine {
             pipe.held = self.sea.pipe_latched(index);
             pipe.drive_target = drive;
             pipe.target = smoothstep(drive) * gain;
-            pipe.register_target = if self.sea.pipe_overblown(index) {
-                1.0
-            } else {
-                0.0
-            };
+            pipe.register_target = self.sea.pipe_register(index);
         }
     }
 
@@ -949,6 +945,8 @@ fn pipe_sample(
     let bend = 1.0 + PIPE_PITCH_RISE_MIN + PIPE_PITCH_RISE_SPAN * pipe.drive;
     *phase += freq * bend / sample_rate;
     *phase -= phase.floor();
+    pipe.upper_phase += freq * bend * pipe.upper_ratio / sample_rate;
+    pipe.upper_phase -= pipe.upper_phase.floor();
 
     // Stopped pipe: odd partials, brightening with drive.
     let w3 = PIPE_PARTIAL3_MIN + PIPE_PARTIAL3_SPAN * pipe.drive;
@@ -962,12 +960,14 @@ fn pipe_sample(
     let s7 = s5 * c2 + c5 * s2;
     let fundamental = (s1 + w3 * s3 + w5 * s5 + w7 * s7) / (1.0 + w3 + w5 + w7);
 
-    // Overblown: the twelfth takes over, crossfaded as the register glides.
+    // Overblown: the twelfth takes over as the water rises. It is not phase
+    // locked to the fundamental, so while both sound its slight mistuning
+    // beats against the fundamental's 3rd harmonic: the flutter.
     let blend = PIPE_OVERBLOW_MIX * pipe.register;
     let tone = if blend > 1.0e-4 {
-        let c7 = c5 * c2 - s5 * s2;
-        let s9 = s7 * c2 + c7 * s2;
-        let overblown = (s3 + PIPE_OVERBLOWN_PARTIAL9 * s9) / (1.0 + PIPE_OVERBLOWN_PARTIAL9);
+        let su = (TAU * pipe.upper_phase).sin();
+        let su3 = su * (3.0 - 4.0 * su * su);
+        let overblown = (su + PIPE_OVERBLOWN_PARTIAL9 * su3) / (1.0 + PIPE_OVERBLOWN_PARTIAL9);
         fundamental * (1.0 - blend) + overblown * blend
     } else {
         fundamental
@@ -1439,6 +1439,10 @@ mod tests {
     }
 
     fn render_pipe(register: f64) -> Vec<f64> {
+        render_pipe_for(register, 1.0)
+    }
+
+    fn render_pipe_for(register: f64, seconds: f64) -> Vec<f64> {
         let mut pipe = PipeVoice::new(17);
         pipe.target = 1.0;
         pipe.register_target = register;
@@ -1448,7 +1452,7 @@ mod tests {
             level: 1.0,
             register: 1.0,
         };
-        (0..8_000)
+        (0..(8_000.0 * seconds) as usize)
             .map(|_| {
                 pipe_sample(
                     &mut pipe, &mut amplitude, &mut phase, 100.0, true, rates, 1.0 / 8_000.0,
@@ -1462,11 +1466,27 @@ mod tests {
     fn overblown_pipe_moves_up_a_twelfth() {
         // Pitch sits 0.5 % sharp at zero drive.
         let f = 100.0 * (1.0 + PIPE_PITCH_RISE_MIN);
+        let upper = f * PipeVoice::new(17).upper_ratio;
         let low = render_pipe(0.0);
         let high = render_pipe(1.0);
         assert!(magnitude_at(&low, f, 8_000.0) > 4.0 * magnitude_at(&low, 3.0 * f, 8_000.0));
-        assert!(magnitude_at(&high, 3.0 * f, 8_000.0) > 2.0 * magnitude_at(&high, f, 8_000.0));
+        assert!(magnitude_at(&high, upper, 8_000.0) > 2.0 * magnitude_at(&high, f, 8_000.0));
         assert!(magnitude_at(&high, f, 8_000.0) > 0.0);
+    }
+
+    #[test]
+    fn partly_overblown_pipe_flutters_at_trill_rate() {
+        let f = 100.0 * (1.0 + PIPE_PITCH_RISE_MIN);
+        let upper = f * PipeVoice::new(17).upper_ratio;
+        let beat = (upper - 3.0 * f).abs();
+        assert!((1.0..=4.0).contains(&beat), "beat {beat} Hz at a 100 Hz pipe");
+
+        // Both near-twelfths sound together, so they beat at `beat` Hz.
+        let mixed = render_pipe_for(0.35, 4.0);
+        let harmonic = magnitude_at(&mixed, 3.0 * f, 8_000.0);
+        let twelfth = magnitude_at(&mixed, upper, 8_000.0);
+        assert!(harmonic > 0.03 && twelfth > 0.03, "{harmonic} {twelfth}");
+        assert!(harmonic.min(twelfth) / harmonic.max(twelfth) > 0.25);
     }
 
     #[test]
