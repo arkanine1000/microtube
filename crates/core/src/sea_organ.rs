@@ -89,9 +89,6 @@ const THRESHOLD_JITTER: f64 = 0.10;
 const OFF_RATIO: f64 = 0.7;
 /// Displacement above the off threshold that takes a pipe to full voice.
 const SPEAK_RANGE: f64 = 0.66;
-/// Relative level while the water falls and air is drawn back in. Unknown at
-/// Zadar; a quieter inflow keeps the per-wave "breath" audible.
-const INFLOW_GAIN: f64 = 0.35;
 
 /// Fixed seed so a given session always meets the same sea.
 const SEA_SEED: u64 = 0x5EA0_7A0A_2005_0415;
@@ -300,18 +297,12 @@ impl SeaOrganState {
         self.pipes[pipe].onset
     }
 
-    /// Normalised drive (0–1) above the pipe's off threshold. Tone follows a
-    /// smoothstep of it; breath follows its square root.
+    /// Normalised drive (0–1) above the pipe's off threshold. The pipe swells
+    /// with the water level, so loudness rises and falls once per wave.
     pub fn pipe_drive(&self, pipe: usize) -> f64 {
         let segment = pipe / PIPES_PER_SEGMENT;
         let off = self.pipes[pipe].threshold * OFF_RATIO;
-        let drive = ((self.segment_level(segment) - off) / SPEAK_RANGE).clamp(0.0, 1.0);
-        // Rising water pushes air out through the labium; falling water draws
-        // it back in, more quietly.
-        let velocity = self.segments[segment].velocity * SEGMENT_TRIM[segment];
-        let omega_r = TAU * SEGMENT_RESONANCE_HZ[segment];
-        let rising = 0.5 + 0.5 * (velocity / (omega_r * 0.05)).tanh();
-        drive * (INFLOW_GAIN + (1.0 - INFLOW_GAIN) * rising)
+        ((self.segment_level(segment) - off) / SPEAK_RANGE).clamp(0.0, 1.0)
     }
 }
 

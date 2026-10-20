@@ -144,7 +144,7 @@ impl Voice {
     }
 
     /// A Sea Organ pipe at its fixed place on the wall.
-    fn pipe(index: usize, noise_seed: u32) -> Self {
+    fn pipe(index: usize) -> Self {
         let mut voice = Self::new(
             sea_organ::pipe_ratio(index),
             1.0,
@@ -152,7 +152,7 @@ impl Voice {
             (index / sea_organ::PIPES_PER_SEGMENT) as u8,
             sea_organ::pipe_pan(index),
         );
-        voice.pipe = Some(PipeVoice::new(index as u8, noise_seed));
+        voice.pipe = Some(PipeVoice::new(index as u8));
         voice
     }
 
@@ -263,22 +263,17 @@ fn one_pole_alpha(cutoff_hz: f64, sample_rate: f64) -> f64 {
 }
 
 /// Sea Organ pipe voices: speaking threshold and drive come from the sea;
-/// timbre is a stopped flue pipe (odd partials) with band-passed breath.
-const PIPE_MAX_LIFETIME: f64 = 20.0; // Safety cap for one continuous breath, then release
-const PIPE_RELEASE_SECONDS: f64 = 0.25; // Silence after unlatching before the voice dies
-const PIPE_SMOOTHING_SECONDS: f64 = 0.01;
+/// timbre is a clean stopped flue pipe (odd partials). Air and water noise
+/// belong to the mist layer, so pipes carry no breath, chiff or scoop.
+const PIPE_MAX_LIFETIME: f64 = 20.0; // Safety cap for one continuous swell, then release
+const PIPE_RELEASE_SECONDS: f64 = 0.5; // ~6 smoothing time constants after unlatching
+/// Slow enough that onsets swell in rather than strike like a note-on.
+const PIPE_SMOOTHING_SECONDS: f64 = 0.08;
 const PIPE_PITCH_RISE_MIN: f64 = 0.005; // Sharpening at the edge of speech
 const PIPE_PITCH_RISE_SPAN: f64 = 0.02; // Extra sharpening at full drive
-const PIPE_ONSET_SCOOP: f64 = 0.02; // Starts this much flat...
-const PIPE_SCOOP_SECONDS: f64 = 0.08; // ...and glides up over this long
-const PIPE_CHIFF_SECONDS: f64 = 0.04;
 const PIPE_PARTIAL3_MIN: f64 = 0.15;
 const PIPE_PARTIAL3_SPAN: f64 = 0.35;
 const PIPE_PARTIAL5_SPAN: f64 = 0.125;
-const PIPE_CHIFF_PARTIAL3: f64 = 0.5;
-const PIPE_CHIFF_BREATH: f64 = 2.0;
-const PIPE_BREATH_GAIN: f64 = 0.12; // RMS of breath at full drive, tone peak = 1
-const PIPE_BREATH_Q: f64 = 8.0;
 /// Below this emergence level the sea organ fades out, so turning emergence
 /// off never cuts a sounding pipe.
 const PIPE_FADE_INTENSITY: f64 = 0.15;
@@ -288,81 +283,21 @@ struct PipeVoice {
     index: u8,
     held: bool,
     target: f64,
-    breath_target: f64,
     drive_target: f64,
-    breath: f64,
     drive: f64,
-    onset_age: f64,
     released_for: f64,
-    noise: BreathNoise,
 }
 
 impl PipeVoice {
-    fn new(index: u8, noise_seed: u32) -> Self {
+    fn new(index: u8) -> Self {
         Self {
             index,
             held: true,
             target: 0.0,
-            breath_target: 0.0,
             drive_target: 0.0,
-            breath: 0.0,
             drive: 0.0,
-            onset_age: 0.0,
             released_for: 0.0,
-            noise: BreathNoise::new(noise_seed),
         }
-    }
-}
-
-/// White noise through a unity-peak TPT state-variable band-pass,
-/// normalised so the output RMS matches the input regardless of centre.
-#[derive(Clone, Copy)]
-struct BreathNoise {
-    rng: u32,
-    ic1: f64,
-    ic2: f64,
-    a1: f64,
-    a2: f64,
-    a3: f64,
-    gain: f64,
-}
-
-impl BreathNoise {
-    fn new(seed: u32) -> Self {
-        Self {
-            rng: seed | 1,
-            ic1: 0.0,
-            ic2: 0.0,
-            a1: 0.0,
-            a2: 0.0,
-            a3: 0.0,
-            gain: 0.0,
-        }
-    }
-
-    fn tune(&mut self, freq: f64, sample_rate: f64) {
-        let freq = freq.clamp(20.0, sample_rate * 0.45);
-        let g = (PI * freq / sample_rate).tan();
-        let k = 1.0 / PIPE_BREATH_Q;
-        self.a1 = 1.0 / (1.0 + g * (g + k));
-        self.a2 = g * self.a1;
-        self.a3 = g * self.a2;
-        // Uniform noise has variance 1/3; a unity-peak resonance passes
-        // π f / (2Q) Hz of the fs/2 band.
-        self.gain = k * (3.0 * PIPE_BREATH_Q * sample_rate / (PI * freq)).sqrt();
-    }
-
-    fn sample(&mut self) -> f64 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 17;
-        self.rng ^= self.rng << 5;
-        let white = (self.rng as f64 / u32::MAX as f64) * 2.0 - 1.0;
-        let v3 = white - self.ic2;
-        let v1 = self.a1 * self.ic1 + self.a2 * v3;
-        let v2 = self.ic2 + self.a2 * self.ic1 + self.a3 * v3;
-        self.ic1 = 2.0 * v1 - self.ic1;
-        self.ic2 = 2.0 * v2 - self.ic2;
-        v1 * self.gain
     }
 }
 
@@ -584,7 +519,7 @@ impl EmergenceEngine {
                     sea_organ::wave_height(intensity),
                     sea_organ::peak_period(gravity),
                 );
-                self.update_pipes(base_freq, intensity);
+                self.update_pipes(intensity);
             }
         } else {
             // Spawn logic - check if it's time for a new voice
@@ -688,7 +623,7 @@ impl EmergenceEngine {
 
     /// Control-rate Sea Organ update: start pipes whose segment just crossed
     /// their threshold and retarget every pipe voice from the sea.
-    fn update_pipes(&mut self, base_freq: f64, intensity: f64) {
+    fn update_pipes(&mut self, intensity: f64) {
         for index in 0..sea_organ::PIPES {
             if self.sea.pipe_onset(index) {
                 self.start_pipe(index);
@@ -706,9 +641,6 @@ impl EmergenceEngine {
             pipe.held = self.sea.pipe_latched(index);
             pipe.drive_target = drive;
             pipe.target = smoothstep(drive) * gain;
-            pipe.breath_target = drive.sqrt() * gain;
-            pipe.noise
-                .tune(base_freq * voice.interval_from_root, self.sample_rate);
         }
     }
 
@@ -718,9 +650,8 @@ impl EmergenceEngine {
             .iter_mut()
             .find(|voice| voice.pipe.is_some_and(|pipe| pipe.index as usize == index))
         {
-            // Still breathing out from the last wave: speak again.
+            // Still sounding from the last wave: carry on.
             if let Some(pipe) = voice.pipe.as_mut() {
-                pipe.onset_age = 0.0;
                 pipe.released_for = 0.0;
             }
             voice.age = 0.0;
@@ -741,8 +672,7 @@ impl EmergenceEngine {
         }
 
         self.epoch += 1;
-        let noise_seed = (self.xorshift() * u32::MAX as f64) as u32;
-        self.voices.push(Voice::pipe(index, noise_seed));
+        self.voices.push(Voice::pipe(index));
     }
 
     fn try_spawn(&mut self, intensity: f64, gravity: f64) {
@@ -964,44 +894,34 @@ fn pipe_sample(
     sample_rate: f64,
 ) -> f64 {
     if !driven {
-        // Left Sea Organ mode or held too long: let the pipe breathe out.
+        // Left Sea Organ mode or held too long: let the pipe fade out.
         pipe.held = false;
         pipe.target = 0.0;
-        pipe.breath_target = 0.0;
     }
     if pipe.held {
         pipe.released_for = 0.0;
     } else {
         pipe.released_for += dt;
     }
-    pipe.onset_age += dt;
     *amplitude += (pipe.target - *amplitude) * smoothing;
-    pipe.breath += (pipe.breath_target - pipe.breath) * smoothing;
     pipe.drive += (pipe.drive_target - pipe.drive) * smoothing;
 
-    if *amplitude < 0.001 && pipe.breath < 0.001 {
+    if *amplitude < 0.001 {
         return 0.0;
     }
 
-    // Pitch rises slightly with pressure and scoops up into each onset.
-    let scoop = PIPE_ONSET_SCOOP * (1.0 - pipe.onset_age / PIPE_SCOOP_SECONDS).max(0.0);
-    let bend = 1.0 + PIPE_PITCH_RISE_MIN + PIPE_PITCH_RISE_SPAN * pipe.drive - scoop;
+    // Pitch rises slightly with pressure.
+    let bend = 1.0 + PIPE_PITCH_RISE_MIN + PIPE_PITCH_RISE_SPAN * pipe.drive;
     *phase += freq * bend / sample_rate;
     *phase -= phase.floor();
 
-    // Stopped pipe: odd partials, brightening with drive and on the chiff.
-    let chiff = (1.0 - pipe.onset_age / PIPE_CHIFF_SECONDS).max(0.0);
-    let w3 = PIPE_PARTIAL3_MIN + PIPE_PARTIAL3_SPAN * pipe.drive + PIPE_CHIFF_PARTIAL3 * chiff;
+    // Stopped pipe: odd partials, brightening with drive.
+    let w3 = PIPE_PARTIAL3_MIN + PIPE_PARTIAL3_SPAN * pipe.drive;
     let w5 = PIPE_PARTIAL5_SPAN * pipe.drive;
     let p = TAU * *phase;
     let tone = (p.sin() + w3 * (3.0 * p).sin() + w5 * (5.0 * p).sin()) / (1.0 + w3 + w5);
 
-    let breath = pipe.noise.sample()
-        * PIPE_BREATH_GAIN
-        * pipe.breath
-        * (1.0 + PIPE_CHIFF_BREATH * chiff);
-
-    tone * *amplitude + breath
+    tone * *amplitude
 }
 
 fn build_fuxian_pool(
@@ -1408,7 +1328,7 @@ mod tests {
         let mut engine = sea_engine(8_000.0);
         assert!(engine.voices.is_empty());
 
-        engine.voices.push(Voice::pipe(17, 1));
+        engine.voices.push(Voice::pipe(17));
         engine.reset();
         assert!(engine.voices.is_empty());
     }
@@ -1444,12 +1364,12 @@ mod tests {
     }
 
     #[test]
-    fn leaving_sea_organ_lets_pipes_breathe_out() {
+    fn leaving_sea_organ_lets_pipes_fade_out() {
         let mut engine = sea_engine(8_000.0);
-        engine.voices.push(Voice::pipe(17, 1));
+        engine.voices.push(Voice::pipe(17));
         engine.set_spawn_mode(SpawnMode::Canon);
         let weights = [0.0; 5];
-        for _ in 0..(8_000 / 2) {
+        for _ in 0..8_000 {
             engine.process(146.83, 0.5, 0.5, &weights, 0.0);
         }
         assert!(engine.voices.iter().all(|voice| voice.pipe.is_none()));
@@ -1458,7 +1378,7 @@ mod tests {
     #[test]
     fn pipe_held_past_the_cap_fades_before_it_dies() {
         let mut engine = sea_engine(8_000.0);
-        let mut voice = Voice::pipe(17, 1);
+        let mut voice = Voice::pipe(17);
         voice.age = PIPE_MAX_LIFETIME;
         voice.amplitude = 0.5;
         engine.voices.push(voice);
@@ -1478,22 +1398,6 @@ mod tests {
         engine.voices[0].amplitude = 0.4;
         engine.set_spawn_mode(SpawnMode::SeaOrgan);
         assert_eq!(engine.voices.len(), 1);
-    }
-
-    #[test]
-    fn breath_noise_rms_is_independent_of_pitch() {
-        for freq in [65.41, 246.94] {
-            let mut noise = BreathNoise::new(7);
-            noise.tune(freq, 48_000.0);
-            let n = 480_000;
-            let mut sum_sq = 0.0;
-            for _ in 0..n {
-                let s = noise.sample();
-                sum_sq += s * s;
-            }
-            let rms = (sum_sq / n as f64).sqrt();
-            assert!((rms - 1.0).abs() < 0.2, "freq {freq} rms {rms}");
-        }
     }
 
     #[test]
