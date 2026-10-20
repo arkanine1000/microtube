@@ -21,6 +21,8 @@ const PHI: f64 = 1.618033988749895;
 
 /// Maximum simultaneous voices
 const MAX_VOICES: usize = 12;
+/// Sea Organ storms layer many pipes at once; it gets a larger budget.
+const SEA_MAX_VOICES: usize = 20;
 
 /// Built-in binaural spatialization constants for emergence voices.
 ///
@@ -274,6 +276,14 @@ const PIPE_PITCH_RISE_SPAN: f64 = 0.02; // Extra sharpening at full drive
 const PIPE_PARTIAL3_MIN: f64 = 0.15;
 const PIPE_PARTIAL3_SPAN: f64 = 0.35;
 const PIPE_PARTIAL5_SPAN: f64 = 0.125;
+const PIPE_PARTIAL7_SPAN: f64 = 0.06;
+/// Overblown register: the 3rd harmonic takes over, with a little of its own
+/// 3rd (the 9th) for presence. Sea pressure never holds steady, so the pipe
+/// keeps a share of its fundamental, which also keeps the storm's low body.
+const PIPE_OVERBLOW_MIX: f64 = 0.7;
+const PIPE_OVERBLOWN_PARTIAL9: f64 = 0.15;
+/// Register changes glide over this long rather than switching.
+const PIPE_REGISTER_SECONDS: f64 = 0.15;
 /// Below this emergence level the sea organ fades out, so turning emergence
 /// off never cuts a sounding pipe.
 const PIPE_FADE_INTENSITY: f64 = 0.15;
@@ -285,6 +295,8 @@ struct PipeVoice {
     target: f64,
     drive_target: f64,
     drive: f64,
+    register_target: f64,
+    register: f64,
     released_for: f64,
 }
 
@@ -296,6 +308,8 @@ impl PipeVoice {
             target: 0.0,
             drive_target: 0.0,
             drive: 0.0,
+            register_target: 0.0,
+            register: 0.0,
             released_for: 0.0,
         }
     }
@@ -437,7 +451,7 @@ const RATIO_EPSILON: f64 = 1.0e-9;
 impl EmergenceEngine {
     pub fn new(sample_rate: f64) -> Self {
         let mut engine = Self {
-            voices: Vec::with_capacity(MAX_VOICES),
+            voices: Vec::with_capacity(SEA_MAX_VOICES),
             rng: 0xBAC0_CAFE_1685_1750,
             time: 0.0,
             sample_rate,
@@ -529,7 +543,10 @@ impl EmergenceEngine {
                 self.try_spawn(intensity, gravity);
             }
         }
-        let pipe_smoothing = 1.0 - (-dt / PIPE_SMOOTHING_SECONDS).exp();
+        let pipe_rates = PipeRates {
+            level: 1.0 - (-dt / PIPE_SMOOTHING_SECONDS).exp(),
+            register: 1.0 - (-dt / PIPE_REGISTER_SECONDS).exp(),
+        };
 
         // Generate audio from all living voices
         let mut sum_l = 0.0;
@@ -551,7 +568,7 @@ impl EmergenceEngine {
                     base_freq * voice.interval_from_root,
                     // Past the safety cap the pipe breathes out like any release.
                     sea_mode && voice.age < PIPE_MAX_LIFETIME,
-                    pipe_smoothing,
+                    pipe_rates,
                     dt,
                     self.sample_rate,
                 );
@@ -608,9 +625,14 @@ impl EmergenceEngine {
             total_energy += voice.amplitude;
         }
 
-        // Energy conservation: normalize if too loud
+        // Energy conservation: normalize if too loud. Sea Organ pipes are
+        // independent sources, so their layers add in power, not amplitude.
         if total_energy > 2.0 {
-            let scale = 2.0 / total_energy;
+            let scale = if sea_mode {
+                (2.0 / total_energy).sqrt()
+            } else {
+                2.0 / total_energy
+            };
             sum_l *= scale;
             sum_r *= scale;
         }
@@ -641,6 +663,11 @@ impl EmergenceEngine {
             pipe.held = self.sea.pipe_latched(index);
             pipe.drive_target = drive;
             pipe.target = smoothstep(drive) * gain;
+            pipe.register_target = if self.sea.pipe_overblown(index) {
+                1.0
+            } else {
+                0.0
+            };
         }
     }
 
@@ -659,7 +686,7 @@ impl EmergenceEngine {
             return;
         }
 
-        if self.voices.len() >= MAX_VOICES {
+        if self.voices.len() >= SEA_MAX_VOICES {
             // The sea keeps the loudest pipes.
             if let Some(quietest) = self
                 .voices
@@ -881,6 +908,13 @@ impl EmergenceEngine {
     }
 }
 
+/// Per-sample one-pole coefficients for Sea Organ pipes.
+#[derive(Clone, Copy)]
+struct PipeRates {
+    level: f64,
+    register: f64,
+}
+
 /// Render one sample of a Sea Organ pipe and advance its state.
 #[allow(clippy::too_many_arguments)]
 fn pipe_sample(
@@ -889,7 +923,7 @@ fn pipe_sample(
     phase: &mut f64,
     freq: f64,
     driven: bool,
-    smoothing: f64,
+    rates: PipeRates,
     dt: f64,
     sample_rate: f64,
 ) -> f64 {
@@ -903,8 +937,9 @@ fn pipe_sample(
     } else {
         pipe.released_for += dt;
     }
-    *amplitude += (pipe.target - *amplitude) * smoothing;
-    pipe.drive += (pipe.drive_target - pipe.drive) * smoothing;
+    *amplitude += (pipe.target - *amplitude) * rates.level;
+    pipe.drive += (pipe.drive_target - pipe.drive) * rates.level;
+    pipe.register += (pipe.register_target - pipe.register) * rates.register;
 
     if *amplitude < 0.001 {
         return 0.0;
@@ -918,8 +953,25 @@ fn pipe_sample(
     // Stopped pipe: odd partials, brightening with drive.
     let w3 = PIPE_PARTIAL3_MIN + PIPE_PARTIAL3_SPAN * pipe.drive;
     let w5 = PIPE_PARTIAL5_SPAN * pipe.drive;
-    let p = TAU * *phase;
-    let tone = (p.sin() + w3 * (3.0 * p).sin() + w5 * (5.0 * p).sin()) / (1.0 + w3 + w5);
+    let w7 = PIPE_PARTIAL7_SPAN * pipe.drive;
+    // Odd partials by angle addition: one sin/cos, then steps of 2p.
+    let (s1, c1) = (TAU * *phase).sin_cos();
+    let (s2, c2) = (2.0 * s1 * c1, 1.0 - 2.0 * s1 * s1);
+    let (s3, c3) = (s1 * c2 + c1 * s2, c1 * c2 - s1 * s2);
+    let (s5, c5) = (s3 * c2 + c3 * s2, c3 * c2 - s3 * s2);
+    let s7 = s5 * c2 + c5 * s2;
+    let fundamental = (s1 + w3 * s3 + w5 * s5 + w7 * s7) / (1.0 + w3 + w5 + w7);
+
+    // Overblown: the twelfth takes over, crossfaded as the register glides.
+    let blend = PIPE_OVERBLOW_MIX * pipe.register;
+    let tone = if blend > 1.0e-4 {
+        let c7 = c5 * c2 - s5 * s2;
+        let s9 = s7 * c2 + c7 * s2;
+        let overblown = (s3 + PIPE_OVERBLOWN_PARTIAL9 * s9) / (1.0 + PIPE_OVERBLOWN_PARTIAL9);
+        fundamental * (1.0 - blend) + overblown * blend
+    } else {
+        fundamental
+    };
 
     tone * *amplitude
 }
@@ -1358,7 +1410,7 @@ mod tests {
             most_voices = most_voices.max(engine.voices.len());
         }
         assert!(engine.epoch > 0, "the storm should sound pipes");
-        assert!(most_voices <= MAX_VOICES);
+        assert!(most_voices <= SEA_MAX_VOICES);
         assert!(engine.voices.iter().all(|voice| voice.pipe.is_some()));
         assert!(peak > 0.01 && peak < 1.0, "peak {peak}");
     }
@@ -1373,6 +1425,48 @@ mod tests {
             engine.process(146.83, 0.5, 0.5, &weights, 0.0);
         }
         assert!(engine.voices.iter().all(|voice| voice.pipe.is_none()));
+    }
+
+    /// Magnitude of `samples` at `freq` (single-bin DFT).
+    fn magnitude_at(samples: &[f64], freq: f64, sample_rate: f64) -> f64 {
+        let (mut re, mut im) = (0.0, 0.0);
+        for (n, &x) in samples.iter().enumerate() {
+            let angle = TAU * freq * n as f64 / sample_rate;
+            re += x * angle.cos();
+            im += x * angle.sin();
+        }
+        (re * re + im * im).sqrt() / samples.len() as f64
+    }
+
+    fn render_pipe(register: f64) -> Vec<f64> {
+        let mut pipe = PipeVoice::new(17);
+        pipe.target = 1.0;
+        pipe.register_target = register;
+        pipe.register = register;
+        let (mut amplitude, mut phase) = (1.0, 0.0);
+        let rates = PipeRates {
+            level: 1.0,
+            register: 1.0,
+        };
+        (0..8_000)
+            .map(|_| {
+                pipe_sample(
+                    &mut pipe, &mut amplitude, &mut phase, 100.0, true, rates, 1.0 / 8_000.0,
+                    8_000.0,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn overblown_pipe_moves_up_a_twelfth() {
+        // Pitch sits 0.5 % sharp at zero drive.
+        let f = 100.0 * (1.0 + PIPE_PITCH_RISE_MIN);
+        let low = render_pipe(0.0);
+        let high = render_pipe(1.0);
+        assert!(magnitude_at(&low, f, 8_000.0) > 4.0 * magnitude_at(&low, 3.0 * f, 8_000.0));
+        assert!(magnitude_at(&high, 3.0 * f, 8_000.0) > 2.0 * magnitude_at(&high, f, 8_000.0));
+        assert!(magnitude_at(&high, f, 8_000.0) > 0.0);
     }
 
     #[test]

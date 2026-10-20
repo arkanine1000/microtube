@@ -78,7 +78,9 @@ organ falls almost silent. Gravity sets the wave period: low gravity is a short
 maestral chop that favours the middle segments, high gravity a long jugo swell
 that wakes the deep first segment. Pipes swell in and out with the water, sharpen
 slightly as it pushes harder, and sit at fixed places along the wall around
-you. The pipes stay clean tones; for the sound of the sea itself, add mist.
+you. In heavy seas the hardest-pushed pipes overblow: they glide up a twelfth
+into a flute-like upper register, so storms layer high voices over the chord.
+The pipes stay clean tones; for the sound of the sea itself, add mist.
 
 ## What the Emergence view shows
 

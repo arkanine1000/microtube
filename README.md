@@ -53,8 +53,9 @@ separation.
 - Sea Organ mode replaces the spawn timer with a random-phase sea driving seven
   water-column resonators, after the Zadar Sea Organ's published hydraulics.
   Pipes in alternating G-major and C6 segments speak when their segment's
-  water rises past a threshold. Emergence sets wave height; gravity sets wave
-  period, from a short maestral chop to a long jugo swell.
+  water rises past a threshold, and overblow up a twelfth when storms push
+  hard. Emergence sets wave height; gravity sets wave period, from a short
+  maestral chop to a long jugo swell.
 
 **Terminal studio**
 

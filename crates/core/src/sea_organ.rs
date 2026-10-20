@@ -75,9 +75,10 @@ const SEGMENT_SPACING: f64 = 10.5;
 const PIPE_SPACING: f64 = 1.5;
 /// Listener stands centred, this far back from the wall (m).
 const LISTENER_DISTANCE: f64 = 4.0;
-/// Distance gain is (LISTENER_DISTANCE / r)^ROLLOFF; 1.0 would be free field,
-/// softened so the far segments stay audible.
-const DISTANCE_ROLLOFF: f64 = 0.5;
+/// Distance gain is (LISTENER_DISTANCE / r)^ROLLOFF; 1.0 would be free field.
+/// The organ radiates through cavities under the steps rather than as point
+/// sources, so far segments (and segment 1's deep pipes) stay present.
+const DISTANCE_ROLLOFF: f64 = 0.35;
 const MAX_PAN: f64 = 0.85;
 
 /// A pipe speaks when trim·l crosses its threshold (m of water column) and
@@ -89,6 +90,13 @@ const THRESHOLD_JITTER: f64 = 0.10;
 const OFF_RATIO: f64 = 0.7;
 /// Displacement above the off threshold that takes a pipe to full voice.
 const SPEAK_RANGE: f64 = 0.66;
+/// Overblowing: a stopped pipe driven hard jumps to its 3rd harmonic (a
+/// twelfth up). Krvavica's jugo air pressures (kPa) sit well above normal
+/// flue-pipe wind, so storms should overblow; maestral seas rarely do. The
+/// threshold scales each pipe's speaking threshold, keeping the grading, and
+/// drops back below OVERBLOW_OFF_RATIO of it (register hysteresis).
+const OVERBLOW_RATIO: f64 = 3.0;
+const OVERBLOW_OFF_RATIO: f64 = 0.85;
 
 /// Fixed seed so a given session always meets the same sea.
 const SEA_SEED: u64 = 0x5EA0_7A0A_2005_0415;
@@ -166,6 +174,7 @@ struct Pipe {
     threshold: f64,
     latched: bool,
     onset: bool,
+    overblown: bool,
 }
 
 /// Fixed-size state for the sea and its 35 pipes. No allocation after `new`.
@@ -280,6 +289,15 @@ impl SeaOrganState {
                 state.latched = false;
             }
             state.onset = state.latched && !was_latched;
+
+            let overblow = state.threshold * OVERBLOW_RATIO;
+            if !state.latched {
+                state.overblown = false;
+            } else if level >= overblow {
+                state.overblown = true;
+            } else if level < overblow * OVERBLOW_OFF_RATIO {
+                state.overblown = false;
+            }
         }
     }
 
@@ -290,6 +308,11 @@ impl SeaOrganState {
 
     pub fn pipe_latched(&self, pipe: usize) -> bool {
         self.pipes[pipe].latched
+    }
+
+    /// True while a pipe is overblown into its upper register.
+    pub fn pipe_overblown(&self, pipe: usize) -> bool {
+        self.pipes[pipe].overblown
     }
 
     /// True on the tick a pipe starts speaking.
@@ -340,6 +363,37 @@ mod tests {
         }
         let n = steps as f64;
         (sum_sq.map(|s| (s / n).sqrt()), speaking.map(|s| s / n))
+    }
+
+    /// Share of speaking pipe-time spent overblown.
+    fn overblown_share(hs: f64, tp: f64) -> f64 {
+        let mut sea = SeaOrganState::new();
+        let (mut speaking, mut overblown) = (0.0, 0.0);
+        for step in 0..(660.0 / TEST_DT) as usize {
+            sea.tick(TEST_DT, hs, tp);
+            if step < (60.0 / TEST_DT) as usize {
+                continue;
+            }
+            for pipe in 0..PIPES {
+                if sea.pipe_latched(pipe) {
+                    speaking += 1.0;
+                }
+                if sea.pipe_overblown(pipe) {
+                    assert!(sea.pipe_latched(pipe));
+                    overblown += 1.0;
+                }
+            }
+        }
+        overblown / speaking
+    }
+
+    #[test]
+    fn storms_overblow_pipes_that_maestral_leaves_alone() {
+        let maestral = overblown_share(0.4, 2.9);
+        let jugo = overblown_share(1.0, 4.5);
+        eprintln!("overblown share: maestral {maestral:.3}, jugo {jugo:.3}");
+        assert!(maestral < 0.05, "maestral {maestral}");
+        assert!(jugo > 0.2, "jugo {jugo}");
     }
 
     #[test]
